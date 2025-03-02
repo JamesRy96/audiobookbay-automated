@@ -16,5 +16,10 @@ services:
       - SAVE_PATH_BASE=${SAVE_PATH_BASE}
       - NAV_LINK_NAME=${NAV_LINK_NAME}
       - NAV_LINK_URL=${NAV_LINK_URL}
+      - ENDPOINT_1=${ENDPOINT_1}
+      - ENDPOINT_2=${ENDPOINT_2}
+      - ENDPOINT_3=${ENDPOINT_3}
+      - ENDPOINT_4=${ENDPOINT_4}
+      - ENFORCE_SSL=${ENFORCE_SSL}
     env_file:
       - .env
