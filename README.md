@@ -47,7 +47,8 @@ DL_USERNAME=YOUR_USER          # torrent username
 DL_PASSWORD=YOUR_PASSWORD      # torrent password
 DL_CATEGORY=abb-downloader     # torrent category for downloads
 SAVE_PATH_BASE=/audiobooks     # Root path for audiobook downloads (relative to torrent)
-ABB_HOSTNAME='audiobookbay.is' #Default
+ENDPOINT_1=audiobookbay.lu     # Supports up to 5 user selectable abb mirrors
+ENFORCE_SSL=true              # Setting to true ignores certificate errors (some mirrors have invalid certificates)
 ```
 The following optional variables add an additional entry to the navigation bar. This is useful for linking to your audiobook player or another related service:
 
@@ -78,7 +79,11 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
          - DL_PASSWORD=pass
          - DL_CATEGORY=abb-downloader
          - SAVE_PATH_BASE=/audiobooks
-         - ABB_HOSTNAME='audiobookbay.is' #Default
+         - ENDPOINT_1=audiobookbay.is 
+         - ENDPOINT_2=audiobookbay.lu
+         - ENDPOINT_3=audiobookbay.se
+         - ENDPOINT_4=audiobookbay.nl 
+         - ENFORCE_SSL=true
          - NAV_LINK_NAME=Open Audiobook Player #Optional
          - NAV_LINK_URL=https://audiobooks.yourdomain.com/ #Optional
    ```
@@ -105,11 +110,12 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
     DL_PASSWORD=pass
     DL_CATEGORY=abb-downloader
     SAVE_PATH_BASE=/audiobooks
+    ENDPOINT_1=audiobookbay.is 
+    ENDPOINT_2=audiobookbay.lu
+    ENDPOINT_3=audiobookbay.se
+    ENDPOINT_4=audiobookbay.nl 
+    ENFORCE_SSL=true
     
-    # AudiobookBar Hostname
-    ABB_HOSTNAME='audiobookbay.is' #Default
-    # ABB_HOSTNAME='audiobookbay.lu' #Alternative
-
     # Optional Navigation Bar Entry
     NAV_LINK_NAME=Open Audiobook Player
     NAV_LINK_URL=https://audiobooks.yourdomain.com/

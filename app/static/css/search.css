@@ -107,6 +107,15 @@ img.cover {
     font-size: 1rem;
     color: white;
 }
+/* Dropdown styling */
+.endpoint-dropdown {
+    padding: 10px 15px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    margin-right: 10px;
+    font-size: 16px;
+}
+
 
 /* Spinner animation */
 @keyframes spin {

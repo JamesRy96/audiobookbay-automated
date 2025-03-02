@@ -11,8 +11,8 @@ app = Flask(__name__)
 #Load environment variables
 load_dotenv()
 
-ABB_HOSTNAME = os.getenv("ABB_HOSTNAME", "audiobookbay.lu")
-
+#ABB_HOSTNAME = os.getenv("ABB_HOSTNAME", "audiobookbay.lu")
+DEFAULT_ENDPOINT = "audiobookbay.lu"
 DOWNLOAD_CLIENT = os.getenv("DOWNLOAD_CLIENT")
 DL_URL = os.getenv("DL_URL")
 if DL_URL:
@@ -37,9 +37,17 @@ SAVE_PATH_BASE = os.getenv("SAVE_PATH_BASE")
 # Custom Nav Link Variables
 NAV_LINK_NAME = os.getenv("NAV_LINK_NAME")
 NAV_LINK_URL = os.getenv("NAV_LINK_URL")
+ENFORCE_SSL = os.getenv("ENFORCE_SSL", "false").lower() == "true"
+#Support for quickly switching endpoints
+ENDPOINTS = []
+for i in range(1, 6):
+    endpoint = os.getenv(f"ENDPOINT_{i}")
+    if endpoint:
+        ENDPOINTS.append(endpoint)
+        print(f"ENDPOINT_{i}: {endpoint}")
 
 #Print configuration
-print(f"ABB_HOSTNAME: {ABB_HOSTNAME}")
+#print(f"ABB_HOSTNAME: {ABB_HOSTNAME}")
 print(f"DOWNLOAD_CLIENT: {DOWNLOAD_CLIENT}")
 print(f"DL_HOST: {DL_HOST}")
 print(f"DL_PORT: {DL_PORT}")
@@ -55,20 +63,23 @@ print(f"NAV_LINK_URL: {NAV_LINK_URL}")
 def inject_nav_link():
     return {
         'nav_link_name': os.getenv('NAV_LINK_NAME'),
-        'nav_link_url': os.getenv('NAV_LINK_URL')
+        'nav_link_url': os.getenv('NAV_LINK_URL'),
+        'endpoints': ENDPOINTS,
+        #'default_endpoint': DEFAULT_ENDPOINT
     }
 
 
 
 # Helper function to search AudiobookBay
-def search_audiobookbay(query, max_pages=5):
+def search_audiobookbay(query, endpoint=None, max_pages=5):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
     }
     results = []
+
     for page in range(1, max_pages + 1):
-        url = f"https://{ABB_HOSTNAME}/page/{page}/?s={query.replace(' ', '+')}&cat=undefined%2Cundefined"
-        response = requests.get(url, headers=headers)
+        url = f"https://{endpoint}/page/{page}/?s={query.replace(' ', '+')}&cat=undefined%2Cundefined"
+        response = requests.get(url, headers=headers,verify=ENFORCE_SSL)
         if response.status_code != 200:
             print(f"[ERROR] Failed to fetch page {page}. Status Code: {response.status_code}")
             break
@@ -77,7 +88,7 @@ def search_audiobookbay(query, max_pages=5):
         for post in soup.select('.post'):
             try:
                 title = post.select_one('.postTitle > h2 > a').text.strip()
-                link = f"https://{ABB_HOSTNAME}{post.select_one('.postTitle > h2 > a')['href']}"
+                link = f"https://{endpoint}{post.select_one('.postTitle > h2 > a')['href']}"
                 cover = post.select_one('img')['src'] if post.select_one('img') else "/static/images/default-cover.jpg"
                 results.append({'title': title, 'link': link, 'cover': cover})
             except Exception as e:
@@ -91,7 +102,7 @@ def extract_magnet_link(details_url):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
     }
     try:
-        response = requests.get(details_url, headers=headers)
+        response = requests.get(details_url, headers=headers,verify=ENFORCE_SSL)
         if response.status_code != 200:
             print(f"[ERROR] Failed to fetch details page. Status Code: {response.status_code}")
             return None
@@ -139,13 +150,20 @@ def sanitize_title(title):
 @app.route('/', methods=['GET', 'POST'])
 def search():
     books = []
+    # Default to the first endpoint in the list
+    selected_endpoint = ENDPOINTS[0] if ENDPOINTS else DEFAULT_ENDPOINT
     if request.method == 'POST':  # Form submitted
         query = request.form['query']
         #Convert to all lowercase
         query = query.lower()
+        # Get the selected endpoint
+        form_endpoint = request.form.get('endpoint')
+        if form_endpoint:
+            selected_endpoint = form_endpoint
+            
         if query:  # Only search if the query is not empty
-            books = search_audiobookbay(query)
-    return render_template('search.html', books=books)
+            books = search_audiobookbay(query, endpoint=selected_endpoint)
+    return render_template('search.html', books=books, endpoints=ENDPOINTS, selected_endpoint=selected_endpoint)
 
 
 # Endpoint to send magnet link to qBittorrent

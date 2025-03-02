@@ -13,6 +13,15 @@
 </div>
 <form method="post" class="search-container" onsubmit="showLoadingSpinner()">
     <input type="text" name="query" placeholder="Enter book name" class="search-bar" required>
+
+    {% if endpoints %}
+    <select name="endpoint" class="endpoint-dropdown">
+        {% for endpoint in endpoints %}
+        <option value="{{ endpoint }}" {% if selected_endpoint == endpoint %}selected{% endif %}>{{ endpoint }}</option>
+        {% endfor %}
+    </select>
+    {% endif %}
+    
     <button type="submit" class="search-button">Search</button>
 </form>
 
@@ -20,6 +29,7 @@
     <div class="spinner"></div>
     <p>Searching...</p>
 </div>
+
 
 <table>
     <tbody>
