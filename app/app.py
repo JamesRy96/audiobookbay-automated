@@ -65,7 +65,7 @@ def inject_nav_link():
         'nav_link_name': os.getenv('NAV_LINK_NAME'),
         'nav_link_url': os.getenv('NAV_LINK_URL'),
         'endpoints': ENDPOINTS,
-        'default_endpoint': DEFAULT_ENDPOINT
+        #'default_endpoint': DEFAULT_ENDPOINT
     }
 
 
@@ -151,7 +151,7 @@ def sanitize_title(title):
 def search():
     books = []
     # Default to the first endpoint in the list
-    selected_endpoint = DEFAULT_ENDPOINT
+    selected_endpoint = ENDPOINTS[0] if ENDPOINTS else DEFAULT_ENDPOINT
     if request.method == 'POST':  # Form submitted
         query = request.form['query']
         #Convert to all lowercase
