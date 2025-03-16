@@ -16,5 +16,6 @@ services:
       - SAVE_PATH_BASE=${SAVE_PATH_BASE}
       - NAV_LINK_NAME=${NAV_LINK_NAME}
       - NAV_LINK_URL=${NAV_LINK_URL}
+      - DL_PATH=${DL_PATH}
     env_file:
       - .env

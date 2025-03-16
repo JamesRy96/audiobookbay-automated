@@ -1,4 +1,3 @@
-
 # AudiobookBay Automated
 
 AudiobookBay Automated is a lightweight web application designed to simplify audiobook management. It allows users to search [**AudioBook Bay**](https://audiobookbay.lu/) for audiobooks and send magnet links directly to a designated **Deludge, qBittorrent or Transmission** client.
@@ -48,6 +47,7 @@ DL_PASSWORD=YOUR_PASSWORD      # torrent password
 DL_CATEGORY=abb-downloader     # torrent category for downloads
 SAVE_PATH_BASE=/audiobooks     # Root path for audiobook downloads (relative to torrent)
 ABB_HOSTNAME='audiobookbay.is' #Default
+DL_PATH=/transmission/rpc      # Path for Transmission client
 ```
 The following optional variables add an additional entry to the navigation bar. This is useful for linking to your audiobook player or another related service:
 
@@ -81,6 +81,7 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
          - ABB_HOSTNAME='audiobookbay.is' #Default
          - NAV_LINK_NAME=Open Audiobook Player #Optional
          - NAV_LINK_URL=https://audiobooks.yourdomain.com/ #Optional
+         - DL_PATH=/transmission/rpc # Optional Path for Transmission client
    ```
 
 2. **Start the Application**:
@@ -105,6 +106,7 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
     DL_PASSWORD=pass
     DL_CATEGORY=abb-downloader
     SAVE_PATH_BASE=/audiobooks
+    DL_PATH=/transmission/rpc # Path for Transmission client
     
     # AudiobookBar Hostname
     ABB_HOSTNAME='audiobookbay.is' #Default
