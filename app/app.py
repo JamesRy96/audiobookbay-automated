@@ -165,7 +165,7 @@ def send():
             return jsonify({'message': 'Failed to extract magnet link'}), 500
 
         save_path = f"{SAVE_PATH_BASE}/{sanitize_title(title)}"
-        
+
         if DOWNLOAD_CLIENT == 'qbittorrent':
             qb = Client(host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD)
             qb.auth_log_in()
@@ -187,7 +187,8 @@ def send():
 def status():
     try:
         if DOWNLOAD_CLIENT == 'transmission':
-            transmission = transmissionrpc(host=DL_HOST, port=DL_PORT, path=DL_PATH, username=DL_USERNAME, password=DL_PASSWORD)            torrents = transmission.get_torrents()
+            transmission = transmissionrpc(host=DL_HOST, port=DL_PORT, protocol=DL_SCHEME, path=DL_PATH, username=DL_USERNAME, password=DL_PASSWORD)
+            torrents = transmission.get_torrents()
             torrent_list = [
                 {
                     'name': torrent.name,
