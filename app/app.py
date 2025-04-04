@@ -33,6 +33,7 @@ DL_USERNAME = os.getenv("DL_USERNAME")
 DL_PASSWORD = os.getenv("DL_PASSWORD")
 DL_CATEGORY = os.getenv("DL_CATEGORY", "Audiobookbay-Audiobooks")
 SAVE_PATH_BASE = os.getenv("SAVE_PATH_BASE")
+DL_PATH = os.getenv("DL_PATH", "/transmission/rpc")  # Added DL_PATH environment variable
 
 # Custom Nav Link Variables
 NAV_LINK_NAME = os.getenv("NAV_LINK_NAME")
@@ -49,6 +50,7 @@ print(f"DL_CATEGORY: {DL_CATEGORY}")
 print(f"SAVE_PATH_BASE: {SAVE_PATH_BASE}")
 print(f"NAV_LINK_NAME: {NAV_LINK_NAME}")
 print(f"NAV_LINK_URL: {NAV_LINK_URL}")
+print(f"DL_PATH: {DL_PATH}")  # Print DL_PATH configuration
 
 
 @app.context_processor
@@ -169,13 +171,13 @@ def send():
             return jsonify({'message': 'Failed to extract magnet link'}), 500
 
         save_path = f"{SAVE_PATH_BASE}/{sanitize_title(title)}"
-        
+
         if DOWNLOAD_CLIENT == 'qbittorrent':
             qb = Client(host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD)
             qb.auth_log_in()
             qb.torrents_add(urls=magnet_link, save_path=save_path, category=DL_CATEGORY)
         elif DOWNLOAD_CLIENT == 'transmission':
-            transmission = transmissionrpc(host=DL_HOST, port=DL_PORT, protocol=DL_SCHEME, username=DL_USERNAME, password=DL_PASSWORD)
+            transmission = transmissionrpc(host=DL_HOST, port=DL_PORT, protocol=DL_SCHEME, path=DL_PATH, username=DL_USERNAME, password=DL_PASSWORD)
             transmission.add_torrent(magnet_link, download_dir=save_path)
         elif DOWNLOAD_CLIENT == "delugeweb":
             delugeweb = delugewebclient(url=DL_URL, password=DL_PASSWORD)
@@ -191,7 +193,7 @@ def send():
 def status():
     try:
         if DOWNLOAD_CLIENT == 'transmission':
-            transmission = transmissionrpc(host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD)
+            transmission = transmissionrpc(host=DL_HOST, port=DL_PORT, protocol=DL_SCHEME, path=DL_PATH, username=DL_USERNAME, password=DL_PASSWORD)
             torrents = transmission.get_torrents()
             torrent_list = [
                 {
