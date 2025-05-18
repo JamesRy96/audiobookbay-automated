@@ -11,6 +11,12 @@
 <div class="title-container">
     <h1>Search AudiobookBay</h1>
 </div>
+
+<div id="recently-added" class="recently-added" style="display: none;">
+    <h2>Recently Added</h2>
+    <div id="recently-added-list"></div>
+</div>
+
 <form method="post" class="search-container" onsubmit="showLoadingSpinner()">
     <input type="text" name="query" placeholder="Enter book name" class="search-bar" required>
 <button type="submit" class="search-button">
@@ -70,7 +76,7 @@
         "Still searching... Maybe grab a snack?",
         "Patience, young grasshopper...",
         "Wow, this is taking a minute!",
-        "Don’t worry, I got this!",
+        "Don't worry, I got this!",
         "Maybe go for a walk?",
         "Still thinking... Almost there!",
         "Finding the best results for you!",
@@ -115,16 +121,109 @@
     }
 
     function sendToQB(link, title) {
+        // Disable the button that was clicked to prevent double-clicks
+        const clickedButton = event.target;
+        clickedButton.disabled = true;
+        
         fetch('/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ link: link, title: title })
         }).then(response => response.json())
         .then(data => {
-          alert(data.message)
-          hideLoadingSpinner();
+            if (data.success) {
+                // Show the recently added section
+                const recentlyAdded = document.getElementById('recently-added');
+                const recentlyAddedList = document.getElementById('recently-added-list');
+                
+                // Create a new entry
+                const entry = document.createElement('div');
+                entry.className = 'recently-added-entry';
+                
+                // Get current time
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                
+                entry.innerHTML = `
+                    <div class="entry-content">
+                        <span class="book-title">${data.title}</span>
+                        <span class="status">Added to download queue</span>
+                    </div>
+                    <span class="timestamp">${timeString}</span>
+                `;
+                
+                // Add to the list
+                recentlyAddedList.insertBefore(entry, recentlyAddedList.firstChild);
+                
+                // Show the section if it was hidden
+                recentlyAdded.style.display = 'block';
+            } else {
+                alert(data.message);
+            }
+            // Re-enable the button
+            clickedButton.disabled = false;
+            hideLoadingSpinner();
+        })
+        .catch(error => {
+            alert('Failed to add download: ' + error);
+            clickedButton.disabled = false;
+            hideLoadingSpinner();
         });
     }
 </script>
+
+<style>
+    .recently-added {
+        width: 90%;
+        max-width: 1000px;
+        margin: 20px auto;
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 20px;
+    }
+
+    .recently-added h2 {
+        margin: 0 0 15px 0;
+        font-size: 1.5rem;
+        color: #ffcc00;
+    }
+
+    .recently-added-entry {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
+        margin-bottom: 10px;
+    }
+
+    .recently-added-entry .entry-content {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .recently-added-entry .book-title {
+        font-weight: bold;
+    }
+
+    .recently-added-entry .status {
+        color: #4caf50;
+        font-size: 0.9em;
+    }
+
+    .recently-added-entry .timestamp {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.8em;
+        white-space: nowrap;
+        margin-left: 15px;
+    }
+
+    button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+</style>
 
 {% endblock %}
