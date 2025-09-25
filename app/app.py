@@ -11,7 +11,25 @@ app = Flask(__name__)
 #Load environment variables
 load_dotenv()
 
-ABB_HOSTNAME = os.getenv("ABB_HOSTNAME", "audiobookbay.lu")
+# Get hostname and strip any quotes that may have been included in the environment variable
+ABB_HOSTNAME = os.getenv("ABB_HOSTNAME", "audiobookbay.lu").strip("'\"")
+
+# Define fallback hostnames to try if the primary one fails
+ABB_FALLBACK_HOSTNAMES = [
+    ABB_HOSTNAME,
+    "audiobookbay.se",
+    "audiobookbay.li", 
+    "audiobookbay.ws",
+    "audiobookbay.la",
+    "audiobookbay.me",
+    "audiobookbay.fi",
+    "theaudiobookbay.com",
+    "audiobookbay.is"
+]
+
+# Remove duplicates while preserving order
+seen = set()
+ABB_FALLBACK_HOSTNAMES = [x for x in ABB_FALLBACK_HOSTNAMES if not (x in seen or seen.add(x))]
 
 PAGE_LIMIT = int(os.getenv("PAGE_LIMIT", 5))
 
@@ -42,6 +60,7 @@ NAV_LINK_URL = os.getenv("NAV_LINK_URL")
 
 #Print configuration
 print(f"ABB_HOSTNAME: {ABB_HOSTNAME}")
+print(f"ABB_FALLBACK_HOSTNAMES: {ABB_FALLBACK_HOSTNAMES}")
 print(f"DOWNLOAD_CLIENT: {DOWNLOAD_CLIENT}")
 print(f"DL_HOST: {DL_HOST}")
 print(f"DL_PORT: {DL_PORT}")
@@ -63,24 +82,78 @@ def inject_nav_link():
 
 
 
+# Helper function to find a working hostname
+def get_working_hostname(test_query="test"):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+    }
+    
+    for hostname in ABB_FALLBACK_HOSTNAMES:
+        try:
+            # Test with a simple request to the homepage first
+            test_url = f"https://{hostname}"
+            print(f"[INFO] Testing hostname: {hostname}")
+            response = requests.get(test_url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                print(f"[INFO] Successfully connected to {hostname}")
+                return hostname
+        except Exception as e:
+            print(f"[ERROR] Failed to connect to {hostname}: {e}")
+            continue
+    
+    # If no hostname works, return the primary one and let the search function handle the error
+    print(f"[WARNING] No working hostname found, using primary: {ABB_HOSTNAME}")
+    return ABB_HOSTNAME
+
 # Helper function to search AudiobookBay
 def search_audiobookbay(query, max_pages=PAGE_LIMIT):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
     }
     results = []
+    
+    # Get a working hostname
+    working_hostname = get_working_hostname()
+    
     for page in range(1, max_pages + 1):
-        url = f"https://{ABB_HOSTNAME}/page/{page}/?s={query.replace(' ', '+')}&cat=undefined%2Cundefined"
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"[ERROR] Failed to fetch page {page}. Status Code: {response.status_code}")
-            break
+        url = f"https://{working_hostname}/page/{page}/?s={query.replace(' ', '+')}&cat=undefined%2Cundefined"
+        print(f"[INFO] Fetching: {url}")
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                print(f"[ERROR] Failed to fetch page {page}. Status Code: {response.status_code}")
+                break
+        except Exception as e:
+            print(f"[ERROR] Request failed for page {page}: {e}")
+            # Try to find another working hostname
+            if page == 1:  # Only retry hostname finding on first page failure
+                print(f"[INFO] Trying to find alternative hostname...")
+                for alternative_hostname in ABB_FALLBACK_HOSTNAMES:
+                    if alternative_hostname != working_hostname:
+                        try:
+                            alt_url = f"https://{alternative_hostname}/page/{page}/?s={query.replace(' ', '+')}&cat=undefined%2Cundefined"
+                            print(f"[INFO] Trying alternative: {alt_url}")
+                            response = requests.get(alt_url, headers=headers, timeout=15)
+                            if response.status_code == 200:
+                                working_hostname = alternative_hostname
+                                print(f"[INFO] Successfully switched to {working_hostname}")
+                                url = alt_url
+                                break
+                        except Exception as alt_e:
+                            print(f"[ERROR] Alternative {alternative_hostname} also failed: {alt_e}")
+                            continue
+                else:
+                    print(f"[ERROR] All hostnames failed for page {page}")
+                    break
+            else:
+                break
 
         soup = BeautifulSoup(response.text, 'html.parser')
         for post in soup.select('.post'):
             try:
                 title = post.select_one('.postTitle > h2 > a').text.strip()
-                link = f"https://{ABB_HOSTNAME}{post.select_one('.postTitle > h2 > a')['href']}"
+                link = f"https://{working_hostname}{post.select_one('.postTitle > h2 > a')['href']}"
                 cover = post.select_one('img')['src'] if post.select_one('img') else "/static/images/default-cover.jpg"
                 results.append({'title': title, 'link': link, 'cover': cover})
             except Exception as e:
@@ -149,10 +222,25 @@ def search():
             query = query.lower()
             if query:  # Only search if the query is not empty
                 books = search_audiobookbay(query)
+                if len(books) == 0:
+                    # Check if this might be a connectivity issue
+                    error_msg = ("No results found. This could be due to:\n"
+                               "1. No matching audiobooks found for your search\n"
+                               "2. AudiobookBay website connectivity issues\n"
+                               "3. All AudiobookBay domains are currently down\n\n"
+                               "Please try again later or check your network connection.")
+                    return render_template('search.html', books=books, error=error_msg)
         return render_template('search.html', books=books)
     except Exception as e:
         print(f"[ERROR] Failed to search: {e}")
-        return render_template('search.html', books=books, error=f"Failed to search. { str(e) }")
+        
+        # Provide a more user-friendly error message
+        error_msg = ("Unable to connect to AudiobookBay. This could be due to:\n"
+                   "1. AudiobookBay domains are temporarily down\n"
+                   "2. Network connectivity issues\n"
+                   "3. DNS resolution problems\n\n"
+                   "Please try again later or check if AudiobookBay has moved to a new domain.")
+        return render_template('search.html', books=books, error=error_msg)
 
 
 
