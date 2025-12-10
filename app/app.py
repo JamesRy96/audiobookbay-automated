@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from qbittorrentapi import Client
 from transmission_rpc import Client as transmissionrpc
 from deluge_web_client import DelugeWebClient as delugewebclient
+from deluge_web_client import TorrentOptions as delugetorrentoptions
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 
@@ -313,9 +314,10 @@ def send():
         elif DOWNLOAD_CLIENT == "delugeweb":
             delugeweb = delugewebclient(url=DL_URL, password=DL_PASSWORD)
             delugeweb.login()
-            delugeweb.add_torrent_magnet(
-                magnet_link, save_directory=save_path, label=DL_CATEGORY
+            torrent_options = delugetorrentoptions(
+                download_location=save_path, label=DL_CATEGORY
             )
+            delugeweb.add_torrent_magnet(magnet_link, torrent_options=torrent_options)
         else:
             return jsonify({"message": "Unsupported download client"}), 400
 
