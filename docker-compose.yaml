@@ -2,12 +2,14 @@ version: '3.8'
 
 services:
   audiobookbay-automated:
-    image: ghcr.io/jamesry96/audiobookbay-automated:latest
+    image: ghcr.io/kobius77/audiobookbay-automated:latest
     ports:
       - "5078:5078"
     container_name: audiobookbay-automated
     environment:
       - DOWNLOAD_CLIENT=${DOWNLOAD_CLIENT}
+      - PUTIO_TOKEN=${PUTIO_TOKEN}
+      - PUTIO_FOLDER_ID=${PUTIO_FOLDER_ID}
       - DL_HOST=${DL_HOST}
       - DL_PORT=${DL_PORT}
       - DL_USERNAME=${DL_USERNAME}

@@ -20,6 +20,13 @@ PAGE_LIMIT = int(os.getenv("PAGE_LIMIT", 5))
 
 DOWNLOAD_CLIENT = os.getenv("DOWNLOAD_CLIENT")
 DL_URL = os.getenv("DL_URL")
+
+# --- PUT.IO CONFIGURATION START ---
+# We add the token and an optional folder ID (defaults to 0, which is root)
+PUTIO_TOKEN = os.getenv("PUTIO_TOKEN")
+PUTIO_FOLDER_ID = os.getenv("PUTIO_FOLDER_ID", "0") 
+# --- PUT.IO CONFIGURATION END ---
+
 if DL_URL:
     parsed_url = urlparse(DL_URL)
     DL_SCHEME = parsed_url.scheme
@@ -49,6 +56,7 @@ FLASK_PORT = int(os.getenv("PORT", 5078))
 # Print configuration
 print(f"ABB_HOSTNAME: {ABB_HOSTNAME}")
 print(f"DOWNLOAD_CLIENT: {DOWNLOAD_CLIENT}")
+# Only print these if not using putio to avoid clutter, or just print all
 print(f"DL_HOST: {DL_HOST}")
 print(f"DL_PORT: {DL_PORT}")
 print(f"DL_URL: {DL_URL}")
@@ -59,6 +67,9 @@ print(f"NAV_LINK_NAME: {NAV_LINK_NAME}")
 print(f"NAV_LINK_URL: {NAV_LINK_URL}")
 print(f"PAGE_LIMIT: {PAGE_LIMIT}")
 print(f"PORT: {FLASK_PORT}")
+if DOWNLOAD_CLIENT == "putio":
+    print(f"PUTIO_TOKEN: {'*' * 5 if PUTIO_TOKEN else 'Not Set'}")
+    print(f"PUTIO_FOLDER_ID: {PUTIO_FOLDER_ID}")
 
 
 @app.context_processor
@@ -72,9 +83,6 @@ def inject_nav_link():
 def is_url_valid(url):
     """
     Checks if URL is valid and returns a 200 status code. Primarily used to check if cover images are accessible.
-
-    Args:
-        url (str): The URL to check.
     """
     try:
         # Use a HEAD request with a short timeout and stream parameter
@@ -86,17 +94,6 @@ def is_url_valid(url):
 
 # Helper function to search AudiobookBay
 def search_audiobookbay(query, max_pages=PAGE_LIMIT):
-    """
-    Searches AudiobookBay for a given query and scrapes the results.
-
-    Args:
-        query (str): The search term.
-        max_pages (int): The maximum number of pages to scrape.
-
-    Returns:
-        list: A list of dictionaries, where each dictionary represents a book
-              and contains its details.
-    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     }
@@ -108,7 +105,6 @@ def search_audiobookbay(query, max_pages=PAGE_LIMIT):
         url = f"https://{ABB_HOSTNAME}/page/{page}/?s={query.lower().replace(' ', '+')}"
         try:
             response = requests.get(url, headers=headers, timeout=15)
-            # Raise an exception for bad status codes (4xx or 5xx)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"[ERROR] Failed to fetch page {page}. Reason: {e}")
@@ -117,7 +113,6 @@ def search_audiobookbay(query, max_pages=PAGE_LIMIT):
         soup = BeautifulSoup(response.text, "html.parser")
         posts = soup.select(".post")
 
-        # If no posts are found on the page, stop paginating
         if not posts:
             print(f"No more results found on page {page}.")
             break
@@ -133,7 +128,6 @@ def search_audiobookbay(query, max_pages=PAGE_LIMIT):
                 title = title_element.text.strip()
                 link = f"https://{ABB_HOSTNAME}{title_element['href']}"
 
-                # Check if the cover URL is valid, otherwise use the default
                 cover_url = (
                     post.select_one("img")["src"] if post.select_one("img") else None
                 )
@@ -261,7 +255,6 @@ def sanitize_title(title):
     return re.sub(r'[<>:"/\\|?*]', "", title).strip()
 
 
-# Endpoint for search page
 @app.route("/", methods=["GET", "POST"])
 def search():
     books = []
@@ -279,7 +272,6 @@ def search():
         )
 
 
-# Endpoint to send magnet link to qBittorrent
 @app.route("/send", methods=["POST"])
 def send():
     data = request.json
@@ -316,6 +308,29 @@ def send():
             delugeweb.add_torrent_magnet(
                 magnet_link, save_directory=save_path, label=DL_CATEGORY
             )
+        
+        # --- PUT.IO ADDITION START ---
+        elif DOWNLOAD_CLIENT == "putio":
+            if not PUTIO_TOKEN:
+                return jsonify({"message": "Put.io Token not configured"}), 500
+            
+            # Post to Put.io API
+            putio_url = "https://api.put.io/v2/transfers/add"
+            payload = {
+                "oauth_token": PUTIO_TOKEN,
+                "url": magnet_link,
+                "save_parent_id": PUTIO_FOLDER_ID # Defaults to 0 (root) if not set
+            }
+            resp = requests.post(putio_url, data=payload)
+            
+            if resp.status_code == 200:
+                # Put.io returns 200 OK even if the torrent is already added
+                # The response JSON usually looks like {"transfer": {...}, "status": "OK"}
+                pass
+            else:
+                return jsonify({"message": f"Put.io error: {resp.text}"}), 400
+        # --- PUT.IO ADDITION END ---
+
         else:
             return jsonify({"message": "Unsupported download client"}), 400
 
@@ -346,6 +361,7 @@ def status():
                 for torrent in torrents
             ]
             return render_template("status.html", torrents=torrent_list)
+        
         elif DOWNLOAD_CLIENT == "qbittorrent":
             qb = Client(
                 host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD
@@ -361,6 +377,7 @@ def status():
                 }
                 for torrent in torrents
             ]
+        
         elif DOWNLOAD_CLIENT == "delugeweb":
             delugeweb = delugewebclient(url=DL_URL, password=DL_PASSWORD)
             delugeweb.login()
@@ -377,9 +394,53 @@ def status():
                 }
                 for k, torrent in torrents.result.items()
             ]
+        
+        # --- PUT.IO ADDITION START ---
+        elif DOWNLOAD_CLIENT == "putio":
+            if not PUTIO_TOKEN:
+                return jsonify({"message": "Put.io Token not configured"}), 500
+
+            # List transfers from Put.io
+            putio_url = "https://api.put.io/v2/transfers/list"
+            payload = {"oauth_token": PUTIO_TOKEN}
+            resp = requests.get(putio_url, params=payload)
+            
+            if resp.status_code != 200:
+                return jsonify({"message": f"Put.io error: {resp.text}"}), 500
+                
+            data = resp.json()
+            transfers = data.get("transfers", [])
+            
+            # Put.io returns a lot of transfers, we might want to filter or just show the top 20
+            # Note: Put.io doesn't use "Categories" in the same way, so we show all active transfers
+            
+            torrent_list = []
+            for t in transfers:
+                # put.io 'percent_done' is 0-100 already
+                progress = t.get("percent_done", 0)
+                # (t.get("size") or 0 to to avoid error 500?
+                size_bytes = t.get("size") or 0
+                
+                # if size is 0, show "fetching meta.." instead of "0.00 MB"
+                if size_bytes == 0:
+                    size_mb = "fetching meta.."
+                else:
+                    size_mb = f"{size_bytes / (1024 * 1024):.2f} MB"
+                
+                torrent_list.append({
+                    "name": t.get("name", "Unknown"),
+                    "progress": progress,
+                    "state": t.get("status", "Unknown"),
+                    "size": size_mb
+            })
+        # --- PUT.IO ADDITION END ---
+
         else:
             return jsonify({"message": "Unsupported download client"}), 400
+            
+        # Ensure we pass the list to the template
         return render_template("status.html", torrents=torrent_list)
+        
     except Exception as e:
         return jsonify({"message": f"Failed to fetch torrent status: {e}"}), 500
 
