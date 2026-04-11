@@ -16,11 +16,16 @@ class TransmissionAdapter(TorrentClientAdapter):
             password=self.settings.dl_password,
         )
 
-    def add_magnet(self, magnet_link: str, title: str) -> None:
+    def add_magnet(
+        self,
+        magnet_link: str,
+        title: str,
+        author: str | None = None,
+    ) -> None:
         client = self._client()
         client.add_torrent(
             magnet_link,
-            download_dir=self.build_save_path(title),
+            download_dir=self.build_save_path(title, author),
         )
 
     def list_torrents(self) -> list[TorrentStatus]:

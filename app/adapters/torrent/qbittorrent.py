@@ -17,11 +17,16 @@ class QbittorrentAdapter(TorrentClientAdapter):
         client.auth_log_in()
         return client
 
-    def add_magnet(self, magnet_link: str, title: str) -> None:
+    def add_magnet(
+        self,
+        magnet_link: str,
+        title: str,
+        author: str | None = None,
+    ) -> None:
         client = self._client()
         client.torrents_add(
             urls=magnet_link,
-            save_path=self.build_save_path(title),
+            save_path=self.build_save_path(title, author),
             category=self.settings.dl_category,
         )
 

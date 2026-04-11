@@ -17,11 +17,15 @@ DEFAULT_TRACKERS = [
     "udp://tracker.coppersurfer.tk:6969",
     "udp://tracker.leechers-paradise.org:6969",
 ]
+AUTHOR_TERMINATORS = (
+    r"\s*(?:Read by|Narrated by|Keywords:|Language:|Posted:|Format:|Bitrate:|"
+    r"File Size:|Category:|$)"
+)
 
 
 def extract_author_from_text(text: str) -> str | None:
     author_match = re.search(
-        r"(?:Author|By)\s*:\s*([^|<\n\r]+?)(?:\s*(?:Keywords:|Language:|Posted:|Format:|Bitrate:|File Size:)|$)",
+        rf"(?:Author|By)\s*:?\s*(.+?)(?:{AUTHOR_TERMINATORS})",
         text,
         re.IGNORECASE | re.DOTALL,
     )
@@ -32,17 +36,46 @@ def extract_author_from_text(text: str) -> str | None:
 
 
 def infer_author_from_title(title: str) -> str | None:
-    title_match = re.match(r"^\s*(.+?)\s+-\s+(.+?)\s*$", title)
-    if not title_match:
+    _candidate_title, separator, candidate_author = title.rpartition(" - ")
+    if not separator:
         return None
 
-    candidate_author = title_match.group(1).strip()
-    candidate_title = title_match.group(2).strip()
+    candidate_author = candidate_author.strip()
 
-    if not candidate_author or not candidate_title:
+    if not candidate_author:
         return None
 
     return candidate_author
+
+
+def strip_author_from_title(title: str) -> str:
+    candidate_title, separator, candidate_author = title.rpartition(" - ")
+    if not separator:
+        return title.strip()
+
+    candidate_title = candidate_title.strip()
+    candidate_author = candidate_author.strip()
+    if not candidate_title or not candidate_author:
+        return title.strip()
+
+    return candidate_title
+
+
+def parse_details_author(details_html: str) -> str | None:
+    details_text = BeautifulSoup(details_html, "html.parser").get_text(
+        separator=" ",
+        strip=True,
+    )
+    author_match = re.search(
+        rf"(?:Written by|Author|By)\s*:?\s*(.+?)(?:{AUTHOR_TERMINATORS})",
+        details_text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not author_match:
+        return None
+
+    author = author_match.group(1).strip()
+    return author or None
 
 
 def parse_search_results(
@@ -68,11 +101,13 @@ def parse_post(
     if not title_element:
         return None
 
-    title = title_element.text.strip()
+    raw_title = title_element.text.strip()
     link = f"https://{hostname}{title_element['href']}"
     cover = resolve_cover(post, cover_validator)
     post_text = post.get_text(separator=" ", strip=True)
-    author = extract_author_from_text(post_text) or infer_author_from_title(title)
+    title_author = infer_author_from_title(raw_title)
+    title = strip_author_from_title(raw_title) if title_author else raw_title
+    author = title_author or extract_author_from_text(post_text)
 
     post_info = post.select_one(".postInfo")
     post_info_text = post_info.get_text(separator=" ", strip=True) if post_info else ""

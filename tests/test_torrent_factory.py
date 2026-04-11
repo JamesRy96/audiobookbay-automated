@@ -50,6 +50,22 @@ class TorrentFactoryTests(unittest.TestCase):
         with self.assertRaises(UnsupportedDownloadClientError):
             create_torrent_client(make_settings("unknown"))
 
+    def test_build_save_path_includes_author_directory(self):
+        client = create_torrent_client(make_settings("qbittorrent"))
+
+        self.assertEqual(
+            client.build_save_path("Project Hail Mary", "Andy Weir"),
+            "/audiobooks/Andy Weir/Project Hail Mary",
+        )
+
+    def test_build_save_path_falls_back_to_title_only_without_author(self):
+        client = create_torrent_client(make_settings("qbittorrent"))
+
+        self.assertEqual(
+            client.build_save_path("Project Hail Mary", None),
+            "/audiobooks/Project Hail Mary",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

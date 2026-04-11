@@ -4,7 +4,11 @@ import logging
 import requests
 
 from adapters.abb.client import AudiobookBayClient
-from adapters.abb.parser import parse_magnet_link, parse_search_results
+from adapters.abb.parser import (
+    parse_details_author,
+    parse_magnet_link,
+    parse_search_results,
+)
 from config import AppSettings
 from models import BookResult
 
@@ -44,18 +48,28 @@ def search_audiobookbay(
 
 
 def extract_magnet_link(details_url: str, settings: AppSettings) -> str | None:
+    details = extract_details_metadata(details_url, settings)
+    return details["magnet_link"]
+
+
+def extract_details_metadata(
+    details_url: str,
+    settings: AppSettings,
+) -> dict[str, str | None]:
     client = AudiobookBayClient(settings)
 
     try:
         details_html = client.fetch_details_page(details_url)
     except requests.exceptions.RequestException as exc:
         logger.error("Failed to fetch details page: %s", exc)
-        return None
+        return {"magnet_link": None, "author": None}
 
     magnet_link = parse_magnet_link(details_html)
+    author = parse_details_author(details_html)
+
     if not magnet_link:
         logger.error("Info Hash not found on the page.")
-        return None
+        return {"magnet_link": None, "author": author}
 
     logger.debug("Generated magnet link: %s", magnet_link)
-    return magnet_link
+    return {"magnet_link": magnet_link, "author": author}

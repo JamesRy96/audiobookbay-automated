@@ -97,7 +97,11 @@
             </td>
             <td>
                 <button onclick="window.open('{{ book.link }}', '_blank')">Details</button>
-                <button onclick="sendToQB('{{ book.link|escape }}', '{{ book.title|escape }}')">Download to Server</button>
+                <button onclick='sendToQB({{ {
+                    "link": book.link,
+                    "title": book.title,
+                    "author": book.author if book.author is defined else ""
+                }|tojson }})'>Download to Server</button>
             </td>
         </tr>
         {% endfor %}

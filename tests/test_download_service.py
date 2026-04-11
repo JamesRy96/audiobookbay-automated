@@ -34,25 +34,41 @@ def make_settings() -> AppSettings:
 class DownloadServiceTests(unittest.TestCase):
     def test_add_download_persists_tracked_record(self):
         settings = make_settings()
+        book_details = {
+            "link": "https://example.com/book",
+            "title": "Example Book",
+            "author": None,
+        }
 
         with (
-            patch("services.downloads.extract_magnet_link", return_value="magnet:?xt=urn:btih:abc123") as extract_magnet_link,
+            patch(
+                "services.downloads.extract_details_metadata",
+                return_value={
+                    "magnet_link": "magnet:?xt=urn:btih:abc123",
+                    "author": "Example Author",
+                },
+            ) as extract_details_metadata,
             patch("services.downloads.create_torrent_client") as create_torrent_client,
             patch("services.downloads.create_download_record") as create_download_record,
         ):
             torrent_client = Mock()
             create_torrent_client.return_value = torrent_client
 
-            message = add_download("https://example.com/book", "Example Book", settings)
+            message = add_download(book_details, settings)
 
         self.assertIn("Download added successfully", message)
-        extract_magnet_link.assert_called_once_with("https://example.com/book", settings)
+        extract_details_metadata.assert_called_once_with("https://example.com/book", settings)
         create_torrent_client.assert_called_once_with(settings)
-        torrent_client.add_magnet.assert_called_once_with("magnet:?xt=urn:btih:abc123", "Example Book")
+        torrent_client.add_magnet.assert_called_once_with(
+            "magnet:?xt=urn:btih:abc123",
+            "Example Book",
+            "Example Author",
+        )
         create_download_record.assert_called_once_with(
             settings.database_path,
             "Example Book",
             "https://example.com/book",
+            author="Example Author",
             magnet_link="magnet:?xt=urn:btih:abc123",
             client="qbittorrent",
             state=DownloadState.SENT,

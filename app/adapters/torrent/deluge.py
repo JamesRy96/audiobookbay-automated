@@ -16,10 +16,15 @@ class DelugeAdapter(TorrentClientAdapter):
         client.login()
         return client
 
-    def add_magnet(self, magnet_link: str, title: str) -> None:
+    def add_magnet(
+        self,
+        magnet_link: str,
+        title: str,
+        author: str | None = None,
+    ) -> None:
         client = self._client()
         torrent_options = DelugeTorrentOptions(
-            download_location=self.build_save_path(title),
+            download_location=self.build_save_path(title, author),
             label=self.settings.dl_category,
         )
         client.add_torrent_magnet(magnet_link, torrent_options=torrent_options)

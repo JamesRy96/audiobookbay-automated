@@ -291,11 +291,11 @@ function hideScrollingMessages() {
   if(messageScroller) messageScroller.style.display = "none";
 }
 
-function sendToQB(link, title) {
+function sendToQB(book) {
   fetch("/send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ link: link, title: title }),
+    body: JSON.stringify(book),
   })
     .then((response) => response.json())
     .then((data) => {

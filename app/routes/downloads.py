@@ -12,9 +12,16 @@ def send():
     data = request.json or {}
     details_url = data.get("link")
     title = data.get("title")
+    author = data.get("author")
 
     if not details_url or not title:
         raise ValidationError("Invalid request")
 
-    message = add_download(details_url, title, get_settings())
+    book_details = {
+        "title": title,
+        "link": details_url,
+        "author": author,
+    }
+
+    message = add_download(book_details, get_settings())
     return jsonify({"message": message})
