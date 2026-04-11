@@ -4,21 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Flask App{% endblock %}</title>
+    <meta name="theme-color" content="#0b1020">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block extra_css %}{% endblock %}
-    {% block extra_js %}{% endblock %}
 </head>
-<body>
-    <div class="navbar">
-        <a href="{{ url_for('pages.search') }}" class="{% if request.endpoint == 'pages.search' %}active{% endif %}">Search</a>
-        <a href="{{ url_for('pages.status') }}" class="{% if request.endpoint == 'pages.status' %}active{% endif %}">Status</a>
-        {% if nav_link_name and nav_link_url %}
-        <a href="{{ nav_link_url }}" target="_blank">{{ nav_link_name }}</a>
-        {% endif %}
-    </div>
+<body class="app-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <div class="app-shell__backdrop" aria-hidden="true"></div>
+    <div class="app-shell__frame">
+        <header class="app-header">
+            <div class="app-brand" aria-label="AudiobookBay Automated">
+                <span class="app-brand__eyebrow">Audiobook Manager</span>
+                <span class="app-brand__title">AudiobookBay Automated</span>
+            </div>
+            <nav class="navbar" aria-label="Primary">
+                <a href="{{ url_for('pages.search') }}" {% if request.endpoint == 'pages.search' %}class="active" aria-current="page"{% endif %}>Search</a>
+                <a href="{{ url_for('pages.status') }}" {% if request.endpoint == 'pages.status' %}class="active" aria-current="page"{% endif %}>Status</a>
+                {% if nav_link_name and nav_link_url %}
+                <a href="{{ nav_link_url }}" target="_blank" rel="noreferrer">{{ nav_link_name }}</a>
+                {% endif %}
+            </nav>
+        </header>
 
-    <div class="content">
-        {% block content %}{% endblock %}
+        <main class="content" id="main-content">
+            {% block content %}{% endblock %}
+        </main>
     </div>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

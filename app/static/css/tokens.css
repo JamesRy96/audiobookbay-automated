@@ -1,0 +1,43 @@
+:root {
+    color-scheme: dark;
+
+    --font-sans: "Inter", "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+
+    --bg: #0b1020;
+    --bg-elevated: rgba(12, 18, 34, 0.78);
+    --surface: rgba(18, 26, 45, 0.74);
+    --surface-strong: rgba(22, 32, 54, 0.92);
+    --surface-soft: rgba(255, 255, 255, 0.03);
+
+    --text: #eef3ff;
+    --text-muted: #a9b4cc;
+    --text-subtle: #7f8ba7;
+
+    --accent: #4f8cff;
+    --accent-strong: #2dd4bf;
+    --accent-contrast: #08111f;
+    --accent-soft: rgba(79, 140, 255, 0.18);
+
+    --border: rgba(160, 177, 214, 0.18);
+    --border-strong: rgba(160, 177, 214, 0.3);
+    --shadow-sm: 0 10px 30px rgba(0, 0, 0, 0.18);
+    --shadow-md: 0 18px 40px rgba(0, 0, 0, 0.24);
+    --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.32);
+
+    --radius-sm: 0.5rem;
+    --radius-md: 0.8rem;
+    --radius-lg: 1.1rem;
+    --radius-xl: 1.5rem;
+
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+
+    --content-width: 1120px;
+    --transition: 180ms ease;
+}
