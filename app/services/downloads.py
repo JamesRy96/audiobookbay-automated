@@ -4,7 +4,8 @@ from adapters.torrent.base import UnsupportedDownloadClientError
 from adapters.torrent.factory import create_torrent_client
 from config import AppSettings
 from errors import ExternalServiceError
-from models import TorrentStatus
+from models import DownloadState, TorrentStatus
+from services.download_records import create_download_record
 from services.audiobookbay import extract_magnet_link
 
 
@@ -15,6 +16,14 @@ def add_download(details_url: str, title: str, settings: AppSettings) -> str:
 
     torrent_client = create_torrent_client(settings)
     torrent_client.add_magnet(magnet_link, title)
+    create_download_record(
+        settings.database_path,
+        title,
+        details_url,
+        magnet_link=magnet_link,
+        client=settings.download_client,
+        state=DownloadState.SENT,
+    )
     return (
         "Download added successfully! This may take some time, "
         "the download will show in Audiobookshelf when completed."

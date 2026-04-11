@@ -19,6 +19,32 @@ DEFAULT_TRACKERS = [
 ]
 
 
+def extract_author_from_text(text: str) -> str | None:
+    author_match = re.search(
+        r"(?:Author|By)\s*:\s*([^|<\n\r]+?)(?:\s*(?:Keywords:|Language:|Posted:|Format:|Bitrate:|File Size:)|$)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if author_match:
+        author = author_match.group(1).strip()
+        return author or None
+    return None
+
+
+def infer_author_from_title(title: str) -> str | None:
+    title_match = re.match(r"^\s*(.+?)\s+-\s+(.+?)\s*$", title)
+    if not title_match:
+        return None
+
+    candidate_author = title_match.group(1).strip()
+    candidate_title = title_match.group(2).strip()
+
+    if not candidate_author or not candidate_title:
+        return None
+
+    return candidate_author
+
+
 def parse_search_results(
     html: str,
     hostname: str,
@@ -45,6 +71,8 @@ def parse_post(
     title = title_element.text.strip()
     link = f"https://{hostname}{title_element['href']}"
     cover = resolve_cover(post, cover_validator)
+    post_text = post.get_text(separator=" ", strip=True)
+    author = extract_author_from_text(post_text) or infer_author_from_title(title)
 
     post_info = post.select_one(".postInfo")
     post_info_text = post_info.get_text(separator=" ", strip=True) if post_info else ""
@@ -58,6 +86,7 @@ def parse_post(
 
     return BookResult(
         title=title,
+        author=author,
         link=link,
         cover=cover,
         language=language,

@@ -9,9 +9,9 @@ from adapters.abb.parser import parse_magnet_link, parse_search_results
 
 SEARCH_HTML = """
 <div class="post">
-  <div class="postTitle"><h2><a href="/book/example">Example Book</a></h2></div>
+  <div class="postTitle"><h2><a href="/book/example">Example Author - Example Book</a></h2></div>
   <img src="https://covers.example/book.jpg" />
-  <div class="postInfo">Language: English Keywords: fiction</div>
+  <div class="postInfo">Author: Example Author Language: English Keywords: fiction</div>
   <div class="postContent">
     <p style="text-align:center">
       Posted: 10 Jan 2026
@@ -41,10 +41,31 @@ class AbbParserTests(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         result = results[0]
-        self.assertEqual(result.title, "Example Book")
+        self.assertEqual(result.title, "Example Author - Example Book")
+        self.assertEqual(result.author, "Example Author")
         self.assertEqual(result.language, "English")
         self.assertEqual(result.format, "MP3")
         self.assertEqual(result.file_size, "500 MB")
+
+    def test_parse_search_results_infers_author_from_title(self):
+        html = """
+        <div class="post">
+          <div class="postTitle"><h2><a href="/book/example">Example Author - Example Book</a></h2></div>
+          <div class="postInfo">Language: English Keywords: fiction</div>
+          <div class="postContent">
+            <p style="text-align:center">
+              Posted: 10 Jan 2026
+              Format: <span>MP3</span>
+              Bitrate: <span>128Kbps</span>
+              File Size: <span>500</span> MB
+            </p>
+          </div>
+        </div>
+        """
+
+        results = parse_search_results(html, "audiobookbay.lu", lambda _url: True)
+
+        self.assertEqual(results[0].author, "Example Author")
 
     def test_parse_magnet_link_returns_magnet(self):
         magnet_link = parse_magnet_link(DETAILS_HTML)

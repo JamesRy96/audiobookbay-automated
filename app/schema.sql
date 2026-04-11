@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS downloads (
     completed_at TEXT
 );
 
+CREATE INDEX IF NOT EXISTS idx_downloads_state_added_at
+    ON downloads(state, added_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS import_jobs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     download_id INTEGER NOT NULL,
