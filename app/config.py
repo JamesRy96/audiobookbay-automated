@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -10,6 +11,7 @@ from flask import current_app
 load_dotenv()
 
 APP_SETTINGS_KEY = "APP_SETTINGS"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class AppSettings:
     save_path_base: str | None
     nav_link_name: str | None
     nav_link_url: str | None
+    database_path: str
     flask_port: int
 
 
@@ -36,7 +39,19 @@ def _parse_optional_int(value: str | None) -> int | None:
     return int(value)
 
 
-def load_settings() -> AppSettings:
+def resolve_database_path(default_database_path: str) -> str:
+    configured_path = os.getenv("APP_DB_PATH")
+    if configured_path:
+        return os.path.abspath(configured_path)
+
+    docker_config_dir = "/config"
+    if os.path.isdir(docker_config_dir):
+        return os.path.join(docker_config_dir, "audiobookbay.db")
+
+    return os.path.abspath(default_database_path)
+
+
+def load_settings(default_database_path: str) -> AppSettings:
     dl_url = os.getenv("DL_URL")
 
     if dl_url:
@@ -66,6 +81,7 @@ def load_settings() -> AppSettings:
         save_path_base=os.getenv("SAVE_PATH_BASE"),
         nav_link_name=os.getenv("NAV_LINK_NAME"),
         nav_link_url=os.getenv("NAV_LINK_URL"),
+        database_path=resolve_database_path(default_database_path),
         flask_port=int(os.getenv("PORT", os.getenv("FLASK_PORT", 5078))),
     )
 
@@ -75,15 +91,16 @@ def get_settings() -> AppSettings:
 
 
 def log_settings(settings: AppSettings) -> None:
-    print(f"ABB_HOSTNAME: {settings.abb_hostname}")
-    print(f"DOWNLOAD_CLIENT: {settings.download_client}")
-    print(f"DL_HOST: {settings.dl_host}")
-    print(f"DL_PORT: {settings.dl_port}")
-    print(f"DL_URL: {settings.dl_url}")
-    print(f"DL_USERNAME: {settings.dl_username}")
-    print(f"DL_CATEGORY: {settings.dl_category}")
-    print(f"SAVE_PATH_BASE: {settings.save_path_base}")
-    print(f"NAV_LINK_NAME: {settings.nav_link_name}")
-    print(f"NAV_LINK_URL: {settings.nav_link_url}")
-    print(f"PAGE_LIMIT: {settings.page_limit}")
-    print(f"PORT: {settings.flask_port}")
+    logger.info("ABB_HOSTNAME: %s", settings.abb_hostname)
+    logger.info("DOWNLOAD_CLIENT: %s", settings.download_client)
+    logger.info("DL_HOST: %s", settings.dl_host)
+    logger.info("DL_PORT: %s", settings.dl_port)
+    logger.info("DL_URL: %s", settings.dl_url)
+    logger.info("DL_USERNAME: %s", settings.dl_username)
+    logger.info("DL_CATEGORY: %s", settings.dl_category)
+    logger.info("SAVE_PATH_BASE: %s", settings.save_path_base)
+    logger.info("NAV_LINK_NAME: %s", settings.nav_link_name)
+    logger.info("NAV_LINK_URL: %s", settings.nav_link_url)
+    logger.info("DB_PATH: %s", settings.database_path)
+    logger.info("PAGE_LIMIT: %s", settings.page_limit)
+    logger.info("PORT: %s", settings.flask_port)

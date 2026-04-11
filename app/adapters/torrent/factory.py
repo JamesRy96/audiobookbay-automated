@@ -5,9 +5,10 @@ from adapters.torrent.deluge import DelugeAdapter
 from adapters.torrent.qbittorrent import QbittorrentAdapter
 from adapters.torrent.transmission import TransmissionAdapter
 from config import AppSettings
+from adapters.torrent.base import TorrentClientAdapter
 
 
-def create_torrent_client(settings: AppSettings):
+def create_torrent_client(settings: AppSettings) -> TorrentClientAdapter:
     adapter_map = {
         "qbittorrent": QbittorrentAdapter,
         "transmission": TransmissionAdapter,

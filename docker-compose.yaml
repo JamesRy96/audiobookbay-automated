@@ -18,3 +18,5 @@ services:
       - NAV_LINK_URL=${NAV_LINK_URL}
     env_file:
       - .env
+    volumes:
+      - ./config:/config

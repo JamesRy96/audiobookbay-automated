@@ -3,14 +3,15 @@ from __future__ import annotations
 from adapters.torrent.base import UnsupportedDownloadClientError
 from adapters.torrent.factory import create_torrent_client
 from config import AppSettings
+from errors import ExternalServiceError
 from models import TorrentStatus
 from services.audiobookbay import extract_magnet_link
 
 
 def add_download(details_url: str, title: str, settings: AppSettings) -> str:
-    magnet_link = extract_magnet_link(details_url)
+    magnet_link = extract_magnet_link(details_url, settings)
     if not magnet_link:
-        raise ValueError("Failed to extract magnet link")
+        raise ExternalServiceError("Failed to extract magnet link")
 
     torrent_client = create_torrent_client(settings)
     torrent_client.add_magnet(magnet_link, title)

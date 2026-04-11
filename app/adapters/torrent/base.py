@@ -3,11 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from config import AppSettings
+from errors import ConfigurationError, ValidationError
 from models import TorrentStatus
 from utils import sanitize_title
 
 
-class UnsupportedDownloadClientError(ValueError):
+class UnsupportedDownloadClientError(ValidationError):
     pass
 
 
@@ -17,7 +18,7 @@ class TorrentClientAdapter(ABC):
 
     def build_save_path(self, title: str) -> str:
         if not self.settings.save_path_base:
-            raise ValueError("SAVE_PATH_BASE is not configured")
+            raise ConfigurationError("SAVE_PATH_BASE is not configured")
         return f"{self.settings.save_path_base}/{sanitize_title(title)}"
 
     def format_size_mb(self, total_size_bytes: int | float) -> str:

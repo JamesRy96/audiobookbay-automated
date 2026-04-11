@@ -1,7 +1,8 @@
 from flask import Blueprint, jsonify, request
 
 from config import get_settings
-from services.downloads import UnsupportedDownloadClientError, add_download
+from errors import ValidationError
+from services.downloads import add_download
 
 downloads_bp = Blueprint("downloads", __name__)
 
@@ -13,14 +14,7 @@ def send():
     title = data.get("title")
 
     if not details_url or not title:
-        return jsonify({"message": "Invalid request"}), 400
+        raise ValidationError("Invalid request")
 
-    try:
-        message = add_download(details_url, title, get_settings())
-        return jsonify({"message": message})
-    except UnsupportedDownloadClientError as exc:
-        return jsonify({"message": str(exc)}), 400
-    except ValueError as exc:
-        return jsonify({"message": str(exc)}), 500
-    except Exception as exc:
-        return jsonify({"message": str(exc)}), 500
+    message = add_download(details_url, title, get_settings())
+    return jsonify({"message": message})
