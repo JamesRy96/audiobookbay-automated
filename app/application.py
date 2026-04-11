@@ -11,6 +11,7 @@ from errors import AppError
 from logging_utils import configure_logging
 from routes.downloads import downloads_bp
 from routes.pages import pages_bp
+from routes.settings import settings_bp
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ def create_app() -> Flask:
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(downloads_bp)
+    app.register_blueprint(settings_bp)
 
     initialize_database(settings.database_path)
     register_error_handlers(app)
