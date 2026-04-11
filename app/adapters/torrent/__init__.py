@@ -1,0 +1,1 @@
+# Torrent client adapter package.
