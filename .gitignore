@@ -123,6 +123,7 @@ celerybeat.pid
 .env
 .venv
 config/
+docs/
 env/
 venv/
 ENV/
