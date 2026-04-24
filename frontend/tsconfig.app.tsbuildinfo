@@ -1,0 +1,1 @@
+{"root":["./src/main.ts","./src/router.ts","./src/types.ts","./src/api/client.ts","./src/app.vue","./src/components/appheader.vue","./src/components/filterbar.vue","./src/components/torrenttable.vue","./src/views/searchview.vue","./src/views/settingsview.vue","./src/views/statusview.vue","./env.d.ts"],"version":"5.9.3"}

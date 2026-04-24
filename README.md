@@ -53,6 +53,10 @@ ABB_HOSTNAME='audiobookbay.is' # Default
 PAGE_LIMIT=5                   # Defaults to 5 if not set, more than this may probably rate limit.
 FLASK_PORT=5078                # Port used by docker container
 ```
+
+If the torrent client runs on the same Mac as Docker Desktop, do not use the Mac's LAN or VPN IP by default. Use `DL_HOST=host.docker.internal` or `DL_URL=http://host.docker.internal:8080` so the container talks back to the host correctly.
+
+If that still fails, check the torrent WebUI bind address. A `Connection refused` error usually means the WebUI is only listening on `127.0.0.1` or on a different port, so the container cannot reach it.
 The following optional variables add an additional entry to the navigation bar. This is useful for linking to your audiobook player or another related service:
 
 ```
@@ -76,7 +80,7 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
        environment:
          - DOWNLOAD_CLIENT=qbittorrent
          - DL_SCHEME=http
-         - DL_HOST=192.168.1.123
+         - DL_HOST=host.docker.internal
          - DL_PORT=8080
          - DL_USERNAME=admin
          - DL_PASSWORD=pass
@@ -105,7 +109,7 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
     # Torrent Client Configuration
     DOWNLOAD_CLIENT=transmission # Change to delugeweb, transmission or qbittorrent
     DL_SCHEME=http
-    DL_HOST=192.168.1.123
+    DL_HOST=host.docker.internal
     DL_PORT=8080
     DL_USERNAME=admin
     DL_PASSWORD=pass

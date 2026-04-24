@@ -162,6 +162,10 @@ cython_debug/
 #.idea/
 
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 #Mac DS_Store
 .DS_Store
 

@@ -30,7 +30,7 @@ class RouteTests(unittest.TestCase):
     def test_send_requires_link_and_title(self):
         client = self.create_test_client()
 
-        response = client.post("/send", json={})
+        response = client.post("/api/send", json={})
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["message"], "Invalid request")
@@ -38,9 +38,9 @@ class RouteTests(unittest.TestCase):
     def test_send_uses_central_error_handler(self):
         client = self.create_test_client()
 
-        with patch("routes.downloads.add_download", side_effect=ExternalServiceError("Failed to extract magnet link")):
+        with patch("routes.api.add_download", side_effect=ExternalServiceError("Failed to extract magnet link")):
             response = client.post(
-                "/send",
+                "/api/send",
                 json={"link": "https://example.com", "title": "Example"},
             )
 
@@ -51,13 +51,31 @@ class RouteTests(unittest.TestCase):
         client = self.create_test_client()
 
         with patch(
-            "routes.pages.fetch_torrent_status",
+            "routes.api.fetch_torrent_status",
             side_effect=UnsupportedDownloadClientError("Unsupported download client"),
         ):
-            response = client.get("/status")
+            response = client.get("/api/status")
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["message"], "Unsupported download client")
+
+    def test_search_empty_query_returns_empty(self):
+        client = self.create_test_client()
+
+        response = client.get("/api/search")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["books"], [])
+
+    def test_config_returns_nav_link(self):
+        client = self.create_test_client()
+
+        response = client.get("/api/config")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("nav_link_name", data)
+        self.assertIn("nav_link_url", data)
 
 
 if __name__ == "__main__":

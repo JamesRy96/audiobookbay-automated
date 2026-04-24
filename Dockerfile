@@ -1,17 +1,14 @@
-# Use an official Python runtime as a parent image
+FROM node:22-alpine AS frontend-build
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.13-slim
-
-# Set the working directory in the container
 WORKDIR /app
-
-# Copy the app directory contents into the container
-COPY /app /app
-
-# Install any necessary dependencies
+COPY app/ /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Expose the port the app runs on
+COPY --from=frontend-build /build/dist /app/dist
 EXPOSE 5078
-
-# Define the command to run the application
 CMD ["python", "app.py"]

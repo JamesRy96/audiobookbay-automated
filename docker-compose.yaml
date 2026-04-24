@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   audiobookbay-automated:
-    image: ghcr.io/jamesry96/audiobookbay-automated:latest
+    build: .
     ports:
       - "5078:5078"
     container_name: audiobookbay-automated

@@ -7,7 +7,7 @@ from errors import AppError, ValidationError
 from repositories.settings import SettingsRepository
 from services.settings_service import SettingsService
 
-settings_bp = Blueprint("settings", __name__)
+settings_bp = Blueprint("settings", __name__, url_prefix="/api")
 
 
 def _build_service() -> tuple[SettingsService, AppSettings]:

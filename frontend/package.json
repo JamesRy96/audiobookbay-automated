@@ -1,0 +1,24 @@
+{
+  "name": "audiobookbay-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "flatpickr": "^4.6",
+    "nouislider": "^15.8",
+    "vue": "^3.5",
+    "vue-router": "^4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@vitejs/plugin-vue": "^5.2",
+    "typescript": "^5.7",
+    "vite": "^6.2",
+    "vue-tsc": "^2.2"
+  }
+}

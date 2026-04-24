@@ -53,7 +53,7 @@ class SettingsRouteTests(unittest.TestCase):
     def test_get_settings_returns_current_settings(self):
         client = self.create_test_client()
 
-        response = client.get("/settings")
+        response = client.get("/api/settings")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["settings"]["page_limit"], 5)
@@ -65,7 +65,7 @@ class SettingsRouteTests(unittest.TestCase):
         client = self.create_test_client()
 
         response = client.post(
-            "/settings",
+            "/api/settings",
             json={"page_limit": 11, "dl_url": "https://example.com:9443"},
         )
 
@@ -79,12 +79,12 @@ class SettingsRouteTests(unittest.TestCase):
     def test_post_settings_does_not_clear_password_when_omitted(self):
         client = self.create_test_client()
 
-        response = client.post("/settings", json={"page_limit": 7})
+        response = client.post("/api/settings", json={"page_limit": 7})
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["settings"]["dl_password_configured"])
 
-        response = client.get("/settings")
+        response = client.get("/api/settings")
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["settings"]["dl_password_configured"])

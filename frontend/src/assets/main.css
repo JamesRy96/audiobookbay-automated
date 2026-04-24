@@ -1,0 +1,72 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    min-height: 100%;
+    scroll-behavior: smooth;
+}
+
+body.app-shell {
+    margin: 0;
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    color: var(--text);
+    line-height: 1.5;
+    background:
+        radial-gradient(circle at top left, rgba(79, 140, 255, 0.22), transparent 30%),
+        radial-gradient(circle at top right, rgba(45, 212, 191, 0.16), transparent 28%),
+        radial-gradient(circle at bottom center, rgba(255, 186, 73, 0.1), transparent 25%),
+        linear-gradient(180deg, #0b1020 0%, #0d1428 46%, #0a0f1b 100%);
+    background-attachment: fixed;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+.app-shell__backdrop {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 30%),
+        linear-gradient(225deg, rgba(255, 255, 255, 0.025), transparent 28%);
+    opacity: 0.55;
+}
+
+a { color: inherit; }
+img { display: block; max-width: 100%; }
+button, input, select, textarea { font: inherit; }
+button { border: 0; cursor: pointer; }
+
+.app-shell__frame {
+    position: relative;
+    z-index: 1;
+    width: min(var(--content-width), calc(100% - 2rem));
+    margin: 1rem auto 2rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 840px) {
+    .app-shell__frame {
+        width: min(var(--content-width), calc(100% - 1rem));
+        margin-top: 0.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
