@@ -9,6 +9,10 @@ COPY /app /app
 
 # Install any necessary dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Healthcheck
+HEALTHCHECK CMD curl -sf http://127.0.0.1:5078 || exit 1
 
 # Expose the port the app runs on
 EXPOSE 5078
