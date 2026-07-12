@@ -1,13 +1,17 @@
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import requests
+
 
 def test_search_route_renders_and_processes_queries(monkeypatch, client, app_module):
     monkeypatch.setattr(
         app_module, "search_audiobookbay", Mock(return_value=[{"title": "Book"}])
     )
 
-    assert client.get("/").status_code == 200
+    search_page = client.get("/")
+    assert search_page.status_code == 200
+    assert b'<form method="post" action="/"' in search_page.data
     response = client.post("/", data={"query": "Book"})
     assert response.status_code == 200
     app_module.search_audiobookbay.assert_called_once_with("Book")
@@ -21,6 +25,38 @@ def test_search_route_handles_search_error(monkeypatch, client, app_module):
     response = client.post("/", data={"query": "Book"})
 
     assert response.status_code == 200
+    assert b"Failed to search. offline" in response.data
+
+
+def test_details_returns_parsed_book_details(monkeypatch, client, app_module):
+    details = {"title": "Meditations", "source_url": "https://abb.example/book"}
+    monkeypatch.setattr(app_module, "ABB_HOSTNAME", "abb.example")
+    monkeypatch.setattr(app_module, "extract_book_details", Mock(return_value=details))
+
+    response = client.post("/details", json={"link": "https://abb.example/book"})
+
+    assert response.status_code == 200
+    assert response.get_json() == details
+    app_module.extract_book_details.assert_called_once_with("https://abb.example/book")
+
+
+def test_details_rejects_other_hosts_and_reports_fetch_errors(
+    monkeypatch, client, app_module
+):
+    monkeypatch.setattr(app_module, "ABB_HOSTNAME", "abb.example")
+    assert (
+        client.post("/details", json={"link": "https://other.example/book"}).status_code
+        == 400
+    )
+
+    monkeypatch.setattr(
+        app_module,
+        "extract_book_details",
+        Mock(side_effect=requests.exceptions.RequestException("offline")),
+    )
+    response = client.post("/details", json={"link": "https://abb.example/book"})
+    assert response.status_code == 502
+    assert response.get_json()["message"] == "Unable to load details from AudiobookBay"
 
 
 def test_send_rejects_invalid_or_unavailable_magnet(monkeypatch, client, app_module):

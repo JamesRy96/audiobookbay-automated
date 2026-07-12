@@ -17,5 +17,5 @@ fi
 resolved_env="$(mktemp "${TMPDIR:-/tmp}/audiobookbay-automated.env.XXXXXX")"
 trap 'rm -f "$resolved_env"' EXIT
 
-op inject --in-file "$ENV_FILE" --out-file "$resolved_env"
+op inject --force --in-file "$ENV_FILE" --out-file "$resolved_env"
 APP_ENV_FILE="$resolved_env" docker compose --env-file "$ENV_FILE" -f "$ROOT_DIR/docker-compose.yaml" "$@"

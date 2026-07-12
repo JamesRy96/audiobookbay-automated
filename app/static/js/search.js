@@ -9,6 +9,11 @@ document.addEventListener("DOMContentLoaded", function () {
       .getElementById("clear-button")
       .addEventListener("click", clearFilters);
   }
+
+  document.querySelectorAll(".details-button").forEach((button) => {
+    button.addEventListener("click", () => showBookDetails(button.dataset.detailsUrl));
+  });
+  initializeDetailsModal();
 });
 
 let datePicker;
@@ -302,4 +307,93 @@ function sendToQB(link, title) {
       alert(data.message);
       hideLoadingSpinner();
     });
+}
+
+let lastDetailsButton;
+
+function initializeDetailsModal() {
+  const modal = document.getElementById("details-modal");
+  const closeButton = document.getElementById("details-modal-close");
+  if (!modal || !closeButton) return;
+
+  closeButton.addEventListener("click", closeBookDetails);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeBookDetails();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.hidden) closeBookDetails();
+  });
+}
+
+function setDetailsModalState({ loading, error, details }) {
+  document.getElementById("details-modal-loading").hidden = !loading;
+  const errorElement = document.getElementById("details-modal-error");
+  errorElement.hidden = !error;
+  errorElement.textContent = error || "";
+  document.getElementById("details-modal-content").hidden = !details;
+}
+
+function renderBookDetails(details) {
+  document.getElementById("details-title").textContent = details.title;
+  const cover = document.getElementById("details-cover");
+  cover.hidden = !details.cover;
+  if (details.cover) {
+    cover.src = details.cover;
+    cover.alt = `Cover for ${details.title}`;
+  }
+
+  const metadata = document.getElementById("details-metadata");
+  metadata.replaceChildren();
+  const fields = [
+    ["Category", details.category], ["Language", details.language],
+    ["Keywords", details.keywords], ["Shared by", details.shared_by],
+    ["Written by", details.written_by], ["Read by", details.read_by],
+    ["Format", details.format], ["Bitrate", details.bitrate],
+  ];
+  fields.filter(([, value]) => value).forEach(([label, value]) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const definition = document.createElement("dd");
+    definition.textContent = value;
+    metadata.append(term, definition);
+  });
+
+  const description = document.getElementById("details-description");
+  description.replaceChildren();
+  details.description.split("\n\n").forEach((text) => {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = text;
+    description.appendChild(paragraph);
+  });
+  document.getElementById("details-source-link").href = details.source_url;
+}
+
+async function showBookDetails(link) {
+  const modal = document.getElementById("details-modal");
+  lastDetailsButton = document.activeElement;
+  modal.hidden = false;
+  document.body.classList.add("modal-open");
+  document.getElementById("details-modal-close").focus();
+  setDetailsModalState({ loading: true, error: null, details: false });
+
+  try {
+    const response = await fetch("/details", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Unable to load details");
+    renderBookDetails(data);
+    setDetailsModalState({ loading: false, error: null, details: true });
+  } catch (error) {
+    setDetailsModalState({ loading: false, error: error.message, details: false });
+  }
+}
+
+function closeBookDetails() {
+  const modal = document.getElementById("details-modal");
+  modal.hidden = true;
+  document.body.classList.remove("modal-open");
+  if (lastDetailsButton) lastDetailsButton.focus();
 }

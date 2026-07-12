@@ -182,7 +182,8 @@ def test_search_audiobookbay_stops_for_empty_page_or_request_error(
         "get",
         Mock(side_effect=requests.exceptions.RequestException("offline")),
     )
-    assert app_module.search_audiobookbay("book", max_pages=1) == []
+    with pytest.raises(app_module.AudiobookBayUnavailableError):
+        app_module.search_audiobookbay("book", max_pages=1)
 
 
 def test_extract_magnet_link_uses_page_trackers(monkeypatch, app_module):
@@ -232,6 +233,38 @@ def test_extract_magnet_link_uses_default_trackers(monkeypatch, app_module):
     magnet = app_module.extract_magnet_link("https://abb.example/book")
 
     assert "tracker.openbittorrent.com" in magnet
+
+
+def test_extract_book_details_parses_listing_content(monkeypatch, app_module):
+    page = """
+    <h1>Meditations</h1>
+    <div class="postContent">
+      <p>Category: Self-help Language: English Keywords: stoic history
+      Shared by: Guest Written by: Marcus Aurelius Read by: Roger Davis
+      Format: M4B Bitrate: Variable</p>
+      <img src="/covers/meditations.jpg">
+      <p>Nearly two thousand years after it was written, Meditations remains relevant.</p>
+      <p>It is a practical guide to living a meaningful life.</p>
+    </div>
+    """
+    monkeypatch.setattr(app_module.requests, "get", Mock(return_value=response(page)))
+
+    details = app_module.extract_book_details("https://abb.example/meditations")
+
+    assert details == {
+        "title": "Meditations",
+        "category": "Self-help",
+        "language": "English",
+        "keywords": "stoic history",
+        "shared_by": "Guest",
+        "written_by": "Marcus Aurelius",
+        "read_by": "Roger Davis",
+        "format": "M4B",
+        "bitrate": "Variable",
+        "cover": "https://abb.example/covers/meditations.jpg",
+        "description": "Nearly two thousand years after it was written, Meditations remains relevant.\n\nIt is a practical guide to living a meaningful life.",
+        "source_url": "https://abb.example/meditations",
+    }
 
 
 @pytest.mark.parametrize(

@@ -8,9 +8,14 @@ from transmission_rpc import Client as transmissionrpc
 from deluge_web_client import DelugeWebClient as delugewebclient
 from deluge_web_client import TorrentOptions as delugetorrentoptions
 from dotenv import load_dotenv
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 app = Flask(__name__)
+
+
+class AudiobookBayUnavailableError(Exception):
+    """Raised when AudiobookBay cannot be reached for a search."""
+
 
 # Load environment variables
 load_dotenv()
@@ -161,6 +166,10 @@ def search_audiobookbay(query, max_pages=PAGE_LIMIT):
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
             print(f"[ERROR] Failed to fetch page {page}. Reason: {e}")
+            if page == 1:
+                raise AudiobookBayUnavailableError(
+                    f"AudiobookBay ({ABB_HOSTNAME}) did not respond. Please try again later."
+                ) from e
             break
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -305,9 +314,94 @@ def extract_magnet_link(details_url):
         return None
 
 
+DETAIL_LABELS = (
+    "Category",
+    "Language",
+    "Keywords",
+    "Shared by",
+    "Written by",
+    "Read by",
+    "Format",
+    "Bitrate",
+    "File Size",
+    "Posted",
+)
+
+
+def detail_label_value(page_text, label):
+    """Return one AudiobookBay metadata value from the detail-page text."""
+    next_labels = "|".join(re.escape(item) for item in DETAIL_LABELS)
+    match = re.search(
+        rf"{re.escape(label)}\s*:\s*(.*?)(?=\s*(?:{next_labels})\s*:|\n|$)",
+        page_text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return re.sub(r"\s+", " ", match.group(1)).strip() if match else None
+
+
+def extract_book_details(details_url):
+    """Fetch and parse the displayable details from an AudiobookBay listing."""
+    response = requests.get(
+        details_url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        timeout=15,
+    )
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    content = soup.select_one(".postContent") or soup
+    page_text = content.get_text("\n", strip=True)
+    title = soup.select_one(".postTitle h1, h1")
+    cover = content.select_one("img[src]") or soup.select_one(".post img[src]")
+
+    metadata_terms = tuple(f"{label.lower()}:" for label in DETAIL_LABELS)
+    description = []
+    for paragraph in content.select("p"):
+        text = paragraph.get_text(" ", strip=True)
+        if text and not any(term in text.lower() for term in metadata_terms):
+            description.append(text)
+
+    return {
+        "title": title.get_text(" ", strip=True) if title else "Audiobook details",
+        "category": detail_label_value(page_text, "Category"),
+        "language": detail_label_value(page_text, "Language"),
+        "keywords": detail_label_value(page_text, "Keywords"),
+        "shared_by": detail_label_value(page_text, "Shared by"),
+        "written_by": detail_label_value(page_text, "Written by"),
+        "read_by": detail_label_value(page_text, "Read by"),
+        "format": detail_label_value(page_text, "Format"),
+        "bitrate": detail_label_value(page_text, "Bitrate"),
+        "cover": urljoin(details_url, cover["src"]) if cover else None,
+        "description": "\n\n".join(description) or "No description is available.",
+        "source_url": details_url,
+    }
+
+
 # Helper function to sanitize titles
 def sanitize_title(title):
     return re.sub(r'[<>:"/\\|?*]', "", title).strip()
+
+
+@app.route("/details", methods=["POST"])
+def details():
+    details_url = (request.json or {}).get("link")
+    parsed_url = urlparse(details_url) if details_url else None
+    if (
+        not parsed_url
+        or parsed_url.scheme != "https"
+        or parsed_url.hostname != ABB_HOSTNAME.lower()
+    ):
+        return jsonify({"message": "Invalid AudiobookBay detail link"}), 400
+
+    try:
+        return jsonify(extract_book_details(details_url))
+    except requests.exceptions.RequestException:
+        return jsonify({"message": "Unable to load details from AudiobookBay"}), 502
+    except Exception as e:
+        print(f"[ERROR] Failed to load book details: {e}")
+        return jsonify({"message": "Unable to parse AudiobookBay details"}), 500
 
 
 # Endpoint for search page
