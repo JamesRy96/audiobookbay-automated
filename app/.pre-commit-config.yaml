@@ -1,0 +1,80 @@
+minimum_pre_commit_version: "3.7.0"
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff (lint and fix)
+        entry: bash scripts/ci/checks.sh ruff-check
+        language: system
+        args: ["--fix"]
+        files: ^.*\.py$
+
+      - id: ruff-format
+        name: Ruff (format)
+        entry: bash scripts/ci/checks.sh ruff-format
+        language: system
+        files: ^.*\.py$
+
+      - id: bandit
+        name: Bandit (Python security)
+        entry: bash scripts/ci/checks.sh bandit
+        language: system
+        files: ^.*\.py$
+
+      - id: semgrep
+        name: Semgrep (Python security audit)
+        entry: bash scripts/ci/checks.sh semgrep
+        language: system
+        files: ^.*\.py$
+        stages: [pre-push]
+
+      - id: pip-audit
+        name: pip-audit (locked dependencies)
+        entry: bash scripts/ci/checks.sh pip-audit
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pytest
+        name: Pytest (unit tests)
+        entry: bash scripts/ci/checks.sh pytest
+        language: system
+        files: ^(.*\.py|pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+      - id: hadolint
+        name: Hadolint (Dockerfile lint)
+        entry: bash scripts/ci/checks.sh hadolint
+        language: system
+        types: [dockerfile]
+
+      - id: trivy-docker
+        name: Trivy (Docker configuration scan)
+        entry: bash scripts/ci/checks.sh trivy-config
+        language: system
+        files: ^(Dockerfile|docker/.*\.ya?ml)$
+        pass_filenames: false
+
+      - id: trivy-fs
+        name: Trivy (dependencies and secrets)
+        entry: bash scripts/ci/checks.sh trivy-fs
+        language: system
+        files: ^(.*\.py|pyproject\.toml|uv\.lock|Dockerfile)$
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: detect-secrets
+        name: detect-secrets (staged files)
+        entry: bash scripts/ci/checks.sh detect-secrets
+        language: system
+        exclude: ^(\.secrets\.baseline|uv\.lock)$
+
+      - id: trufflehog
+        name: TruffleHog (offline Git change scan)
+        entry: bash scripts/ci/checks.sh trufflehog
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

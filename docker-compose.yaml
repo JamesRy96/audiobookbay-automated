@@ -12,6 +12,7 @@ services:
       - DL_PORT=${DL_PORT}
       - DL_USERNAME=${DL_USERNAME}
       - DL_PASSWORD=${DL_PASSWORD}
+      - DL_API_KEY=${DL_API_KEY}
       - DL_CATEGORY=${DL_CATEGORY}
       - SAVE_PATH_BASE=${SAVE_PATH_BASE}
       - NAV_LINK_NAME=${NAV_LINK_NAME}

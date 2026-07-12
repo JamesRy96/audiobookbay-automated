@@ -1,0 +1,3 @@
+-r app/requirements.txt
+pytest
+pytest-cov

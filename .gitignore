@@ -178,3 +178,9 @@ cython_debug/
 *.vsix
 .vscode/settings.json
 .python-version
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/vcs.xml
+/.idea/audiobookbay-automated.iml
+/.idea/.gitignore

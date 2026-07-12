@@ -37,6 +37,7 @@ else:
 
 DL_USERNAME = os.getenv("DL_USERNAME")
 DL_PASSWORD = os.getenv("DL_PASSWORD")
+DL_API_KEY = os.getenv("DL_API_KEY")
 DL_CATEGORY = os.getenv("DL_CATEGORY", "Audiobookbay-Audiobooks")
 SAVE_PATH_BASE = os.getenv("SAVE_PATH_BASE")
 
@@ -83,6 +84,53 @@ def is_url_valid(url):
         return response.status_code == 200
     except requests.exceptions.RequestException:
         return False
+
+
+def qbittorrent_api_request(method, endpoint, **kwargs):
+    """Make an authenticated qBittorrent Web API request using an API key."""
+    if not DL_API_KEY:
+        raise RuntimeError("DL_API_KEY is not configured")
+
+    response = requests.request(
+        method,
+        f"{DL_URL.rstrip('/')}/api/v2/{endpoint.lstrip('/')}",
+        headers={"Authorization": f"Bearer {DL_API_KEY}"},
+        timeout=30,
+        **kwargs,
+    )
+    response.raise_for_status()
+    if response.text.strip() == "Fails.":
+        raise RuntimeError("qBittorrent rejected the request")
+    return response
+
+
+def qbittorrent_add_torrent(magnet_link, save_path):
+    if DL_API_KEY:
+        qbittorrent_api_request(
+            "POST",
+            "torrents/add",
+            data={
+                "urls": magnet_link,
+                "savepath": save_path,
+                "category": DL_CATEGORY,
+            },
+        )
+        return
+
+    qb = Client(host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD)
+    qb.auth_log_in()
+    qb.torrents_add(urls=magnet_link, save_path=save_path, category=DL_CATEGORY)
+
+
+def qbittorrent_torrents():
+    if DL_API_KEY:
+        return qbittorrent_api_request(
+            "GET", "torrents/info", params={"category": DL_CATEGORY}
+        ).json()
+
+    qb = Client(host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD)
+    qb.auth_log_in()
+    return qb.torrents_info(category=DL_CATEGORY)
 
 
 # Helper function to search AudiobookBay
@@ -297,11 +345,7 @@ def send():
         save_path = f"{SAVE_PATH_BASE}/{sanitize_title(title)}"
 
         if DOWNLOAD_CLIENT == "qbittorrent":
-            qb = Client(
-                host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD
-            )
-            qb.auth_log_in()
-            qb.torrents_add(urls=magnet_link, save_path=save_path, category=DL_CATEGORY)
+            qbittorrent_add_torrent(magnet_link, save_path)
         elif DOWNLOAD_CLIENT == "transmission":
             transmission = transmissionrpc(
                 host=DL_HOST,
@@ -349,11 +393,7 @@ def status():
             ]
             return render_template("status.html", torrents=torrent_list)
         elif DOWNLOAD_CLIENT == "qbittorrent":
-            qb = Client(
-                host=DL_HOST, port=DL_PORT, username=DL_USERNAME, password=DL_PASSWORD
-            )
-            qb.auth_log_in()
-            torrents = qb.torrents_info(category=DL_CATEGORY)
+            torrents = qbittorrent_torrents()
             torrent_list = [
                 {
                     "name": torrent.name,
@@ -387,4 +427,4 @@ def status():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=FLASK_PORT)
+    app.run(host="0.0.0.0", port=FLASK_PORT)  # nosec B104: container service

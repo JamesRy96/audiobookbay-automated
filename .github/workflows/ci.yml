@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install pre-commit
+        run: |
+          source scripts/ci/tool-versions.env
+          uv tool install "pre-commit==${PRE_COMMIT_VERSION}"
+      - name: Validate pre-commit configuration
+        run: pre-commit validate-config .pre-commit-config.yaml
+      - name: Validate workflow hook coverage
+        run: bash scripts/ci/validate-workflow-hooks.sh
+      - run: uv sync --frozen --extra test
+      - name: Ruff check
+        run: pre-commit run ruff-check --all-files --hook-stage pre-commit
+      - name: Ruff format
+        run: pre-commit run ruff-format --all-files --hook-stage pre-commit
+      - name: Commit formatting changes
+        if: always()
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if ! git diff --quiet; then
+            git config user.email "action@github.com"
+            git config user.name "GitHub Action"
+            git add -A
+            git commit -m "Apply Ruff formatting"
+            git push origin "HEAD:${TARGET_BRANCH}"
+          fi
+      - name: Ensure no uncommitted changes
+        run: git diff --exit-code
+      - run: pre-commit run pytest --all-files --hook-stage pre-commit
+
+  python-security:
+    name: Python security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install pre-commit
+        run: |
+          source scripts/ci/tool-versions.env
+          uv tool install "pre-commit==${PRE_COMMIT_VERSION}"
+      - run: pre-commit run bandit --all-files --hook-stage pre-commit
+      - run: pre-commit run semgrep --all-files --hook-stage pre-push
+
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install pre-commit
+        run: |
+          source scripts/ci/tool-versions.env
+          uv tool install "pre-commit==${PRE_COMMIT_VERSION}"
+      - run: pre-commit run pip-audit --all-files --hook-stage pre-push
+
+  containers:
+    name: Container checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install pre-commit
+        run: |
+          source scripts/ci/tool-versions.env
+          uv tool install "pre-commit==${PRE_COMMIT_VERSION}"
+      - run: pre-commit run hadolint --all-files --hook-stage pre-commit
+      - run: pre-commit run trivy-docker --all-files --hook-stage pre-commit
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+      - run: pre-commit run trivy-fs --all-files --hook-stage pre-push
+        env:
+          TRIVY_CACHE_DIR: ${{ runner.temp }}/trivy-cache
+
+  secrets:
+    name: Secret scans
+    runs-on: ubuntu-latest
+    env:
+      TRUFFLEHOG_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+      - name: Install pre-commit
+        run: |
+          source scripts/ci/tool-versions.env
+          uv tool install "pre-commit==${PRE_COMMIT_VERSION}"
+      - run: pre-commit run detect-secrets --all-files --hook-stage pre-commit
+      - run: pre-commit run trufflehog --all-files --hook-stage pre-push

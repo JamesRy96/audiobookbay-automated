@@ -45,8 +45,9 @@ The app uses environment variables to configure its behavior. Below are the requ
 DL_SCHEME=http
 DL_HOST=192.168.xxx.xxx        # IP or hostname of your qBittorrent or Transmission instance
 DL_PORT=8080                   # torrent WebUI port
-DL_USERNAME=YOUR_USER          # torrent username
-DL_PASSWORD=YOUR_PASSWORD      # torrent password
+DL_USERNAME=YOUR_USER          # torrent username (not needed when using DL_API_KEY)
+DL_PASSWORD=YOUR_PASSWORD      # torrent password (not needed when using DL_API_KEY)
+DL_API_KEY=                    # qBittorrent v5.2+ API key (optional; takes precedence)
 DL_CATEGORY=abb-downloader     # torrent category for downloads
 SAVE_PATH_BASE=/audiobooks     # Root path for audiobook downloads (relative to torrent)
 ABB_HOSTNAME='audiobookbay.is' # Default
@@ -80,6 +81,8 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
          - DL_PORT=8080
          - DL_USERNAME=admin
          - DL_PASSWORD=pass
+         # Or, for qBittorrent v5.2+, use an API key instead:
+         # - DL_API_KEY=qbt_your_api_key
          - DL_CATEGORY=abb-downloader
          - SAVE_PATH_BASE=/audiobooks
          - ABB_HOSTNAME='audiobookbay.is' #Default
@@ -109,6 +112,8 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
     DL_PORT=8080
     DL_USERNAME=admin
     DL_PASSWORD=pass
+    # Or, for qBittorrent v5.2+, use an API key instead:
+    # DL_API_KEY=qbt_your_api_key
     DL_CATEGORY=abb-downloader
     SAVE_PATH_BASE=/audiobooks
     
