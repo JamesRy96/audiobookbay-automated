@@ -42,6 +42,7 @@ The app uses environment variables to configure its behavior. Below are the requ
 # For some unknown reason some users have issues if the hostname is quoted, if it doesn't work try removing the quotes. I have no idea why this happens and can only assume it depends on the host system and how it handles envs/DNS lookup.
 
 ```env
+DOWNLOAD_CLIENT=qbittorrent      # qbittorrent, transmission, or delugeweb
 DL_SCHEME=http
 DL_HOST=192.168.xxx.xxx        # IP or hostname of your qBittorrent or Transmission instance
 DL_PORT=8080                   # torrent WebUI port
@@ -54,6 +55,28 @@ ABB_HOSTNAME='audiobookbay.is' # Default
 PAGE_LIMIT=5                   # Defaults to 5 if not set, more than this may probably rate limit.
 FLASK_PORT=5078                # Port used by docker container
 ```
+
+### Docker Compose and 1Password
+
+Docker Compose reads the application configuration from `.env`; it does not need
+an `environment:` list in `docker-compose.yaml`. For secrets stored in
+1Password, replace the value in `.env` with its secret-reference path, for
+example:
+
+```env
+DL_PASSWORD=op://Private/qBittorrent/password
+```
+
+Start the stack through the supplied wrapper, which uses `op inject` to resolve
+the references into a temporary file before Docker Compose starts the container:
+
+```bash
+./scripts/compose-with-op.sh up -d
+```
+
+Install and sign in to the 1Password CLI on the Docker host first. The resolved
+secret is not written to `.env`, committed to Git, or passed to the container as
+a 1Password credential.
 The following optional variables add an additional entry to the navigation bar. This is useful for linking to your audiobook player or another related service:
 
 ```
@@ -63,38 +86,29 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
 
 ### Using Docker
 
-1. Use `docker-compose` for quick deployment. Example `docker-compose.yml`:
+1. Build the image locally:
+
+   ```bash
+   docker build -t audiobookbay-automated .
+   ```
+
+2. Copy `.env.example` to `.env` and set the application values. Use this
+   `docker-compose.yml` for quick deployment:
 
    ```yaml
-   version: '3.8'
-
    services:
      audiobookbay-downloader:
        image: ghcr.io/jamesry96/audiobookbay-automated:latest
        ports:
          - "5078:5078"
        container_name: audiobookbay-downloader
-       environment:
-         - DOWNLOAD_CLIENT=qbittorrent
-         - DL_SCHEME=http
-         - DL_HOST=192.168.1.123
-         - DL_PORT=8080
-         - DL_USERNAME=admin
-         - DL_PASSWORD=pass
-         # Or, for qBittorrent v5.2+, use an API key instead:
-         # - DL_API_KEY=qbt_your_api_key
-         - DL_CATEGORY=abb-downloader
-         - SAVE_PATH_BASE=/audiobooks
-         - ABB_HOSTNAME='audiobookbay.is' #Default
-         - PAGE_LIMIT=5 #Default
-         - FLASK_PORT=5078 #Default
-         - NAV_LINK_NAME=Open Audiobook Player #Optional
-         - NAV_LINK_URL=https://audiobooks.yourdomain.com/ #Optional
+       env_file:
+         - .env
    ```
 
-2. **Start the Application**:
+3. **Start the Application**:
    ```bash
-   docker-compose up -d
+   ./scripts/compose-with-op.sh up -d
    ```
 
 ### Running Locally
