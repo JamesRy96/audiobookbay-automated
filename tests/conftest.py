@@ -15,5 +15,4 @@ def app_module():
 
 @pytest.fixture
 def client(app_module):
-    app_module.app.config.update(TESTING=True)
     return app_module.app.test_client()
