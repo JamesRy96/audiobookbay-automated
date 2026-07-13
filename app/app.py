@@ -1,5 +1,7 @@
 import os
 import re
+import threading
+import time
 import requests
 from flask import Flask, request, render_template, jsonify
 from bs4 import BeautifulSoup
@@ -17,12 +19,21 @@ class AudiobookBayUnavailableError(Exception):
     """Raised when AudiobookBay cannot be reached for a search."""
 
 
+class SearchCooldownError(Exception):
+    """Raised when an uncached search is requested too soon."""
+
+
 # Load environment variables
 load_dotenv()
 
 ABB_HOSTNAME = os.getenv("ABB_HOSTNAME", "audiobookbay.lu")
 
-PAGE_LIMIT = int(os.getenv("PAGE_LIMIT", 5))
+PAGE_LIMIT = max(1, int(os.getenv("PAGE_LIMIT", 1)))
+SEARCH_COOLDOWN_SECONDS = max(0, int(os.getenv("SEARCH_COOLDOWN_SECONDS", 5)))
+SEARCH_CACHE_TTL_SECONDS = max(0, int(os.getenv("SEARCH_CACHE_TTL_SECONDS", 900)))
+_search_cache = {}
+_search_cache_lock = threading.Lock()
+_last_uncached_search_at = 0.0
 
 DOWNLOAD_CLIENT = os.getenv("DOWNLOAD_CLIENT")
 DL_URL = os.getenv("DL_URL")
@@ -65,6 +76,8 @@ print(f"SAVE_PATH_BASE: {SAVE_PATH_BASE}")
 print(f"NAV_LINK_NAME: {NAV_LINK_NAME}")
 print(f"NAV_LINK_URL: {NAV_LINK_URL}")
 print(f"PAGE_LIMIT: {PAGE_LIMIT}")
+print(f"SEARCH_COOLDOWN_SECONDS: {SEARCH_COOLDOWN_SECONDS}")
+print(f"SEARCH_CACHE_TTL_SECONDS: {SEARCH_CACHE_TTL_SECONDS}")
 print(f"PORT: {FLASK_PORT}")
 
 
@@ -74,21 +87,6 @@ def inject_nav_link():
         "nav_link_name": os.getenv("NAV_LINK_NAME"),
         "nav_link_url": os.getenv("NAV_LINK_URL"),
     }
-
-
-def is_url_valid(url):
-    """
-    Checks if URL is valid and returns a 200 status code. Primarily used to check if cover images are accessible.
-
-    Args:
-        url (str): The URL to check.
-    """
-    try:
-        # Use a HEAD request with a short timeout and stream parameter
-        response = requests.head(url, timeout=3, allow_redirects=True, stream=True)
-        return response.status_code == 200
-    except requests.exceptions.RequestException:
-        return False
 
 
 def qbittorrent_api_request(method, endpoint, **kwargs):
@@ -139,13 +137,13 @@ def qbittorrent_torrents():
 
 
 # Helper function to search AudiobookBay
-def search_audiobookbay(query, max_pages=PAGE_LIMIT):
+def search_audiobookbay(query, page=1):
     """
     Searches AudiobookBay for a given query and scrapes the results.
 
     Args:
         query (str): The search term.
-        max_pages (int): The maximum number of pages to scrape.
+        page (int): The single results page to scrape.
 
     Returns:
         list: A list of dictionaries, where each dictionary represents a book
@@ -158,106 +156,122 @@ def search_audiobookbay(query, max_pages=PAGE_LIMIT):
 
     print(f"Searching for '{query}' on https://{ABB_HOSTNAME}...")
 
-    for page in range(1, max_pages + 1):
-        url = f"https://{ABB_HOSTNAME}/page/{page}/?s={query.lower().replace(' ', '+')}"
+    url = f"https://{ABB_HOSTNAME}/page/{page}/?s={query.lower().replace(' ', '+')}"
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Failed to fetch page {page}. Reason: {e}")
+        raise AudiobookBayUnavailableError(
+            f"AudiobookBay ({ABB_HOSTNAME}) did not respond. Please try again later."
+        ) from e
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    posts = soup.select(".post")
+
+    if not posts:
+        print(f"No results found on page {page}.")
+        return results
+
+    print(f"Processing {len(posts)} posts on page {page}...")
+
+    for post in posts:
         try:
-            response = requests.get(url, headers=headers, timeout=15)
-            # Raise an exception for bad status codes (4xx or 5xx)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Failed to fetch page {page}. Reason: {e}")
-            if page == 1:
-                raise AudiobookBayUnavailableError(
-                    f"AudiobookBay ({ABB_HOSTNAME}) did not respond. Please try again later."
-                ) from e
-            break
+            title_element = post.select_one(".postTitle > h2 > a")
+            if not title_element:
+                continue  # Skip post if title is not found
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        posts = soup.select(".post")
+            title = title_element.text.strip()
+            link = f"https://{ABB_HOSTNAME}{title_element['href']}"
 
-        # If no posts are found on the page, stop paginating
-        if not posts:
-            print(f"No more results found on page {page}.")
-            break
+            cover_image = post.select_one("img[src]")
+            cover = (
+                cover_image["src"]
+                if cover_image
+                else "/static/images/default_cover.jpg"
+            )
 
-        print(f"Processing {len(posts)} posts on page {page}...")
+            post_info = post.select_one(".postInfo")
+            post_info_text = (
+                post_info.get_text(separator=" ", strip=True) if post_info else ""
+            )
 
-        for post in posts:
-            try:
-                title_element = post.select_one(".postTitle > h2 > a")
-                if not title_element:
-                    continue  # Skip post if title is not found
+            language_match = re.search(
+                r"Language:\s*(.*?)(?:\s*Keywords:|$)", post_info_text, re.DOTALL
+            )
+            language = language_match.group(1).strip() if language_match else "N/A"
 
-                title = title_element.text.strip()
-                link = f"https://{ABB_HOSTNAME}{title_element['href']}"
+            details_paragraph = post.select_one(
+                ".postContent p[style*='text-align:center']"
+            )
 
-                # Check if the cover URL is valid, otherwise use the default
-                cover_url = (
-                    post.select_one("img")["src"] if post.select_one("img") else None
-                )
-                if cover_url and is_url_valid(cover_url):
-                    cover = cover_url
-                else:
-                    cover = "/static/images/default_cover.jpg"
+            post_date, book_format, bitrate, file_size = "N/A", "N/A", "N/A", "N/A"
 
-                post_info = post.select_one(".postInfo")
-                post_info_text = (
-                    post_info.get_text(separator=" ", strip=True) if post_info else ""
+            if details_paragraph:
+                details_html = str(details_paragraph)
+
+                post_date_match = re.search(r"Posted:\s*([^<]+)", details_html)
+                post_date = (
+                    post_date_match.group(1).strip() if post_date_match else "N/A"
                 )
 
-                language_match = re.search(
-                    r"Language:\s*(.*?)(?:\s*Keywords:|$)", post_info_text, re.DOTALL
+                format_match = re.search(
+                    r"Format:\s*<span[^>]*>([^<]+)</span>", details_html
                 )
-                language = language_match.group(1).strip() if language_match else "N/A"
+                book_format = format_match.group(1).strip() if format_match else "N/A"
 
-                details_paragraph = post.select_one(
-                    ".postContent p[style*='text-align:center']"
+                bitrate_match = re.search(
+                    r"Bitrate:\s*<span[^>]*>([^<]+)</span>", details_html
                 )
+                bitrate = bitrate_match.group(1).strip() if bitrate_match else "N/A"
 
-                post_date, book_format, bitrate, file_size = "N/A", "N/A", "N/A", "N/A"
-
-                if details_paragraph:
-                    details_html = str(details_paragraph)
-
-                    post_date_match = re.search(r"Posted:\s*([^<]+)", details_html)
-                    post_date = (
-                        post_date_match.group(1).strip() if post_date_match else "N/A"
-                    )
-
-                    format_match = re.search(
-                        r"Format:\s*<span[^>]*>([^<]+)</span>", details_html
-                    )
-                    book_format = (
-                        format_match.group(1).strip() if format_match else "N/A"
-                    )
-
-                    bitrate_match = re.search(
-                        r"Bitrate:\s*<span[^>]*>([^<]+)</span>", details_html
-                    )
-                    bitrate = bitrate_match.group(1).strip() if bitrate_match else "N/A"
-
-                    file_size_match = re.search(
-                        r"File Size:\s*<span[^>]*>([^<]+)</span>\s*([^<]+)",
-                        details_html,
-                    )
-                    if file_size_match:
-                        file_size = f"{file_size_match.group(1).strip()} {file_size_match.group(2).strip()}"
-
-                results.append(
-                    {
-                        "title": title,
-                        "link": link,
-                        "cover": cover,
-                        "language": language,
-                        "post_date": post_date,
-                        "format": book_format,
-                        "bitrate": bitrate,
-                        "file_size": file_size,
-                    }
+                file_size_match = re.search(
+                    r"File Size:\s*<span[^>]*>([^<]+)</span>\s*([^<]+)",
+                    details_html,
                 )
-            except Exception as e:
-                print(f"[ERROR] Could not process a post. Details: {e}")
-                continue
+                if file_size_match:
+                    file_size = f"{file_size_match.group(1).strip()} {file_size_match.group(2).strip()}"
+
+            results.append(
+                {
+                    "title": title,
+                    "link": link,
+                    "cover": cover,
+                    "language": language,
+                    "post_date": post_date,
+                    "format": book_format,
+                    "bitrate": bitrate,
+                    "file_size": file_size,
+                }
+            )
+        except Exception as e:
+            print(f"[ERROR] Could not process a post. Details: {e}")
+            continue
+    return results
+
+
+def get_search_results(query, page=1):
+    """Return a cached page of results, rate-limiting only upstream requests."""
+    global _last_uncached_search_at
+
+    key = (query.strip().casefold(), page)
+    now = time.monotonic()
+    with _search_cache_lock:
+        cached = _search_cache.get(key)
+        if cached and now - cached[0] < SEARCH_CACHE_TTL_SECONDS:
+            return cached[1]
+
+        remaining = SEARCH_COOLDOWN_SECONDS - (now - _last_uncached_search_at)
+        if remaining > 0:
+            raise SearchCooldownError(
+                f"Please wait {int(remaining) + 1} seconds before another search."
+            )
+        _last_uncached_search_at = now
+
+    results = search_audiobookbay(query, page)
+    with _search_cache_lock:
+        _search_cache[key] = (time.monotonic(), results)
     return results
 
 
@@ -413,13 +427,39 @@ def search():
         if request.method == "POST":  # Form submitted
             query = request.form["query"]
             if query:  # Only search if the query is not empty
-                books = search_audiobookbay(query)
-        return render_template("search.html", books=books, query=query)
+                books = get_search_results(query)
+        return render_template(
+            "search.html",
+            books=books,
+            query=query,
+            has_more=bool(books) and PAGE_LIMIT > 1,
+        )
+    except SearchCooldownError as e:
+        return render_template(
+            "search.html", books=books, error=str(e), query=query
+        ), 429
     except Exception as e:
         print(f"[ERROR] Failed to search: {e}")
         return render_template(
             "search.html", books=books, error=f"Failed to search. {str(e)}", query=query
-        )
+        ), 502
+
+
+@app.route("/search-page", methods=["POST"])
+def search_page():
+    data = request.json or {}
+    query = data.get("query", "").strip()
+    page = data.get("page")
+    if not query or not isinstance(page, int) or page < 2 or page > PAGE_LIMIT:
+        return jsonify({"message": "Invalid search page request"}), 400
+
+    try:
+        books = get_search_results(query, page)
+        return jsonify({"books": books, "has_more": bool(books) and page < PAGE_LIMIT})
+    except SearchCooldownError as e:
+        return jsonify({"message": str(e)}), 429
+    except AudiobookBayUnavailableError as e:
+        return jsonify({"message": str(e)}), 502
 
 
 # Endpoint to send magnet link to qBittorrent

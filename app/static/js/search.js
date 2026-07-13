@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", function () {
     button.addEventListener("click", () => showBookDetails(button.dataset.detailsUrl));
   });
   initializeDetailsModal();
+  initializeLoadMore();
 });
 
 let datePicker;
@@ -294,6 +295,104 @@ function hideScrollingMessages() {
     intervalId = null;
   }
   if(messageScroller) messageScroller.style.display = "none";
+}
+
+function initializeLoadMore() {
+  const button = document.getElementById("load-more-button");
+  if (button) button.addEventListener("click", loadNextPage);
+}
+
+function addTextElement(parent, tagName, className, text) {
+  const element = document.createElement(tagName);
+  element.className = className;
+  element.textContent = text;
+  parent.appendChild(element);
+  return element;
+}
+
+function appendSearchResult(book) {
+  const row = document.createElement("tr");
+  row.className = "result-row";
+  row.dataset.language = book.language;
+  row.dataset.bitrate = book.bitrate;
+  row.dataset.format = book.format;
+  row.dataset.fileSize = book.file_size;
+  row.dataset.postDate = book.post_date;
+
+  const coverCell = document.createElement("td");
+  const cover = document.createElement("img");
+  cover.src = book.cover;
+  cover.alt = "Cover Art";
+  cover.className = "cover";
+  cover.width = 100;
+  coverCell.appendChild(cover);
+
+  const informationCell = document.createElement("td");
+  addTextElement(informationCell, "p", "book-title", book.title);
+  const properties = document.createElement("div");
+  properties.className = "property-results-container";
+  [
+    ["book-language", "Language", book.language],
+    ["book-bitrate", "Bitrate", book.bitrate],
+    ["book-format", "Format", book.format],
+    ["book-file_size", "File Size", book.file_size],
+    ["book-post_date", "Posted", book.post_date],
+  ].forEach(([className, label, value]) => {
+    addTextElement(properties, "span", className, `${label}: ${value}`);
+  });
+  informationCell.appendChild(properties);
+
+  const actionsCell = document.createElement("td");
+  const detailsButton = document.createElement("button");
+  detailsButton.type = "button";
+  detailsButton.className = "details-button";
+  detailsButton.textContent = "Details";
+  detailsButton.addEventListener("click", () => showBookDetails(book.link));
+  const downloadButton = document.createElement("button");
+  downloadButton.type = "button";
+  downloadButton.textContent = "Download to Server";
+  downloadButton.addEventListener("click", () => sendToQB(book.link, book.title));
+  actionsCell.append(detailsButton, downloadButton);
+
+  row.append(coverCell, informationCell, actionsCell);
+  document.getElementById("results-table-body").appendChild(row);
+}
+
+async function loadNextPage() {
+  const results = document.getElementById("results-table-body");
+  const button = document.getElementById("load-more-button");
+  const message = document.getElementById("load-more-message");
+  const page = Number(button.dataset.nextPage);
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Loading…";
+  message.hidden = true;
+
+  try {
+    const response = await fetch("/search-page", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: results.dataset.searchQuery, page }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Unable to load more results");
+
+    data.books.forEach(appendSearchResult);
+    if (data.has_more) {
+      button.dataset.nextPage = String(page + 1);
+    } else {
+      button.hidden = true;
+      message.textContent = data.books.length ? "No more pages to load." : "No more results found.";
+      message.hidden = false;
+    }
+    if (datePicker) applyFilters();
+  } catch (error) {
+    message.textContent = error.message;
+    message.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 function sendToQB(link, title) {

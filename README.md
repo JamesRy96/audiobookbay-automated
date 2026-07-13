@@ -52,7 +52,9 @@ DL_API_KEY=                    # qBittorrent v5.2+ API key (optional; takes prec
 DL_CATEGORY=abb-downloader     # torrent category for downloads
 SAVE_PATH_BASE=/audiobooks     # Root path for audiobook downloads (relative to torrent)
 ABB_HOSTNAME='audiobookbay.is' # Default
-PAGE_LIMIT=5                   # Defaults to 5 if not set, more than this may probably rate limit.
+PAGE_LIMIT=5                   # Maximum result pages per query; only page 1 loads initially.
+SEARCH_COOLDOWN_SECONDS=5      # Wait time before another uncached upstream search.
+SEARCH_CACHE_TTL_SECONDS=900   # Reuse matching query/page results for 15 minutes.
 FLASK_PORT=5078                # Port used by docker container
 ```
 
@@ -135,7 +137,9 @@ NAV_LINK_URL=https://audiobooks.yourdomain.com/
     ABB_HOSTNAME='audiobookbay.is' #Default
     # ABB_HOSTNAME='audiobookbay.lu' #Alternative
 
-    PAGE_LIMIT=5 #Default
+    PAGE_LIMIT=5 # Maximum result pages per query; only page 1 loads initially
+    SEARCH_COOLDOWN_SECONDS=5 # Default
+    SEARCH_CACHE_TTL_SECONDS=900 # Default (15 minutes)
     FLASK_PORT=5078 #Default
 
     # Optional Navigation Bar Entry

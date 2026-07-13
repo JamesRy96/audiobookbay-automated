@@ -156,6 +156,16 @@ img.cover {
     color: red;
 }
 
+.load-more-container {
+    width: min(300px, 90%);
+    margin: 24px auto;
+    text-align: center;
+}
+
+.load-more-container p {
+    margin: 0;
+}
+
 /* Spinner animation */
 @keyframes spin {
     0% {

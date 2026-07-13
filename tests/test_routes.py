@@ -5,27 +5,63 @@ import requests
 
 
 def test_search_route_renders_and_processes_queries(monkeypatch, client, app_module):
-    monkeypatch.setattr(
-        app_module, "search_audiobookbay", Mock(return_value=[{"title": "Book"}])
-    )
+    get_results = Mock(return_value=[{"title": "Book"}])
+    monkeypatch.setattr(app_module, "get_search_results", get_results)
+    monkeypatch.setattr(app_module, "PAGE_LIMIT", 2)
 
     search_page = client.get("/")
     assert search_page.status_code == 200
     assert b'<form method="post" action="/"' in search_page.data
     response = client.post("/", data={"query": "Book"})
     assert response.status_code == 200
-    app_module.search_audiobookbay.assert_called_once_with("Book")
+    assert b'id="load-more-button"' in response.data
+    get_results.assert_called_once_with("Book")
 
 
 def test_search_route_handles_search_error(monkeypatch, client, app_module):
     monkeypatch.setattr(
-        app_module, "search_audiobookbay", Mock(side_effect=RuntimeError("offline"))
+        app_module, "get_search_results", Mock(side_effect=RuntimeError("offline"))
     )
 
     response = client.post("/", data={"query": "Book"})
 
-    assert response.status_code == 200
+    assert response.status_code == 502
     assert b"Failed to search. offline" in response.data
+
+
+def test_search_page_returns_next_page_and_validates_input(
+    monkeypatch, client, app_module
+):
+    get_results = Mock(return_value=[{"title": "Next book"}])
+    monkeypatch.setattr(app_module, "get_search_results", get_results)
+    monkeypatch.setattr(app_module, "PAGE_LIMIT", 3)
+
+    response = client.post("/search-page", json={"query": "Book", "page": 2})
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "books": [{"title": "Next book"}],
+        "has_more": True,
+    }
+    get_results.assert_called_once_with("Book", 2)
+    assert (
+        client.post("/search-page", json={"query": "Book", "page": 4}).status_code
+        == 400
+    )
+
+
+def test_search_page_reports_cooldown(monkeypatch, client, app_module):
+    monkeypatch.setattr(app_module, "PAGE_LIMIT", 3)
+    monkeypatch.setattr(
+        app_module,
+        "get_search_results",
+        Mock(side_effect=app_module.SearchCooldownError("Please wait 5 seconds")),
+    )
+
+    response = client.post("/search-page", json={"query": "Book", "page": 2})
+
+    assert response.status_code == 429
+    assert response.get_json()["message"] == "Please wait 5 seconds"
 
 
 def test_details_returns_parsed_book_details(monkeypatch, client, app_module):

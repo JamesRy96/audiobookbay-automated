@@ -22,20 +22,6 @@ def test_inject_nav_link_reads_environment(monkeypatch, app_module):
     }
 
 
-def test_is_url_valid_handles_success_and_request_errors(monkeypatch, app_module):
-    monkeypatch.setattr(
-        app_module.requests, "head", lambda *args, **kwargs: response(status_code=200)
-    )
-    assert app_module.is_url_valid("https://cover.example") is True
-
-    monkeypatch.setattr(
-        app_module.requests,
-        "head",
-        Mock(side_effect=requests.exceptions.RequestException("offline")),
-    )
-    assert app_module.is_url_valid("https://cover.example") is False
-
-
 def test_qbittorrent_api_request_requires_api_key(monkeypatch, app_module):
     monkeypatch.setattr(app_module, "DL_API_KEY", None)
 
@@ -150,10 +136,9 @@ def test_search_audiobookbay_parses_book_and_default_cover(monkeypatch, app_modu
     <article class="post"><div class="postTitle"><h2><a href="/second">Second</a></h2></div></article>
     """
     monkeypatch.setattr(app_module.requests, "get", Mock(return_value=response(page)))
-    monkeypatch.setattr(app_module, "is_url_valid", lambda url: True)
     monkeypatch.setattr(app_module, "ABB_HOSTNAME", "abb.example")
 
-    books = app_module.search_audiobookbay("A Book", max_pages=1)
+    books = app_module.search_audiobookbay("A Book")
 
     assert books[0] == {
         "title": "A Book",
@@ -175,7 +160,7 @@ def test_search_audiobookbay_stops_for_empty_page_or_request_error(
     monkeypatch.setattr(
         app_module.requests, "get", Mock(return_value=response("<html></html>"))
     )
-    assert app_module.search_audiobookbay("book", max_pages=2) == []
+    assert app_module.search_audiobookbay("book", page=2) == []
 
     monkeypatch.setattr(
         app_module.requests,
@@ -183,7 +168,37 @@ def test_search_audiobookbay_stops_for_empty_page_or_request_error(
         Mock(side_effect=requests.exceptions.RequestException("offline")),
     )
     with pytest.raises(app_module.AudiobookBayUnavailableError):
-        app_module.search_audiobookbay("book", max_pages=1)
+        app_module.search_audiobookbay("book")
+
+
+def test_get_search_results_caches_pages_and_enforces_cooldown(monkeypatch, app_module):
+    search = Mock(return_value=[{"title": "Book"}])
+    monkeypatch.setattr(app_module, "search_audiobookbay", search)
+    monkeypatch.setattr(app_module, "SEARCH_CACHE_TTL_SECONDS", 900)
+    monkeypatch.setattr(app_module, "SEARCH_COOLDOWN_SECONDS", 5)
+    monkeypatch.setattr(app_module, "_search_cache", {})
+    monkeypatch.setattr(app_module, "_last_uncached_search_at", 0.0)
+
+    assert app_module.get_search_results("Book") == [{"title": "Book"}]
+    assert app_module.get_search_results("book") == [{"title": "Book"}]
+    search.assert_called_once_with("Book", 1)
+
+    with pytest.raises(app_module.SearchCooldownError):
+        app_module.get_search_results("Different book")
+
+
+def test_get_search_results_requeries_after_cache_expiry(monkeypatch, app_module):
+    search = Mock(return_value=[])
+    monkeypatch.setattr(app_module, "search_audiobookbay", search)
+    monkeypatch.setattr(app_module, "SEARCH_CACHE_TTL_SECONDS", 0)
+    monkeypatch.setattr(app_module, "SEARCH_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(app_module, "_search_cache", {})
+    monkeypatch.setattr(app_module, "_last_uncached_search_at", 0.0)
+
+    app_module.get_search_results("Book")
+    app_module.get_search_results("Book")
+
+    assert search.call_count == 2
 
 
 def test_extract_magnet_link_uses_page_trackers(monkeypatch, app_module):
