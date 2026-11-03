@@ -45,7 +45,7 @@ dev = [
     "pre-commit==4.7.0",
     "mypy==2.4.1",
     "pyright==1.1.414",
-    "types-requests==2.33.0.20261006",
+    "types-requests==2.33.0.20261030",
     "types-cachetools==7.0.0.20260713",
     "types-gunicorn==26.2.0.20261008",
 ]
