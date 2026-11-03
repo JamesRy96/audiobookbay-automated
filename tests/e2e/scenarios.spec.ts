@@ -21,6 +21,9 @@ test("search, narrow loaded results, inspect details and send to the isolated cl
             .filter({ has: page.locator(".meta-label", { hasText: "Narrator" }) })
             .locator("a")
     ).toHaveCount(2);
+    const narrator = page.locator(".meta-item").filter({ has: page.locator(".meta-label", { hasText: "Narrator" }) });
+    await expect(narrator.getByText("full cast", { exact: true })).toBeVisible();
+    await expect(narrator.locator("a", { hasText: "full cast" })).toHaveCount(0);
     await page.locator(".details-download-btn").click();
     await expect(page.locator(".toast")).toContainText("Sent to your Download Client");
 });
@@ -75,4 +78,40 @@ test("an expired page explains how to recover without sending a download", async
     await page.reload();
     await page.locator(".send-torrent-btn").first().click();
     await expect(page.locator(".toast")).toContainText("Sent to your Download Client");
+});
+
+test("a slow next page has a single loading row and no duplicate loading button", async ({ page }) => {
+    let release!: () => void;
+    let requests = 0;
+    const waiting = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/api/search?**", async (route) => {
+        requests++;
+        await waiting;
+        await route.fulfill({ json: { books: [], has_more: false, page: 2 } });
+    });
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/?query=voyage");
+    await page.locator("#load-more-indicator").scrollIntoViewIfNeeded();
+    await expect(page.locator("#load-more-indicator")).toHaveAttribute("aria-busy", "true");
+    await expect(page.locator("#pagination-message")).toHaveText("Loading audiobooks…");
+    await expect(page.locator("#load-more-loading")).toBeVisible();
+    await expect(page.locator("#load-more-btn")).toBeHidden();
+    const geometry = await page.locator("#pagination-message").evaluate((element) => {
+        const spinner = element.querySelector("#load-more-loading")!.getBoundingClientRect();
+        const text = element.querySelector("#pagination-text")!.getBoundingClientRect();
+        return Math.abs(spinner.top + spinner.height / 2 - (text.top + text.height / 2));
+    });
+    expect(geometry).toBeLessThan(1);
+    await page.evaluate(() => {
+        void (window as any).loadNextPage("voyage");
+    });
+    expect(requests).toBe(1);
+    release();
+    await expect(page.locator("#load-more-end")).toHaveText("End of results");
+    await expect(page.locator("#load-more-end")).toBeVisible();
+    await expect(page.locator("#pagination-message")).toBeHidden();
+    await expect(page.locator("#load-more-loading")).toBeHidden();
+    await expect(page.locator("#load-more-btn")).toBeHidden();
 });

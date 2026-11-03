@@ -58,9 +58,10 @@ pre-commit run --all-files
   `#content`, and no third-party domain redirects) rather than relying only on HTTP 200/root index responses.
 - **Dual Protocol Fallback & Latency Ranking:** Scrapers must probe HTTPS first, falling back to HTTP (port 80) if TLS
   handshake fails, ranking active mirrors via exponential moving average (EMA) response latency.
-- **Taxonomy Routing:** UI/search prefixes are `category:`, `language:`, `author:`, and `narrator:`. Map to native
-  `/audio-books/type/<category>/`, `/audio-books/tag/<language>/`,
-  `/audio-books/author/<slug>/`, and `/audio-books/narrator/<slug>/` feeds alongside general keyword search.
+- **Catalog Routing:** UI/search prefixes are `category:`, `language:`, `author:`, and `narrator:`. Category/language
+  map to verified native `/audio-books/type/<category>/` and `/audio-books/tag/<language>/` feeds. Author/narrator
+  use catalog keyword search with dotted-initial normalization; do not fabricate contributor archives. Preserve
+  explicit native `/audio-books/...` paths when supplied. Do not fetch Details per search result for enrichment.
 - **Multi-Client Aggregation:** Support concurrent multi-client setups via `DL_CLIENTS` (comma-separated), unifying
   download status reporting across all active clients.
 

@@ -599,12 +599,12 @@
     </table>
     {% if books %}
     <div id="load-more-indicator" class="load-more-container" aria-busy="false">
-        <p id="pagination-message" role="status" aria-live="polite">More results load as you scroll.</p>
-        <div class="load-more-loading" id="load-more-loading" style="display: none" aria-hidden="true">
-            <span class="load-more-spinner"></span>
-        </div>
+        <p id="pagination-message" class="pagination-status" role="status" aria-live="polite">
+            <span id="load-more-loading" class="load-more-spinner" hidden aria-hidden="true"></span>
+            <span id="pagination-text">More results load as you scroll.</span>
+        </p>
         <button id="load-more-btn" class="btn-glass load-more-btn" type="button">Load more audiobooks</button>
-        <p role="status" aria-live="polite" id="load-more-end" class="load-more-end" style="display: none"></p>
+        <p role="status" aria-live="polite" id="load-more-end" class="load-more-end" hidden></p>
     </div>
     {% endif %}
 </div>

@@ -554,30 +554,23 @@ function setPaginationState(state) {
     const button = document.getElementById("load-more-btn");
     const end = document.getElementById("load-more-end");
     const message = document.getElementById("pagination-message");
-    if (indicator) {
-        indicator.style.display = "flex";
-        indicator.setAttribute("aria-busy", String(state === "loading"));
-    }
-    if (spinner) spinner.style.display = state === "loading" ? "flex" : "none";
+    const messageText = document.getElementById("pagination-text");
+    if (indicator) indicator.setAttribute("aria-busy", String(state === "loading"));
+    if (spinner) spinner.hidden = state !== "loading";
     if (button) {
-        button.style.display = state === "exhausted" ? "none" : "inline-block";
+        button.hidden = state === "loading" || state === "exhausted";
         button.disabled = state === "loading";
-        button.textContent =
-            state === "error"
-                ? "Retry loading audiobooks"
-                : state === "loading"
-                  ? "Loading audiobooks…"
-                  : "Load more audiobooks";
+        button.textContent = state === "error" ? "Retry loading audiobooks" : "Load more audiobooks";
     }
     if (end) {
-        end.style.display = state === "exhausted" ? "block" : "none";
+        end.hidden = state !== "exhausted";
         end.textContent = "End of results";
     }
     if (message) message.hidden = state === "exhausted";
-    if (message)
-        message.textContent = {
+    if (messageText)
+        messageText.textContent = {
             idle: "More results load as you scroll. You can also load them below.",
-            loading: "Finding more audiobooks…",
+            loading: "Loading audiobooks…",
             error: "Couldn’t load more audiobooks. Your results are still here. Please retry.",
             exhausted: "",
         }[state];

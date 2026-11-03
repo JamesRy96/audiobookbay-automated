@@ -93,7 +93,7 @@ extra_css %}
                         <a
                             href="{{ url_for('main.search', query='author:' + person) }}"
                             class="category-tag category-link"
-                            title="Browse all audiobooks by author {{ person }}"
+                            title="Search the catalog for {{ person }}"
                             >{{ person }}</a
                         >
                         {% endfor %} {% else %}
@@ -105,14 +105,16 @@ extra_css %}
                     <span class="meta-label">Narrator</span>
                     <div class="meta-pills-wrap">
                         {% if book.narrator and book.narrator != "Unknown" %} {% for person in
-                        book.narrator|split_contributors %}
+                        book.narrator|split_contributors %} {% if person|lower == "full cast" %}<span class="meta-value"
+                            >{{ person }}</span
+                        >{% else %}
                         <a
                             href="{{ url_for('main.search', query='narrator:' + person) }}"
                             class="category-tag category-link"
-                            title="Browse all audiobooks narrated by {{ person }}"
+                            title="Search the catalog for {{ person }}"
                             >{{ person }}</a
                         >
-                        {% endfor %} {% else %}
+                        {% endif %}{% endfor %} {% else %}
                         <span class="meta-value">{{ book.narrator }}</span>
                         {% endif %}
                     </div>

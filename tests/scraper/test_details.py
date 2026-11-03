@@ -345,3 +345,40 @@ def test_get_book_details_network_failure_records_outcome(app: Flask) -> None:
         assert get_book_details("https://audiobookbay.lu/abss/x/", refresh=True) is None
         record.assert_called_once()
         assert record.call_args.args[:2] == ("https://audiobookbay.lu/abss/x/", False)
+
+
+def test_uncached_details_obeys_request_jitter_and_semaphore() -> None:
+    """A real Details fetch uses the same bounded request policy as search."""
+    entered = False
+
+    class Gate:
+        """Observe the exact external request scope without a real semaphore."""
+
+        def __enter__(self) -> None:
+            nonlocal entered
+            entered = True
+
+        def __exit__(self, *_: Any) -> None:
+            nonlocal entered
+            entered = False
+
+    session = MagicMock()
+    response = MagicMock()
+    response.text = '<div class="postTitle"><h1>Test book</h1></div>'
+
+    def request(*_: Any, **__: Any) -> Any:
+        """Only permit the external request after the configured jitter and gate."""
+        assert entered
+        sleep.assert_called_once_with(1.0)
+        return response
+
+    session.get.side_effect = request
+    with (
+        patch("audiobook_automated.scraper.core.network.get_mirrors", return_value=["catalog.example"]),
+        patch("audiobook_automated.scraper.core.network.get_session", return_value=session),
+        patch("audiobook_automated.scraper.core.network.get_semaphore", return_value=Gate()),
+        patch("audiobook_automated.scraper.core.random.uniform", return_value=1.0),
+        patch("audiobook_automated.scraper.core.time.sleep") as sleep,
+    ):
+        assert get_book_details("https://catalog.example/book", refresh=True) is not None
+    assert not entered

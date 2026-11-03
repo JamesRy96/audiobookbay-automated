@@ -10,6 +10,7 @@ from flask.testing import FlaskClient
 
 from audiobook_automated import diagnostics
 from audiobook_automated.extensions import torrent_manager
+from audiobook_automated.logging_buffer import log_ring_buffer
 from audiobook_automated.scraper import network
 
 
@@ -210,13 +211,14 @@ def test_diagnostics_inspect_query(app: Flask, client: FlaskClient) -> None:
     app.config["ENABLE_DIAGNOSTICS"] = True
 
     mock_results = [{"title": "Test Book", "link": "/abss/test/"}]
-    with patch("audiobook_automated.scraper.core.search_audiobookbay", return_value=mock_results):
+    with patch("audiobook_automated.scraper.core.search_audiobookbay", return_value=mock_results) as search:
         resp = client.get("/api/diagnostics/inspect?query=Test")
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["type"] == "search"
         assert data["count"] == 1
         assert data["data"] == mock_results
+        search.assert_called_once_with("test", max_pages=1)
 
 
 def test_diagnostics_inspect_url(app: Flask, client: FlaskClient) -> None:
@@ -355,3 +357,23 @@ def test_snapshot_marks_untested_mirrors_and_seeds_probe(app: Flask, client: Fla
     assert body["mirrors"]["mirrors"][0]["tested"] is False
     assert body["mirrors"]["mirrors"][0]["reachable"] is False
     probe.assert_called_once()
+
+
+@pytest.mark.parametrize("query", ["a", " ", "  a  "])
+def test_inspector_rejects_short_queries_without_network(app: Flask, client: FlaskClient, query: str) -> None:
+    """Diagnostics must enforce the same minimum and trim rules as normal search."""
+    app.config["ENABLE_DIAGNOSTICS"] = True
+    with patch("audiobook_automated.scraper.core.search_audiobookbay") as search:
+        response = client.get("/api/diagnostics/inspect", query_string={"query": query})
+    assert response.status_code == 400
+    search.assert_not_called()
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "-500"])
+def test_log_export_limit_never_expands_on_negative_input(app: Flask, client: FlaskClient, limit: str) -> None:
+    """A zero/negative log limit must not export the whole real ring buffer."""
+    app.config["ENABLE_DIAGNOSTICS"] = True
+    with patch.object(log_ring_buffer, "get_logs") as logs:
+        response = client.get("/api/diagnostics/logs", query_string={"limit": limit})
+    assert response.get_json() == {"logs": [], "count": 0}
+    logs.assert_not_called()

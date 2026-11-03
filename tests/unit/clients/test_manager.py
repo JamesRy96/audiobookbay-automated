@@ -1,11 +1,13 @@
 # File: tests/unit/clients/test_manager.py
 """Unit tests for the TorrentManager."""
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, get_ident
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
-from pytest import LogCaptureFixture
+from pytest import LogCaptureFixture, raises
 
 from audiobook_automated.clients.base import TorrentClientPlugin, TorrentStatus
 from audiobook_automated.clients.manager import TorrentManager
@@ -154,8 +156,8 @@ def test_manager_proxy_methods_no_client() -> None:
     manager.client = None
 
     assert manager.verify_credentials() is False
-    # Don't assert None return for void function to satisfy Mypy
-    manager.add_magnet("link", "path")
+    with raises(ConnectionError, match="No Download Client"):
+        manager.add_magnet("link", "path")
     assert manager.get_status() == []
     assert manager.remove_torrent("id") is False
     manager.close()
@@ -369,3 +371,63 @@ def test_manager_remove_torrent_fallback_loop(app: Flask) -> None:
 
     client_b.remove_torrent.side_effect = RuntimeError("Failed too")
     assert manager.remove_torrent("hash456") is False
+
+
+def test_manager_connects_transport_in_each_request_thread() -> None:
+    """A startup connection must not mask missing handles on fresh request threads."""
+    connected: list[int] = []
+
+    class RequestClient(MockClient):
+        """Require a request-local handle just like the real SDK plugins."""
+
+        def connect(self) -> None:
+            """Open the current thread's handle."""
+            connected.append(get_ident())
+            self.client = object()
+
+        def get_status(self, category: str) -> list[TorrentStatus]:
+            """Reject operations that did not establish a handle."""
+            assert self.client is not None
+            return []
+
+        def close(self) -> None:
+            """Release only this thread's connection."""
+            self.client = None
+
+    plugin = RequestClient("localhost", 8080, None, None)
+    manager = TorrentManager()
+    manager.clients = {"test": plugin}
+    manager.client = plugin
+    barrier = Barrier(2, timeout=5)
+
+    def request_thread(_: int) -> int:
+        """Perform repeated reads and request cleanup without any shared handle."""
+        assert plugin.client is None
+        assert manager.get_status() == []
+        handle = plugin.client
+        assert manager.get_status("test") == []
+        assert plugin.client is handle
+        barrier.wait()
+        identity = id(handle)
+        manager.teardown_request()
+        assert plugin.client is None
+        return identity
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        identities = list(pool.map(request_thread, [0, 1]))
+    assert len(set(identities)) == 2
+    assert len(connected) == 2
+    assert plugin.client is None
+
+
+def test_manager_registers_request_cleanup() -> None:
+    """The real Flask lifecycle must call connection cleanup after an app context ends."""
+    isolated = Flask("client-cleanup")
+    manager = TorrentManager()
+    plugin = MagicMock()
+    manager.clients = {"test": plugin}
+    with patch.object(manager, "_load_clients"):
+        manager.init_app(isolated)
+    with isolated.app_context():
+        pass
+    plugin.teardown.assert_called_once()

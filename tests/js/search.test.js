@@ -652,8 +652,28 @@ describe("pagination recovery and result discovery", () => {
         window.resetPaginationState();
         document.body.insertAdjacentHTML(
             "beforeend",
-            '<div id="load-more-indicator"><span id="pagination-message"></span><span id="load-more-loading"></span><button id="load-more-btn"></button><p id="load-more-end"></p></div><div id="filtered-empty" hidden></div>'
+            '<div id="load-more-indicator"><p id="pagination-message"><span id="load-more-loading" hidden></span><span id="pagination-text"></span></p><button id="load-more-btn"></button><p id="load-more-end"></p></div><div id="filtered-empty" hidden></div>'
         );
+    });
+    test("a pending page has one loading message and no duplicate button", async () => {
+        let finish;
+        global.fetch = jest.fn(
+            () =>
+                new Promise((resolve) => {
+                    finish = resolve;
+                })
+        );
+        const pending = window.loadNextPage("books");
+        expect(document.getElementById("load-more-btn").hidden).toBe(true);
+        expect(document.getElementById("load-more-loading").hidden).toBe(false);
+        expect(document.getElementById("pagination-message").textContent).toBe("Loading audiobooks…");
+        await window.loadNextPage("books");
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        finish({ ok: false });
+        await pending;
+        expect(document.getElementById("load-more-btn").hidden).toBe(false);
+        expect(document.getElementById("load-more-btn").textContent).toBe("Retry loading audiobooks");
+        expect(document.getElementById("load-more-loading").hidden).toBe(true);
     });
     test("a failed page remains retryable and an empty retry announces the end", async () => {
         global.fetch = jest
@@ -694,7 +714,7 @@ describe("pagination recovery and result discovery", () => {
     test("idle initialization does not claim that a request is running", () => {
         global.IntersectionObserver = jest.fn(() => ({ observe: jest.fn(), disconnect: jest.fn() }));
         window.initInfiniteScroll("books");
-        expect(document.getElementById("load-more-loading").style.display).toBe("none");
+        expect(document.getElementById("load-more-loading").hidden).toBe(true);
         expect(document.getElementById("load-more-btn").disabled).toBe(false);
     });
 });

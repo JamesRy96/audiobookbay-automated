@@ -203,16 +203,14 @@ def test_core_get_search_url_taxonomy_and_queries() -> None:
     assert get_search_url("base.com", "language:English", page=1) == "https://base.com/audio-books/tag/english/"
     assert (
         get_search_url("base.com", "author:Brandon Sanderson", page=1)
-        == "https://base.com/audio-books/author/brandon-sanderson/"
+        == "https://base.com/page/1/?s=Brandon%20Sanderson"
     )
-    assert (
-        get_search_url("base.com", "narrator:Ray Porter", page=2)
-        == "https://base.com/audio-books/narrator/ray-porter/page/2/"
-    )
+    assert get_search_url("base.com", "narrator:Ray Porter", page=2) == "https://base.com/page/2/?s=Ray%20Porter"
 
     # Standard keyword query
     assert (
-        get_search_url("base.com", "Dungeon Crawler Carl", page=1) == "https://base.com/page/1/?s=Dungeon Crawler Carl"
+        get_search_url("base.com", "Dungeon Crawler Carl", page=1)
+        == "https://base.com/page/1/?s=Dungeon%20Crawler%20Carl"
     )
 
     # HTTP scheme preserved when stat indicates http protocol
@@ -228,11 +226,43 @@ def test_core_get_search_url_taxonomy_and_queries() -> None:
         ("CATEGORY:Science Fiction", "type/science-fiction"),
         ("language:German", "tag/german"),
         ("Language: Français", "tag/français"),
-        ("author:J.R.R. Tolkien", "author/jrr-tolkien"),
-        ("narrator:Gert Heidenreich", "narrator/gert-heidenreich"),
     ],
 )
 def test_user_facing_taxonomy_prefixes(query: str, path: str) -> None:
     """User-facing prefixes reach the correct paginated native feeds."""
     assert get_search_url("https://example.com", query) == f"https://example.com/audio-books/{path}/"
     assert get_search_url("https://example.com", query, page=2) == f"https://example.com/audio-books/{path}/page/2/"
+
+
+@pytest.mark.parametrize(
+    ("query", "encoded"),
+    [
+        ("author:J.R.R. Tolkien", "Tolkien"),
+        ("author:J. R. R. Tolkien", "Tolkien"),
+        ("AUTHOR: George R. R. Martin", "George%20Martin"),
+        ("narrator:Andy Serkis", "Andy%20Serkis"),
+        ("narrator:Gert Heidenreich", "Gert%20Heidenreich"),
+        ("author:Simon & Schuster Audio", "Simon%20%26%20Schuster%20Audio"),
+        ("author:J. R.", "J.%20R."),
+        ("author:Émile Zola", "%C3%89mile%20Zola"),
+    ],
+)
+def test_contributor_search_uses_supported_catalog_keywords(query: str, encoded: str) -> None:
+    """Use the real catalog search, not nonexistent contributor archive routes."""
+    assert get_search_url("https://catalog.example", query) == f"https://catalog.example/page/1/?s={encoded}"
+    assert get_search_url("https://catalog.example", query, 2) == f"https://catalog.example/page/2/?s={encoded}"
+
+
+def test_missing_catalog_page_does_not_penalize_mirror() -> None:
+    """A 404 page ends pagination without marking the entire catalog unavailable."""
+    response = requests.Response()
+    response.status_code = 404
+    error = requests.HTTPError("Not found", response=response)
+    session = MagicMock()
+    session.get.return_value.raise_for_status.side_effect = error
+    with (
+        patch("audiobook_automated.scraper.core.network.get_session", return_value=session),
+        patch("audiobook_automated.scraper.core.network.record_request_outcome") as record,
+    ):
+        assert fetch_page_results("https://catalog.example/page/30/?s=books") == []
+    record.assert_not_called()

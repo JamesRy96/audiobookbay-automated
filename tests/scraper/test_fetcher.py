@@ -4,6 +4,7 @@
 import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlparse
 
 import requests
 import requests_mock
@@ -364,10 +365,10 @@ def test_fetch_page_special_characters(real_world_html: str, mock_sleep: Any) ->
             with patch("audiobook_automated.scraper.core.network.get_semaphore"):
                 fetch_and_parse_page(hostname, query, page, user_agent, 30)
 
-            # Verify the query was passed in the params dict
+            # Special characters must round-trip as one search parameter.
             mock_get.assert_called()
             args = mock_get.call_args
-            assert query in args[0][0]
+            assert parse_qs(urlparse(args[0][0]).query) == {"s": [query]}
 
 
 def test_fetch_page_timeout(mock_sleep: Any) -> None:

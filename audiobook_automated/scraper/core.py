@@ -36,8 +36,8 @@ def get_search_url(base_url: str, query: str | None, page: int = 1) -> str:
       - Direct taxonomy prefixes:
           'category:<category>' -> /audio-books/type/<category>/page/<N>/
           'language:<language>' -> /audio-books/tag/<language>/page/<N>/
-          'author:<author>'     -> /audio-books/author/<author>/page/<N>/
-          'narrator:<narrator>' -> /audio-books/narrator/<narrator>/page/<N>/
+      - Contributor searches use the catalog's keyword search, not fabricated archive paths.
+        Dotted initials are omitted to match both compact and spaced catalog spellings.
       - Direct path input:
           '/audio-books/...'    -> /audio-books/.../page/<N>/
       - General keyword search:
@@ -69,8 +69,6 @@ def get_search_url(base_url: str, query: str | None, page: int = 1) -> str:
     taxonomy_prefixes = {
         "category:": "type",
         "language:": "tag",
-        "author:": "author",
-        "narrator:": "narrator",
     }
     for prefix, tax_type in taxonomy_prefixes.items():
         if q_strip.lower().startswith(prefix):
@@ -81,8 +79,16 @@ def get_search_url(base_url: str, query: str | None, page: int = 1) -> str:
                 return f"{base_url}{path}/page/{page}/"
             return f"{base_url}{path}/"
 
-    # Case 3: Standard WordPress keyword search parameter
-    return f"{base_url}/page/{page}/?s={q_strip}"
+    # The catalog has no author/narrator archive links. Search existing catalog text without enrichment.
+    for prefix in ("author:", "narrator:"):
+        if q_strip.lower().startswith(prefix):
+            contributor = q_strip[len(prefix) :].strip()
+            without_initials = re.sub(r"(?<!\w)(?:[^\W\d_]\.\s*)+", "", contributor).strip()
+            q_strip = without_initials or contributor
+            break
+
+    # Encode the whole search value so ampersands and punctuation stay inside the query.
+    return f"{base_url}/page/{page}/?s={quote(q_strip, safe='')}"
 
 
 def search_audiobookbay(query: str, max_pages: int = 1, start_page: int = 1) -> Sequence[BookSummary]:
@@ -205,6 +211,9 @@ def fetch_page_results(url: str) -> list[BookSummary]:
             network.record_request_outcome(url, False, error="Connection error or timeout")
             return []
         except network.requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:  # noqa: PLR2004
+                logger.info("Search: Catalog page not found; no results on this page.")
+                return []
             network.record_request_outcome(url, False, error=str(e))
             # Re-raise HTTP errors (4xx/5xx) to allow search_audiobookbay to handle invalidation
             raise
@@ -255,10 +264,12 @@ def get_book_details(url: str, refresh: bool = False) -> dict[str, Any] | None:
         # 2. Fetch Page
         # Ensure we have a valid session with headers (User-Agent)
         session = network.get_session()
-        started = time.perf_counter()
-        response = session.get(url, timeout=15)
-        response.raise_for_status()
-        network.record_request_outcome(url, True, round((time.perf_counter() - started) * 1000, 2))
+        with network.get_semaphore():
+            time.sleep(random.uniform(0.5, 1.5))  # noqa: S311
+            started = time.perf_counter()
+            response = session.get(url, timeout=15)
+            response.raise_for_status()
+            network.record_request_outcome(url, True, round((time.perf_counter() - started) * 1000, 2))
 
         # 3. Parse Content
         soup = parser.parse_html(response.text)

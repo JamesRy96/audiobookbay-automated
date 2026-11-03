@@ -349,3 +349,16 @@ def test_qbittorrent_generic_forbidden(app: Flask) -> None:
         with pytest.raises(ConnectionError, match="Invalid API key or credentials"):
             client.connect()
         assert client.consecutive_auth_failures == 1
+
+
+@pytest.mark.parametrize("raw_state", ["stoppedDL", "stoppedUP"])
+@pytest.mark.parametrize("raw_size, expected_size", [(-1, "Unknown"), (0, "0.00 B"), (1024, "1.00 KB")])
+def test_qbittorrent_stopped_and_pending_metadata(raw_state: str, raw_size: int, expected_size: str) -> None:
+    """Real qBittorrent 5 stopped jobs are paused and missing metadata has no negative size."""
+    client = QBittorrentClient("localhost", 8080, None, None)
+    client.client = MagicMock()
+    torrent = MagicMock(hash="test", name="Public-domain audit", state=raw_state, total_size=raw_size, progress=0)
+    client.client.torrents_info.return_value = [torrent]
+    status = client.get_status("audit")[0]
+    assert status.state == "Paused"
+    assert status.size == expected_size

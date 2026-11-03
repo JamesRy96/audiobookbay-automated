@@ -74,6 +74,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Connect Download Clients in each request thread and close their handles at request teardown; reject dispatch when
+  no client is configured.
+- Show qBittorrent stopped transfers as Paused and unavailable metadata sizes as Unknown.
+- Normalize Diagnostics Inspector searches and enforce their minimum length; clamp log limits to the buffer capacity.
+- Apply the existing scraper semaphore and request jitter to uncached Details requests.
+
+- Use working catalog keyword searches for authors/narrators; normalize dotted initials and retain healthy mirrors
+  when a search page returns 404.
+- Show one inline loading indicator during pagination, and split narrator lists that include a full-cast credit.
+
 - Isolated Download Client connections per request thread so cleanup cannot close another request's session.
 - Corrected the default client host when its setting is empty, including Put.io cloud setup.
 

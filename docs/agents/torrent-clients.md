@@ -43,6 +43,9 @@ an unset port permits each plugin's default. Different hosts/credentials require
 
 The inherited `verify_credentials()` calls `connect()` and returns a boolean. Override it only if a lighter check can
 prove that the configured credentials work. An unreachable or unauthenticated client must not report success.
+Before dispatch, status or removal, the manager connects the current thread when both transport handles are absent.
+It registers application-context teardown to release that thread's connection at the end of the request. Repeated
+operations within one request reuse the handle; startup verification does not connect future request threads.
 The inherited `teardown()` calls `close()` after a web request. Override it only for a documented, thread-isolated
 connection lifecycle. Never close or log out another request's connection.
 

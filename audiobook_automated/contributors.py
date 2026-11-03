@@ -38,7 +38,7 @@ def split_contributors(value: str | None) -> list[str]:
     if not credit:
         return []
     parts = re.split(r"\s+(?:and|&)\s+|\s*[;,]\s*", credit)
-    if len(parts) > 1 and all(_person_name(part) for part in parts):
+    if len(parts) > 1 and all(_person_name(part) or part.casefold() == "full cast" for part in parts):
         return list(dict.fromkeys(parts))
     return [credit]
 

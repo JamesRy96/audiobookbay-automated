@@ -17,6 +17,7 @@ from typing import Any
 
 from flask import Blueprint, Response, abort, current_app, jsonify, render_template, request
 
+from audiobook_automated.constants import MIN_SEARCH_QUERY_LENGTH
 from audiobook_automated.extensions import torrent_manager
 from audiobook_automated.logging_buffer import log_ring_buffer
 from audiobook_automated.scraper import core, network
@@ -272,11 +273,11 @@ def diagnostics_logs() -> Response:
     """Return recent sanitized application logs as JSON."""
     limit_str = request.args.get("limit", "100")
     try:
-        limit = int(limit_str)
+        limit = max(0, min(int(limit_str), log_ring_buffer.capacity))
     except ValueError:
         limit = 100
 
-    logs = log_ring_buffer.get_logs(limit=limit)
+    logs = log_ring_buffer.get_logs(limit=limit) if limit else []
     return jsonify({"logs": logs, "count": len(logs)})
 
 
@@ -294,11 +295,14 @@ def diagnostics_logs_download() -> Response:
 @diagnostics_bp.route("/api/diagnostics/inspect")
 def diagnostics_inspect() -> Response | tuple[Response, int]:
     """Inspect parser output for a live URL or query to verify tag and metadata fidelity."""
-    url = request.args.get("url")
-    query = request.args.get("query")
+    url = (request.args.get("url") or "").strip()
+    query = (request.args.get("query") or "").strip()
 
     if not url and not query:
         return jsonify({"error": "Either 'url' or 'query' parameter is required"}), 400
+
+    if not url and len(query) < MIN_SEARCH_QUERY_LENGTH:
+        return jsonify({"error": f"Enter at least {MIN_SEARCH_QUERY_LENGTH} characters."}), 400
 
     try:
         if url:
@@ -308,7 +312,7 @@ def diagnostics_inspect() -> Response | tuple[Response, int]:
             return jsonify({"type": "details", "url": url, "data": details})
 
         # Query inspection
-        results = core.search_audiobookbay(query or "", max_pages=1)
+        results = core.search_audiobookbay(query.lower(), max_pages=1)
         return jsonify(
             {
                 "type": "search",

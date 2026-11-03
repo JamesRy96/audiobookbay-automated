@@ -53,6 +53,7 @@ class TorrentManager:
         """
         self._app = app
         self._load_clients(app)
+        app.teardown_appcontext(self.teardown_request)
 
     def _instantiate_client(self, app: Flask, client_name: str) -> TorrentClientPlugin | None:
         """Instantiate a client plugin by name with app configuration.
@@ -185,6 +186,12 @@ class TorrentManager:
             return False
         return target.verify_credentials()
 
+    @staticmethod
+    def _ensure_connected(client: TorrentClientPlugin) -> None:
+        """Open this request thread's transport once before using a client operation."""
+        if client.client is None and client.session is None:
+            client.connect()
+
     def add_magnet(self, magnet_link: str, save_path: str, client_name: str | None = None) -> None:
         """Add a magnet link to the client.
 
@@ -195,13 +202,13 @@ class TorrentManager:
         """
         target = self.get_client(client_name)
         if not target:
-            logger.error("Manager: No download client loaded.")
-            return
+            raise ConnectionError("No Download Client is configured.")
 
         category = "abb-automated"
         if self._app:
             category = self._app.config.get("DL_CATEGORY", "abb-automated")
 
+        self._ensure_connected(target)
         target.add_magnet(magnet_link, save_path, category)
 
     def get_status(self, client_name: str | None = None) -> list[TorrentStatus]:
@@ -219,6 +226,7 @@ class TorrentManager:
 
         if client_name and client_name.lower() in self.clients:
             client_instance = self.clients[client_name.lower()]
+            self._ensure_connected(client_instance)
             statuses = client_instance.get_status(category)
             for s in statuses:
                 s.client = client_name.lower()
@@ -229,6 +237,7 @@ class TorrentManager:
             aggregated: list[TorrentStatus] = []
             for name, client_instance in self.clients.items():
                 try:
+                    self._ensure_connected(client_instance)
                     statuses = client_instance.get_status(category)
                     for s in statuses:
                         if hasattr(s, "client"):
@@ -241,6 +250,7 @@ class TorrentManager:
         if not self._client:
             return []
 
+        self._ensure_connected(self._client)
         statuses = self._client.get_status(category)
         default_name = next(iter(self.clients.keys()), "").lower()
         if not default_name:
@@ -265,6 +275,7 @@ class TorrentManager:
         target = self.get_client(client_name)
         if target:
             try:
+                self._ensure_connected(target)
                 target.remove_torrent(torrent_id)
                 return True
             except Exception as e:
@@ -274,6 +285,7 @@ class TorrentManager:
         # If no client specified and multiple exist, attempt removal across clients
         for name, client_instance in self.clients.items():
             try:
+                self._ensure_connected(client_instance)
                 client_instance.remove_torrent(torrent_id)
                 return True
             except Exception as e:

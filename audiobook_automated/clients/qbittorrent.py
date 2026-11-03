@@ -21,7 +21,7 @@ class QbTorrentProtocol(Protocol):
     hash: str
     name: str
     state: str
-    total_size: int
+    total_size: int | None
     progress: float
 
 
@@ -233,7 +233,11 @@ class QBittorrentClient(TorrentClientPlugin):
                     # qB API returns progress as 0.0-1.0 float, normalize to 0.0-100.0
                     progress=round(qb_torrent.progress * 100, 2) if qb_torrent.progress else 0.0,
                     state=friendly_state,
-                    size=format_size(qb_torrent.total_size),
+                    size=format_size(
+                        qb_torrent.total_size
+                        if qb_torrent.total_size is not None and qb_torrent.total_size >= 0
+                        else None
+                    ),
                 )
             )
         return results

@@ -1116,13 +1116,15 @@ td.col-actions {
     min-height: 140px;
 }
 
-.load-more-loading {
+.pagination-status {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
+    gap: 10px;
 }
 
 .load-more-spinner {
+    flex: 0 0 20px;
     width: 20px;
     height: 20px;
     border: 2px solid rgba(255, 255, 255, 0.2);

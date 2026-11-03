@@ -36,7 +36,9 @@
 ## Search and Description Data
 
 - Expose `category:`, `language:`, `author:` and `narrator:` in UI links. Native category/language URLs still use the
-  catalog's `/type/` and `/tag/` segments. Do not add obsolete input aliases.
+  catalog's `/type/` and `/tag/` segments. Author/narrator prefixes use supported keyword search, not invented
+  archive paths; omit dotted initials to handle spelling variants. Retain explicit native paths. Do not add aliases.
+- A search-page 404 means that page has no results; do not penalize or invalidate the whole mirror for it.
 - Progressive search fetches one page at a time and ends when the catalog returns no further results. There is no
   `PAGE_LIMIT` application setting. Preserve request jitter and concurrency caps for every page.
 - Description cleanup is local to already-fetched HTML. Collect the complete structured cast and audio fields first;

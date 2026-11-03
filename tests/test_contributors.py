@@ -16,6 +16,11 @@ from audiobook_automated.contributors import catalog_credit, split_contributors
         ("Anna Elliott,Charles Veley", ["Anna Elliott", "Charles Veley"]),
         ("Jane Doe; John Smith and Alex Brown", ["Jane Doe", "John Smith", "Alex Brown"]),
         ("Jane Doe and Jane Doe", ["Jane Doe"]),
+        (
+            "Erik Bauersfeld, Gail Chugg, Bernard Mayes, Ray Reinhardt, full cast",
+            ["Erik Bauersfeld", "Gail Chugg", "Bernard Mayes", "Ray Reinhardt", "full cast"],
+        ),
+        ("Jane Doe, John Smith, Full Cast", ["Jane Doe", "John Smith", "Full Cast"]),
         ("Smith, John", ["Smith, John"]),
         ("James Doe, Jr.", ["James Doe, Jr."]),
         ("Simon & Schuster Audio", ["Simon & Schuster Audio"]),

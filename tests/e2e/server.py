@@ -84,7 +84,7 @@ def details(link: str) -> dict[str, Any]:
     book = next((book for book in BOOKS if book["link"] == link), BOOKS[0])
     html = f"""<div class="postTitle"><h1>{escape(book["title"])}</h1></div>
     <div class="desc"><p>Written by <span class="author" itemprop="author">Mira Sol</span><br>
-    Read by <span class="narrator" itemprop="author">Jane Doe</span>, <span class="narrator" itemprop="author">John Smith</span><br>
+    Read by <span class="narrator" itemprop="author">Jane Doe, John Smith, full cast</span><br>
     Format: <span>M4B</span><br>Bitrate: <span>128 Kbps</span></p>
     <p>A journey through a world of lost clocks and hidden harbors.</p></div>"""
     parsed = parse_book_details(parse_html(html), link)

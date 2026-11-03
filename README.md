@@ -74,8 +74,8 @@ no sign-in screen of its own.
 3. Open **Downloads** to follow its progress. Your Download Client controls where files are stored and when they finish.
 
 Near the bottom, more results load automatically. **Load more audiobooks** also lets you request the next page manually.
-While a request is running, the button shows **Loading audiobooks…** and is disabled. If it fails, select **Retry loading
-audiobooks**. An end message confirms when there are no more results, and the button disappears.
+While a request is running, one spinner and **Loading audiobooks…** message replace the button. If it fails, select
+**Retry loading audiobooks**. An end message confirms when there are no more results, and the button disappears.
 
 The **×** at the end of the search box clears its text and returns focus so you can type another search. It does not
 submit a request or discard the results already on screen. To clear filters, open **Filters → Reset filters**.
@@ -91,6 +91,9 @@ Click a category, language, author, or narrator link to browse related books. Yo
 | Language | `language:German` |
 | Author | `author:J.R.R. Tolkien` |
 | Narrator | `narrator:Gert Heidenreich` |
+
+Author and narrator searches use the catalog’s keyword search and may include related titles. Dotted author initials
+are omitted so different catalog spellings still match. They do not fetch each book’s Details page.
 
 Recent searches appear inside the search panel and are kept in your browser tab. The trash icon beside
 **Recent searches** clears that history. The menu also lets you choose a color theme.

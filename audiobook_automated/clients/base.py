@@ -37,6 +37,8 @@ _EXACT_STATE_MAP: dict[str, TorrentState] = {
     "pause": TorrentState.PAUSED,
     "pauseddl": TorrentState.PAUSED,
     "pausedup": TorrentState.PAUSED,
+    "stoppeddl": TorrentState.PAUSED,
+    "stoppedup": TorrentState.PAUSED,
     "stopped": TorrentState.PAUSED,
     "stop": TorrentState.PAUSED,
     "stalled": TorrentState.STALLED,
