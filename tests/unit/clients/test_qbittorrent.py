@@ -248,7 +248,8 @@ def test_qbittorrent_api_key_auth(app: Flask) -> None:
             FORCE_SCHEME_FROM_HOST=True,
             username="meek2100",
             api_key="test_api_key",
-            REQUESTS_ARGS={"timeout": 30},
+            REQUESTS_ARGS={"timeout": 5},
+            HTTPADAPTER_ARGS={"max_retries": 0},
         )
         assert client.client is not None
         client.close()
@@ -403,3 +404,19 @@ def test_qbittorrent_real_sdk_https_contract(destination: str | None) -> None:
         assert removal == {"hashes": [info_hash], "deleteFiles": ["False"]}
         client.close()
     assert status[0].progress == 42.5
+
+
+def test_qbittorrent_sdk_propagates_short_timeout_on_unreachable_host() -> None:
+    """Installed SDK receives a finite request timeout and does not make unbounded connection attempts."""
+    import requests_mock
+    from qbittorrentapi.exceptions import APIConnectionError
+    from requests.exceptions import ConnectTimeout
+
+    with requests_mock.Mocker() as mock:
+        mock.get("http://client.example:8080/api/v2/app/version", exc=ConnectTimeout)
+        client = QBittorrentClient("client.example", 8080, None, None, api_key="test-key")
+        with pytest.raises(APIConnectionError):
+            client.connect()
+        assert 1 <= mock.call_count <= 2
+        assert all(request.timeout == 5 for request in mock.request_history)
+        client.close()

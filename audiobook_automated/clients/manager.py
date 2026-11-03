@@ -102,7 +102,7 @@ class TorrentManager:
                 username=settings.get("USERNAME"),
                 password=settings.get("PASSWORD"),
                 scheme=settings.get("SCHEME") or "http",
-                timeout=int(settings.get("TIMEOUT") or app.config.get("CLIENT_TIMEOUT", 30)),
+                timeout=int(settings.get("TIMEOUT") or app.config.get("CLIENT_TIMEOUT", 5)),
                 api_key=settings.get("API_KEY"),
                 token=settings.get("TOKEN"),
                 folder_id=settings.get("FOLDER_ID", "0"),
@@ -156,12 +156,28 @@ class TorrentManager:
         target = self.get_client(client_name)
         if not target:
             return False
-        return target.verify_credentials()
+        name = client_name or next(
+            (name for name, instance in self.clients.items() if instance is target), self.client_type
+        )
+        logger.info("Checking Download Client '%s'. Please wait for the connection result.", name)
+        connected = target.verify_credentials()
+        if not connected:
+            logger.warning(
+                "Cannot connect to Download Client '%s'. Check that it is running, then check %s_HOST, %s_PORT "
+                "and its login settings. If this app and client share Gluetun's network, use %s_HOST=127.0.0.1. "
+                "For a separate server, use its reachable address.",
+                name,
+                name.upper(),
+                name.upper(),
+                name.upper(),
+            )
+        return connected
 
     @staticmethod
     def _ensure_connected(client: TorrentClientPlugin) -> None:
         """Open this request thread's transport once before using a client operation."""
         if client.client is None and client.session is None:
+            logger.info("Connecting to Download Client %s...", type(client).__name__.removesuffix("Client"))
             client.connect()
 
     def add_magnet(self, magnet_link: str, save_path: str | None, client_name: str | None = None) -> None:
@@ -210,15 +226,22 @@ class TorrentManager:
         # Multi-client status aggregation
         if len(self.clients) > 1:
             aggregated: list[TorrentStatus] = []
+            reached_clients = 0
             for name, client_instance in self.clients.items():
                 try:
                     self._ensure_connected(client_instance)
                     statuses = client_instance.get_status(category)
+                    reached_clients += 1
                     for s in statuses:
                         s.client = name
                     aggregated.extend(statuses)
                 except Exception as e:
                     logger.warning(f"Manager: Failed to get status for client '{name}': {e}")
+            if not reached_clients:
+                raise ConnectionError(
+                    "No Download Clients could be reached. Check their host, port and login settings. "
+                    "If they share Gluetun with this app, set their HOST settings to 127.0.0.1."
+                )
             return aggregated
 
         if not self._client:

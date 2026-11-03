@@ -148,7 +148,7 @@ The app sends a destination path; it does not move files or change that folder's
 | `<CLIENT>_PORT` | Client's normal port; positive whole number up to `65535` |
 | `<CLIENT>_SCHEME` | `http`; use `https` if that client serves HTTPS |
 | `<CLIENT>_TIMEOUT` | Override the common timeout for that client, in positive whole seconds |
-| `CLIENT_TIMEOUT` | `30` seconds; common default for Download Client requests |
+| `CLIENT_TIMEOUT` | `5` seconds; common default for Download Client requests |
 | `DL_CATEGORY` | `abb-automated`; label/category used for this app's downloads |
 
 Replace `<CLIENT>` with `QBITTORRENT`, `DELUGE`, or `TRANSMISSION`; do not enter the angle brackets.
@@ -234,7 +234,10 @@ If the app shares Gluetun's network with `network_mode: service:gluetun`, publis
 Omit the app's `ports` key entirely; an empty `ports:` value is invalid Compose. When the Download Client shares that
 same network, use `QBITTORRENT_HOST=127.0.0.1` (or the matching client-specific host setting) and its actual Web UI
 port. A separate client needs an address reachable from
-the app's network. Unraid users should enter the documented `DL_CLIENT=qbittorrent` setting; `DOWNLOAD_CLIENT` is
+the app's network. LAN addresses are supported; the VPN and Docker firewall must allow that route. If a client cannot
+be reached, its connection check logs the client name and the settings to check. Requests use a five-second timeout
+by default; qBittorrent may make a second attempt. Increase `CLIENT_TIMEOUT` only for a genuinely slow connection.
+Unraid users should enter the documented `DL_CLIENT=qbittorrent` setting; `DOWNLOAD_CLIENT` is
 not an app setting.
 
 Search loads one catalog page at a time, with request delays and bounded concurrency. These controls reduce traffic;
@@ -258,9 +261,11 @@ If you use a reverse proxy, set the full public address you open in your browser
 PUBLIC_URL=https://myaudiobooks.com
 ~~~
 
-This declares the app's browser-facing address. It supplies the public host and protocol for links, session cookies
-and HTTPS origin checks even when the proxy connects to the app over HTTP. Use this address for browser access once
-configured; the internal HTTP `/health` check continues to work. Include a custom public port if needed.
+This declares the address used through your reverse proxy. Requests naming this public host use its configured
+protocol for links, session cookies and HTTPS origin checks, even when the proxy connects over HTTP. Direct access
+at `http://SERVER-IP:5078` continues to work independently, with its own browser session. The internal HTTP `/health`
+check also stays available. Include a custom public port if needed, and have the proxy preserve the browser's Host
+header, including that port.
 The address must start with `http://` or `https://`; do not include a login, subpath, query or fragment.
 
 For **Nginx Proxy Manager**:

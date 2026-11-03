@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Bound Download Client request waits by default, explain unreachable client settings in logs, and report an error
+  when all clients are unreachable instead of showing a healthy empty download list.
+- Keep LAN HTTP sessions and Download actions working when `PUBLIC_URL` configures a separate public HTTPS domain.
+
 - Start the website and answer health checks without waiting for Download Clients. Explain missing login settings
   in startup logs without revealing credentials; check actual connectivity through Status.
 
@@ -111,6 +115,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`pre-commit`, `mypy`, `pytest`) are available on all runners.
 
 ### Fixed
+
+- Bound Download Client request waits by default, explain unreachable client settings in logs, and report an error
+  when all clients are unreachable instead of showing a healthy empty download list.
+- Keep LAN HTTP sessions and Download actions working when `PUBLIC_URL` configures a separate public HTTPS domain.
 
 - Decode catalog `post re-ab` listings so JavaScript-revealed books are included without additional requests.
 - Stop cookie-less background responses from deleting an existing page session and invalidating CSRF tokens.

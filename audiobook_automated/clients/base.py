@@ -136,7 +136,7 @@ class TorrentClientPlugin(ABC):
         username: str | None,
         password: str | None,
         scheme: str = "http",
-        timeout: int = 30,
+        timeout: int = 5,
         **kwargs: Any,
     ) -> None:
         """Initialize the client plugin configuration.

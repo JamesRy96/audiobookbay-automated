@@ -118,7 +118,7 @@ def test_deluge_remove_torrent(mock_deluge_client: MagicMock) -> None:
     client = create_client(dl_url="http://localhost:8112")
     client.connect()
     client.remove_torrent("hash")
-    mock_deluge_client.remove_torrent.assert_called_with("hash", remove_data=False, timeout=30)
+    mock_deluge_client.remove_torrent.assert_called_with("hash", remove_data=False, timeout=5)
 
 
 def test_deluge_remove_torrent_no_client() -> None:
@@ -253,7 +253,7 @@ def test_deluge_uses_core_plugin_list(mock_deluge_client: MagicMock) -> None:
     client.connect()
     assert client.label_plugin_enabled is True
     mock_deluge_client.execute_call.assert_called_once_with(
-        {"method": "core.get_enabled_plugins", "params": []}, timeout=30
+        {"method": "core.get_enabled_plugins", "params": []}, timeout=5
     )
 
 

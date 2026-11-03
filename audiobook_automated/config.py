@@ -229,8 +229,8 @@ class Config:
     # Separated from Gunicorn timeout to ensure internal requests fail faster than the worker kill timer.
     SCRAPER_TIMEOUT: int = parse_env_int("SCRAPER_TIMEOUT", 30)
 
-    # Torrent Client Timeout (Default 30)
-    CLIENT_TIMEOUT: int = parse_env_int("CLIENT_TIMEOUT", 30)
+    # Download Client request timeout (Default 5 seconds)
+    CLIENT_TIMEOUT: int = parse_env_int("CLIENT_TIMEOUT", 5)
 
     # Site Identity
     SITE_TITLE: str = get_env("SITE_TITLE", DEFAULT_SITE_TITLE).strip(" \"'")

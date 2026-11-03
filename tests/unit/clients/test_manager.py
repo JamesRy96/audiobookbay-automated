@@ -471,3 +471,26 @@ def test_manager_isolates_per_client_connections(app: Flask) -> None:
     with raises(ConnectionError):
         manager.add_magnet("magnet:?", "/downloads", client_name="missing")
     assert manager.remove_torrent("absent", client_name="missing") is False
+
+
+def test_unreachable_client_check_names_the_settings_to_fix(caplog: LogCaptureFixture) -> None:
+    """A failed connectivity check explains local/shared-network configuration in ordinary language."""
+    manager = TorrentManager()
+    offline = MagicMock()
+    offline.verify_credentials.return_value = False
+    manager.clients = {"qbittorrent": offline}
+    assert manager.verify_credentials("qbittorrent") is False
+    assert "QBITTORRENT_HOST" in caplog.text
+    assert "QBITTORRENT_PORT" in caplog.text
+    assert "127.0.0.1" in caplog.text
+
+
+def test_all_clients_offline_is_not_an_empty_success() -> None:
+    """Multiple unreachable clients must report a failure rather than healthy zero downloads."""
+    manager = TorrentManager()
+    clients = [MagicMock(), MagicMock()]
+    for client in clients:
+        client.get_status.side_effect = ConnectionError("Unreachable")
+    manager.clients = dict(zip(["qbittorrent", "transmission"], clients, strict=True))
+    with raises(ConnectionError, match="No Download Clients could be reached"):
+        manager.get_status()

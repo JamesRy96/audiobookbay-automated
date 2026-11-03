@@ -173,9 +173,9 @@ def test_public_origin_handles_tls_termination_without_redirect_loops(trusted: s
     app = make_transport_app("https://books.example:8443", trusted)
     response = app.test_client().get(
         "/_transport",
-        base_url="http://internal:5078",
+        base_url="http://books.example:8443",
         environ_base={"REMOTE_ADDR": "10.0.0.5"},
-        headers={"X-Forwarded-Proto": "http", "X-Forwarded-Host": "forged.example"},
+        headers={"X-Forwarded-Proto": "http", "X-Forwarded-Host": "books.example:8443"},
     )
     assert response.status_code == 200
     assert response.json["scheme"] == "https"
@@ -204,3 +204,67 @@ def test_public_https_csrf_requires_the_declared_browser_origin() -> None:
                 headers=headers,
             )
             assert response.status_code == expected
+
+
+@pytest.mark.parametrize("local_origin", ["http://10.25.25.246:5078", "http://localhost:5078", "http://[::1]:5078"])
+def test_public_url_preserves_independent_local_http_session(local_origin: str) -> None:
+    """Local browsers retain their actual HTTP origin, usable cookies and valid action tokens."""
+    app = make_transport_app("https://books.example")
+    with app.test_client() as client:
+        response = client.get("/_transport", base_url=local_origin)
+        assert response.status_code == 200
+        assert response.json["scheme"] == "http"
+        assert response.json["link"] == local_origin + "/_transport"
+        assert "; Secure" not in response.headers["Set-Cookie"]
+        token = response.json["csrf"]
+        valid = client.post(
+            "/_transport", base_url=local_origin, headers={"X-CSRFToken": token, "Referer": local_origin + "/"}
+        )
+        assert valid.status_code == 200
+        invalid = client.post("/_transport", base_url=local_origin)
+        assert invalid.status_code == 400
+
+
+@pytest.mark.parametrize("host", ["books.example", "BOOKS.EXAMPLE", "books.example:443"])
+def test_public_domain_selects_https_even_over_http_backend(host: str) -> None:
+    """Domain recognition includes case and explicit default ports without trusting forwarded headers."""
+    app = make_transport_app("https://books.example")
+    response = app.test_client().get("/_transport", base_url="http://" + host)
+    assert response.json["scheme"] == "https"
+    assert response.json["host"] == "books.example"
+    assert "; Secure" in response.headers["Set-Cookie"]
+
+
+def test_local_and_public_sessions_cannot_exchange_action_tokens() -> None:
+    """Independent HTTP and HTTPS sessions remain separate and reject the other session's tokens."""
+    app = make_transport_app("https://books.example")
+    local_origin = "http://10.25.25.246:5078"
+    with app.test_client() as client:
+        local_token = client.get("/_transport", base_url=local_origin).json["csrf"]
+        public_token = client.get("/_transport", base_url="http://books.example").json["csrf"]
+        for origin, token, expected in [
+            (local_origin, local_token, 200),
+            (local_origin, public_token, 400),
+            ("https://books.example", public_token, 200),
+            ("https://books.example", local_token, 400),
+        ]:
+            response = client.post(
+                "/_transport",
+                base_url=origin,
+                environ_overrides={"wsgi.url_scheme": "http"},
+                headers={"X-CSRFToken": token, "Referer": origin + "/"},
+            )
+            assert response.status_code == expected
+
+
+def test_untrusted_forwarding_cannot_change_local_session_with_public_url() -> None:
+    """Declaring a public domain does not let arbitrary forwarding headers mark LAN HTTP as HTTPS."""
+    app = make_transport_app("https://books.example")
+    response = app.test_client().get(
+        "/_transport",
+        base_url="http://10.25.25.246:5078",
+        headers={"X-Forwarded-Host": "books.example", "X-Forwarded-Proto": "https"},
+    )
+    assert response.json["scheme"] == "http"
+    assert response.json["host"] == "10.25.25.246:5078"
+    assert "; Secure" not in response.headers["Set-Cookie"]

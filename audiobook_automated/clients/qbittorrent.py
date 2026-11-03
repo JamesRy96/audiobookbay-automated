@@ -73,6 +73,7 @@ class QBittorrentClient(TorrentClientPlugin):
                     username=self.username or "",
                     api_key=self.api_key,
                     REQUESTS_ARGS={"timeout": self.timeout},
+                    HTTPADAPTER_ARGS={"max_retries": 0},
                 )
                 # Verify key validity with a lightweight call
                 _ = self.client.app.version
@@ -84,6 +85,7 @@ class QBittorrentClient(TorrentClientPlugin):
                     username=self.username or "",
                     password=self.password or "",
                     REQUESTS_ARGS={"timeout": self.timeout},
+                    HTTPADAPTER_ARGS={"max_retries": 0},
                 )
                 self.client.auth_log_in()
 

@@ -69,7 +69,7 @@ class TransportSessionInterface(SecureCookieSessionInterface):
 
 
 class PublicOriginMiddleware:
-    """Apply allowlisted proxy headers, then the deployment's explicit canonical origin."""
+    """Apply allowlisted proxy headers and recognize the configured public host."""
 
     def __init__(
         self, app: WSGIApplication, public_url: str | None, trusted_proxies: tuple[IPv4Network | IPv6Network, ...]
@@ -77,6 +77,11 @@ class PublicOriginMiddleware:
         """Capture immutable deployment configuration once for all request threads."""
         self.app = app
         self.origin = urlsplit(public_url) if public_url else None
+        self.public_hosts = set()
+        if self.origin:
+            self.public_hosts.add(self.origin.netloc)
+            if self.origin.port is None:
+                self.public_hosts.add(f"{self.origin.netloc}:{DEFAULT_PORTS[self.origin.scheme]}")
         self.trusted_proxies = trusted_proxies
         self.proxy_app = ProxyFix(self._serve, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
@@ -108,8 +113,8 @@ class PublicOriginMiddleware:
         return self._serve(environ, start_response)
 
     def _serve(self, environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
-        """Use the declared browser origin without assuming the backend connection uses TLS."""
-        if self.origin:
+        """Recognize public HTTPS without changing independent LAN HTTP requests."""
+        if self.origin and environ.get("HTTP_HOST", "").lower() in self.public_hosts:
             environ["wsgi.url_scheme"] = self.origin.scheme
             environ["HTTP_HOST"] = self.origin.netloc
             environ["SERVER_NAME"] = self.origin.hostname or ""
