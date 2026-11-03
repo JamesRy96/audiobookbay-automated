@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Show actionable Download Client connection help in the chooser, page banner and Status, including partial failures.
+
 - Bound Download Client request waits by default, explain unreachable client settings in logs, and report an error
   when all clients are unreachable instead of showing a healthy empty download list.
 - Keep LAN HTTP sessions and Download actions working when `PUBLIC_URL` configures a separate public HTTPS domain.
@@ -115,6 +117,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`pre-commit`, `mypy`, `pytest`) are available on all runners.
 
 ### Fixed
+
+- Show actionable Download Client connection help in the chooser, page banner and Status, including partial failures.
 
 - Bound Download Client request waits by default, explain unreachable client settings in logs, and report an error
   when all clients are unreachable instead of showing a healthy empty download list.

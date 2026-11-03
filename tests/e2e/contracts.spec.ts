@@ -259,6 +259,7 @@ test("single offline client disables Download without a chooser", async ({ page,
     await request.post("/e2e/client", { data: { offline_qbittorrent: true } });
     await page.goto("/?query=voyage");
     await expect(page.locator("#client-offline-banner")).toBeVisible();
+    await expect(page.locator("#client-offline-banner")).toContainText("QBITTORRENT_HOST");
     await expect(page.locator(".send-torrent-btn").first()).toBeDisabled();
     await expect(page.locator("#modal-client-picker")).toHaveCount(0);
     expect((await (await request.get("/e2e/client")).json()).events).toEqual([]);
@@ -274,4 +275,22 @@ test("all offline clients are shown but none can receive a download", async ({ p
     await expect(page.locator("#modal-confirm")).toBeDisabled();
     await page.locator("#modal-cancel").click();
     expect((await (await request.get("/e2e/client")).json()).events).toEqual([]);
+});
+
+test("partial client failures explain the setting to fix without disabling working clients", async ({
+    page,
+    request,
+}) => {
+    await request.post("/e2e/client", { data: { multi_client: true, offline_transmission: true } });
+    await page.goto("/?query=voyage");
+    await expect(page.locator("#client-offline-banner")).toContainText("TRANSMISSION_HOST");
+    await expect(page.locator(".send-torrent-btn").first()).toBeEnabled();
+    await page.locator(".send-torrent-btn").first().click();
+    const offline = page.locator('.download-client-choice:has(input[value="transmission"])');
+    await expect(offline.locator("input")).toBeDisabled();
+    await expect(offline.locator(".client-choice-help")).toBeVisible();
+    await expect(offline.locator(".client-choice-help")).toContainText("127.0.0.1");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page.locator('input[value="qbittorrent"]')).toBeEnabled();
+    await expect(page.locator("#modal-confirm")).toBeEnabled();
 });

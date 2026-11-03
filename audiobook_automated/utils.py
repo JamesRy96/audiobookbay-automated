@@ -308,6 +308,19 @@ def safe_get(dictionary: dict[str, Any], key: str, default: Any = None) -> Any:
     return value if value is not None else default
 
 
+def client_connection_help(name: str | None = None) -> str:
+    """Explain client connection settings without exposing credentials or assuming a network cause."""
+    labels = {"qbittorrent": "qBittorrent", "deluge": "Deluge", "transmission": "Transmission", "putio": "Put.io"}
+    label = labels.get(name, name) if name else "your Download Clients"
+    if name == "putio":
+        return "Cannot connect to Put.io. Check your internet connection and PUTIO_TOKEN in the app settings."
+    host_setting = f"{name.upper()}_HOST" if name else "the client HOST settings"
+    return (
+        f"Cannot connect to {label}. Check that the client is running and its address, port and login are correct. "
+        f"If it shares Gluetun with this app, use 127.0.0.1 for {host_setting}."
+    )
+
+
 def format_user_error(err: Exception | str, context: str = "general") -> tuple[str, str | None]:
     """Format an exception into a user-friendly message and technical debug details.
 

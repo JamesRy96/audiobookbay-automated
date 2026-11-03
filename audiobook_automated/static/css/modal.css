@@ -132,7 +132,7 @@
 }
 .download-client-choice {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     padding: 12px;
     border: var(--glass-border);
@@ -140,6 +140,7 @@
     cursor: pointer;
 }
 .download-client-choice input {
+    margin-top: 4px;
     accent-color: var(--accent-color);
     flex: 0 0 auto;
 }
@@ -164,4 +165,17 @@
 #modal-confirm:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+.client-choice-info {
+    min-width: 0;
+    flex: 1;
+}
+.client-choice-help:not([hidden]) {
+    display: block;
+    margin-top: 5px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
 }

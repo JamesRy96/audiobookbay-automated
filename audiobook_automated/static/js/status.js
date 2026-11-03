@@ -27,15 +27,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const client = params.get("client");
     const pollUrl = "/status?json=1" + (client ? "&client=" + encodeURIComponent(client) : "");
     let lastSuccess = document.getElementById("status-initial-error") ? null : new Date().toLocaleTimeString();
-    const markStale = () => {
+    const markStale = (message = "") => {
         tableBody.classList.add("is-stale");
         if (updateNote)
             updateNote.textContent =
+                message ||
                 (document.getElementById("status-initial-error") && !lastSuccess
                     ? "Download status is unavailable"
                     : "Couldn’t refresh. Showing previous results") +
-                (lastSuccess ? " from " + lastSuccess : "") +
-                ". Use Refresh to retry.";
+                    (lastSuccess ? " from " + lastSuccess : "") +
+                    ". Use Refresh to retry.";
     };
     let countdown = 5;
     let isFetching = false;
@@ -50,11 +51,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (pollIndicator) pollIndicator.classList.add("polling");
             const response = await fetch(pollUrl);
             if (!response.ok) {
-                markStale();
                 let errData = {};
                 try {
                     errData = await response.json();
                 } catch (_) {}
+                markStale(errData.error);
                 if (clientPill && clientPillText) {
                     clientPill.className = "status-client-pill";
                     if (errData.client_status === "banned") {

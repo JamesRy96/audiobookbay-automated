@@ -249,6 +249,8 @@ not catalog reachability, Download Client connectivity or completed transfers. S
 connections. A loaded plugin is not a confirmed connection: open **Status** to check each client. Missing login
 settings produce warnings naming the setting to add, without showing passwords or tokens. After changing settings,
 recreate the app container with `docker compose up -d` from the folder containing your Compose file.
+Connection help also appears in the page banner, Download Client picker and Status page, so you do not need to read
+logs for basic setup corrections. A client that is unavailable cannot be selected; working clients remain usable.
 
 ## Reverse proxy and HTTPS
 

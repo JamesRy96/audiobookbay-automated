@@ -281,11 +281,11 @@
         <div id="client-offline-banner" class="client-alert-banner" style="display: none">
             <div class="client-alert-content">
                 <span class="client-alert-icon" aria-hidden="true">⚠️</span>
-                <div class="client-alert-text">
+                <div class="client-alert-text" role="status">
                     <strong>Download Client Disconnected:</strong>
-                    <span
-                        >Your download client is currently offline or unreachable. You can browse books, but downloads
-                        are paused until the client is connected.</span
+                    <span id="client-connection-message"
+                        >Check that your Download Client is running and its address, port and login are correct. If it
+                        shares Gluetun with this app, use 127.0.0.1 for its HOST setting.</span
                     >
                 </div>
                 <a
@@ -338,7 +338,10 @@
                     'Transmission', 'putio': 'Put.io'} %} {% for client in download_clients %}
                     <label class="download-client-choice" data-state="checking">
                         <input type="radio" name="download-client" value="{{ client }}" disabled />
-                        <span class="client-choice-name">{{ client_labels.get(client, client) }}</span>
+                        <span class="client-choice-info"
+                            ><span class="client-choice-name">{{ client_labels.get(client, client) }}</span>
+                            <span class="client-choice-help" hidden></span
+                        ></span>
                         <span class="client-choice-status" role="status">Checking…</span>
                     </label>
                     {% endfor %}

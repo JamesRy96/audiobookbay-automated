@@ -676,6 +676,7 @@ function requestDownload(link, title, button, client) {
         choice.disabled = true;
         choice.closest("label").dataset.state = "checking";
         choice.closest("label").querySelector(".client-choice-status").textContent = "Checking…";
+        choice.closest("label").querySelector(".client-choice-help").hidden = true;
     }
     showModal(
         "Choose Download Client",
@@ -701,12 +702,18 @@ function requestDownload(link, title, button, client) {
     updateConfirm();
     picker.onchange = updateConfirm;
     for (const choice of choices) {
-        const finish = (connected) => {
+        const finish = (
+            connected,
+            message = "Could not check this client. Check its connection settings and try again."
+        ) => {
             if (generation !== clientCheckGeneration) return;
             const label = choice.closest("label");
             choice.disabled = !connected;
             label.dataset.state = connected ? "connected" : "offline";
             label.querySelector(".client-choice-status").textContent = connected ? "Connected" : "Offline";
+            const help = label.querySelector(".client-choice-help");
+            help.textContent = connected ? "" : message;
+            help.hidden = connected;
             const selected = choices.find((item) => item.checked);
             if (!selected || (selected.disabled && selected.closest("label").dataset.state === "offline")) {
                 const available = choices.find((item) => !item.disabled);
@@ -719,7 +726,10 @@ function requestDownload(link, title, button, client) {
                 if (!response.ok) throw new Error("Client check failed");
                 return response.json();
             })
-            .then((data) => finish(data.clients?.find((item) => item.name === choice.value)?.connected === true))
+            .then((data) => {
+                const item = data.clients?.find((item) => item.name === choice.value);
+                finish(item?.connected === true, item?.message || undefined);
+            })
             .catch(() => finish(false));
     }
 }
@@ -827,14 +837,21 @@ function initClientBannerCheck() {
         .then((data) => {
             const clients = data.clients || [];
             const hasConnected = clients.some((c) => c.connected);
-            if (!hasConnected && clients.length > 0) {
+            const unavailable = clients.filter((client) => !client.connected);
+            if (unavailable.length > 0) {
                 banner.style.display = "block";
-                // Optionally disable download buttons to prevent user frustration
+                banner.querySelector("strong").textContent = hasConnected
+                    ? "Some Download Clients unavailable:"
+                    : "Download Client unavailable:";
+                document.getElementById("client-connection-message").textContent = unavailable
+                    .map((client) => client.message || "Check your Download Client address, port and login settings.")
+                    .join(" ");
+                // A working client remains usable when another client is offline.
                 document.querySelectorAll(".send-torrent-btn, .details-download-btn").forEach((btn) => {
                     const hasPicker = document.getElementById("modal-client-picker");
-                    btn.disabled = !hasPicker;
-                    if (!hasPicker) btn.classList.add("disabled");
-                    btn.title = "Download client is offline or credentials require attention";
+                    btn.disabled = !hasConnected && !hasPicker;
+                    btn.classList.toggle("disabled", btn.disabled);
+                    btn.title = btn.disabled ? "Download client is offline or credentials require attention" : "";
                 });
             } else {
                 banner.style.display = "none";
@@ -846,6 +863,8 @@ function initClientBannerCheck() {
             }
         })
         .catch(() => {
-            // Silently swallow errors during background connectivity checks
+            banner.style.display = "block";
+            document.getElementById("client-connection-message").textContent =
+                "Could not check Download Clients. Refresh to try again; if this continues, check the app and client connection settings.";
         });
 }

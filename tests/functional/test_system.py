@@ -83,7 +83,7 @@ def test_status_route_error(client: Any) -> None:
         response = client.get("/status")
         assert response.status_code == 200
         assert b"Download Client" in response.data
-        assert b"connection settings" in response.data
+        assert b"address, port and login" in response.data
         assert b"Database Locked" in response.data
 
 
@@ -132,7 +132,9 @@ def test_status_page_json_error(client: Any) -> None:
         assert response.status_code == 500
         assert response.is_json
         # Explicit check for error key as defined in routes.py
-        assert "Client unreachable" in response.json["error"]
+        assert "address, port and login" in response.json["error"]
+        assert "127.0.0.1" in response.json["error"]
+        assert "Client unreachable" not in response.json["error"]
 
 
 def test_reload_library_error(client: Any) -> None:

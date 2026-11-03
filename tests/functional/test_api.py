@@ -319,8 +319,12 @@ def test_api_clients_endpoint(client: FlaskClient) -> None:
         assert response.status_code == 200
         assert response.json == {
             "clients": [
-                {"name": "qbittorrent", "connected": True},
-                {"name": "putio", "connected": False},
+                {"name": "qbittorrent", "connected": True, "message": ""},
+                {
+                    "name": "putio",
+                    "connected": False,
+                    "message": "Cannot connect to Put.io. Check your internet connection and PUTIO_TOKEN in the app settings.",
+                },
             ],
             "primary": "qbittorrent",
         }
@@ -954,7 +958,10 @@ def test_api_clients_checks_only_requested_client(client: FlaskClient) -> None:
         manager.verify_credentials.return_value = False
         response = client.get("/api/clients?client=DELUGE")
         assert response.status_code == 200
-        assert response.json == {"clients": [{"name": "deluge", "connected": False}], "primary": "qbittorrent"}
+        assert response.json is not None
+        assert response.json["clients"][0]["connected"] is False
+        assert "DELUGE_HOST" in response.json["clients"][0]["message"]
+        assert "127.0.0.1" in response.json["clients"][0]["message"]
         manager.verify_credentials.assert_called_once_with("deluge")
         manager.verify_credentials.reset_mock()
         response = client.get("/api/clients?client=unknown")
