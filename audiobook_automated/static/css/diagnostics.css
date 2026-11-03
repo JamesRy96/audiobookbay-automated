@@ -31,7 +31,7 @@
 
 /* --- Main Layout Container --- */
 .diag-container {
-    max-width: 1200px;
+    max-width: var(--primary-content-width);
     margin: 0 auto;
     width: 100%;
     padding: 0 0 40px 0;
@@ -310,4 +310,117 @@
         font-size: 0.78rem;
         max-height: 280px;
     }
+}
+
+.mirror-explanation,
+.mirror-summary {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 12px;
+}
+.mirror-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.mirror-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.4fr) minmax(100px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr);
+    align-items: center;
+    gap: 10px 20px;
+}
+.mirror-host {
+    display: block;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    overflow-wrap: anywhere;
+}
+.mirror-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+.mirror-state {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.mirror-state-available {
+    color: #16866b;
+    font-weight: 600;
+}
+.mirror-state-invalid,
+.mirror-state-offline {
+    color: #e36b6b;
+}
+.mirror-state-cooldown {
+    color: #b99131;
+}
+.mirror-latency,
+.mirror-success {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.mirror-details {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    border-top: var(--glass-border);
+}
+.mirror-details summary {
+    min-height: 32px;
+}
+.mirror-details p {
+    margin: 0 0 8px;
+}
+@media (max-width: 900px) {
+    .mirror-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .mirror-state {
+        justify-self: end;
+        text-align: right;
+    }
+}
+@media (max-width: 420px) {
+    .mirror-row {
+        gap: 10px;
+        padding: 14px;
+    }
+    .mirror-identity {
+        grid-column: 1 / -1;
+    }
+    .mirror-state {
+        justify-self: start;
+        text-align: left;
+        grid-column: 1 / -1;
+    }
+}
+
+.mirror-state-available {
+    color: #4ade80;
+}
+[data-theme="light"] .mirror-state-available {
+    color: #166534;
+}
+[data-theme="light"] .mirror-state-invalid,
+[data-theme="light"] .mirror-state-offline {
+    color: #b91c1c;
+}
+[data-theme="light"] .mirror-state-cooldown {
+    color: #854d0e;
+}
+
+.mirror-state-offline,
+.mirror-state-invalid {
+    color: var(--status-error);
+}
+.mirror-state-cooldown {
+    color: var(--status-warning);
+}
+.inspect-input {
+    color: var(--text-main);
+}
+[data-theme="light"] .inspect-input {
+    background: rgba(255, 255, 255, 0.9);
 }

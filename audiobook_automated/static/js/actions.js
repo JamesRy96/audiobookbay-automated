@@ -21,7 +21,12 @@ function initMobileMenu() {
     const navLinks = document.getElementById("nav-links");
     const navBackdrop = document.getElementById("nav-backdrop");
 
+    let releaseMenu = null;
     if (mobileMenuBtn && navLinks) {
+        navLinks.setAttribute("role", "dialog");
+        navLinks.setAttribute("aria-modal", "true");
+        navLinks.setAttribute("aria-label", "Navigation");
+        navLinks.tabIndex = -1;
         const toggleMobileMenu = function (forceState) {
             const isOpen = typeof forceState === "boolean" ? forceState : !navLinks.classList.contains("active");
             navLinks.classList.toggle("active", isOpen);
@@ -31,6 +36,12 @@ function initMobileMenu() {
                 navBackdrop.classList.toggle("active", isOpen);
             }
             document.body.classList.toggle("nav-open", isOpen);
+            if (releaseMenu) {
+                releaseMenu();
+                releaseMenu = null;
+            }
+            if (isOpen)
+                releaseMenu = window.UI?.openDialog(navLinks, mobileMenuBtn, () => toggleMobileMenu(false), true);
         };
 
         mobileMenuBtn.addEventListener("click", function () {
@@ -59,49 +70,11 @@ function initMobileMenu() {
     }
 }
 
-let activeScrollListener = null;
-
 function initScrollToTop() {
-    const btn = document.getElementById("scroll-to-top-btn");
-    if (!btn) return;
-
-    if (activeScrollListener) {
-        window.removeEventListener("scroll", activeScrollListener);
-        activeScrollListener = null;
-    }
-
-    const checkScroll = function () {
-        if (window.scrollY > 300) {
-            btn.classList.add("visible");
-        } else {
-            btn.classList.remove("visible");
-        }
-    };
-
-    let ticking = false;
-    activeScrollListener = function () {
-        if (!ticking) {
-            ticking = true;
-            if (typeof window.requestAnimationFrame === "function") {
-                window.requestAnimationFrame(() => {
-                    checkScroll();
-                    ticking = false;
-                });
-            } else {
-                checkScroll();
-                ticking = false;
-            }
-        }
-    };
-
-    window.addEventListener("scroll", activeScrollListener, { passive: true });
-
-    btn.addEventListener("click", function () {
-        window.scrollTo({
-            top: 0,
-            behavior: "smooth",
-        });
-    });
+    window.UI.bindFloatingControls();
+    const button = document.getElementById("scroll-to-top-btn");
+    if (button)
+        button.onclick = () => window.scrollTo({ top: 0, behavior: window.UI.reducedMotion() ? "auto" : "smooth" });
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -115,6 +88,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (reloadBtn) {
         reloadBtn.addEventListener("click", function (e) {
             e.preventDefault();
+            reloadBtn.focus({ preventScroll: true });
             reloadLibrary();
         });
     }
@@ -126,9 +100,12 @@ document.addEventListener("DOMContentLoaded", function () {
             if (event.target && event.target.tagName === "IMG") {
                 const img = event.target;
                 const defaultCover = img.getAttribute("data-default-cover");
-                if (defaultCover && img.src !== defaultCover) {
-                    // Prevent infinite loops if default cover is also broken
-                    img.src = defaultCover;
+                if (defaultCover) {
+                    const placeholder = document.createElement("span");
+                    placeholder.className = img.className + " cover-placeholder";
+                    placeholder.setAttribute("role", "img");
+                    placeholder.setAttribute("aria-label", "Cover Unavailable");
+                    img.replaceWith(placeholder);
                 }
             }
         },
@@ -179,6 +156,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (externalBtn) {
             const link = externalBtn.dataset.externalLink;
             if (link) {
+                externalBtn.focus({ preventScroll: true });
                 openExternalLink(link);
             }
         }
@@ -186,7 +164,28 @@ document.addEventListener("DOMContentLoaded", function () {
         // Back Button
         const backBtn = target.closest(".back-link-btn");
         if (backBtn) {
-            history.back();
+            event.preventDefault();
+            try {
+                const referring = new URL(document.referrer);
+                if (referring.origin === location.origin && referring.pathname === "/" && history.length > 1) {
+                    history.back();
+                    return;
+                }
+            } catch (_) {
+                /* Direct visits use the Search fallback below. */
+            }
+            let destination = "/";
+            try {
+                const saved = new URL(
+                    window.UI?.storage("sessionStorage", "getItem", "resultsUrl") || "/",
+                    location.origin
+                );
+                if (saved.origin === location.origin && saved.pathname === "/")
+                    destination = saved.pathname + saved.search;
+            } catch (_) {
+                /* Fall back to Search for direct visits. */
+            }
+            location.assign(destination);
         }
     });
 });
@@ -202,6 +201,24 @@ function initSplashScreen() {
         return;
     }
 
+    if (window.UI?.reducedMotion()) {
+        dismissSplash(splashOverlay, { skipAnimation: true });
+        return;
+    }
+    const masthead = document.querySelector(".masthead-logo-img");
+    const brandFrame = document.getElementById("splash-brand-frame");
+    const matchBrandRatio = () => {
+        const bounds = masthead?.getBoundingClientRect();
+        if (brandFrame && bounds?.width && bounds?.height)
+            brandFrame.style.setProperty("--splash-brand-ratio", String(bounds.width / bounds.height));
+    };
+    matchBrandRatio();
+    masthead?.addEventListener("load", matchBrandRatio, { once: true });
+    masthead
+        ?.decode?.()
+        .then(matchBrandRatio)
+        .catch(() => {});
+
     // If "no-splash" is present on HTML (handled by inline script),
     // we ensure overlay is hidden and return.
     if (document.documentElement.classList.contains("no-splash")) {
@@ -211,7 +228,10 @@ function initSplashScreen() {
     }
 
     // Also double-check sessionStorage / localStorage here (redundant but safe)
-    if (sessionStorage.getItem("splashShown") || localStorage.getItem("splashShown")) {
+    if (
+        window.UI?.storage("sessionStorage", "getItem", "splashShown") ||
+        window.UI?.storage("localStorage", "getItem", "splashShown")
+    ) {
         splashOverlay.classList.add("hidden");
         splashOverlay.style.display = "none";
         return;
@@ -238,7 +258,7 @@ function initSplashScreen() {
 
     const splashVideo = document.getElementById("splash-video");
     if (splashVideo) {
-        // Video splash: Start smooth fade-out exactly 0.5s before video ends (at 3.5s for a 4s video)
+        // Begin the handoff using the actual media duration.
         let fadingStarted = false;
         const triggerFade = () => {
             if (!fadingStarted) {
@@ -248,11 +268,24 @@ function initSplashScreen() {
         };
 
         splashVideo.addEventListener("timeupdate", () => {
-            if (splashVideo.currentTime >= 3.5) {
+            const duration = Number.isFinite(splashVideo.duration) ? splashVideo.duration : 4;
+            if (splashVideo.currentTime >= Math.max(0, duration - 0.65)) {
                 triggerFade();
             }
         });
 
+        if (typeof splashVideo.requestVideoFrameCallback === "function") {
+            const checkFrame = () => {
+                const duration = splashVideo.duration;
+                if (Number.isFinite(duration) && splashVideo.currentTime >= Math.max(0, duration - 0.65)) triggerFade();
+                else if (!fadingStarted && !splashOverlay.classList.contains("hidden"))
+                    splashVideo.requestVideoFrameCallback(checkFrame);
+            };
+            splashVideo.requestVideoFrameCallback(checkFrame);
+        }
+        splashVideo.addEventListener("error", triggerFade);
+        const playback = splashVideo.play();
+        playback?.catch(triggerFade);
         splashVideo.addEventListener("ended", () => {
             triggerFade();
         });
@@ -271,7 +304,7 @@ function initSplashScreen() {
 }
 
 function dismissSplash(overlay, options = {}) {
-    if (overlay.classList.contains("hidden")) return;
+    if (overlay.classList.contains("hidden") || overlay.classList.contains("morphing")) return;
 
     const skipAnimation = options.skipAnimation || false;
     const splashVideo = document.getElementById("splash-video");
@@ -283,6 +316,20 @@ function dismissSplash(overlay, options = {}) {
     const prefersReducedMotion =
         typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    if (!skipAnimation && !prefersReducedMotion && targetLogo?.decode && !overlay.dataset.logoDecoded) {
+        overlay.dataset.logoDecoded = "pending";
+        targetLogo
+            .decode()
+            .catch(() => {})
+            .then(() => {
+                overlay.dataset.logoDecoded = "ready";
+                dismissSplash(overlay, options);
+            });
+        return;
+    }
+    if (overlay.dataset.logoDecoded === "pending" && !skipAnimation) return;
+
+    const movingFrame = document.getElementById("splash-brand-frame") || splashVideo;
     // Check if FLIP morph animation should be played
     let shouldMorph = false;
     let translateX = 0;
@@ -293,7 +340,7 @@ function dismissSplash(overlay, options = {}) {
 
     if (!skipAnimation && !prefersReducedMotion && splashVideo && targetLogo) {
         const targetRect = targetLogo.getBoundingClientRect();
-        const videoRect = splashVideo.getBoundingClientRect();
+        const videoRect = movingFrame.getBoundingClientRect();
 
         // Ensure valid visible bounding rectangles
         if (targetRect.width > 0 && targetRect.height > 0 && videoRect.width > 0 && videoRect.height > 0) {
@@ -307,8 +354,8 @@ function dismissSplash(overlay, options = {}) {
             translateX = targetCenterX - videoCenterX;
             translateY = targetCenterY - videoCenterY;
 
-            scaleX = targetRect.width / videoRect.width;
-            scaleY = targetRect.height / videoRect.height;
+            scaleX = Math.min(targetRect.width / videoRect.width, targetRect.height / videoRect.height);
+            scaleY = scaleX;
 
             targetRadius = window.getComputedStyle(targetLogo).borderRadius || "16px";
         }
@@ -316,14 +363,22 @@ function dismissSplash(overlay, options = {}) {
 
     if (shouldMorph) {
         overlay.classList.add("morphing");
-        splashVideo.style.borderRadius = targetRadius;
-        splashVideo.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`;
+        movingFrame.style.borderRadius = `${parseFloat(targetRadius) / scaleX}px`;
+        movingFrame.style.transform = `translate3d(${translateX}px, ${translateY}px, 0) scale(${scaleX}, ${scaleY})`;
         splashVideo.style.opacity = "0";
 
         // Cross-fade the target logo in as the morph reaches exact target size and position
-        setTimeout(() => {
-            document.documentElement.classList.add("splash-reveal-logo");
-        }, 150);
+        setTimeout(
+            () => {
+                document.documentElement.classList.add("splash-reveal-logo");
+                if (movingFrame !== splashVideo) {
+                    targetLogo.style.transition = "none";
+                    targetLogo.style.opacity = "1";
+                    movingFrame.style.visibility = "hidden";
+                }
+            },
+            movingFrame !== splashVideo ? 650 : 150
+        );
 
         // Stagger the fade-in of the remaining page elements slightly behind the logo
         setTimeout(() => {
@@ -331,17 +386,19 @@ function dismissSplash(overlay, options = {}) {
         }, 350);
 
         setTimeout(() => {
+            targetLogo?.style.removeProperty("transition");
+            targetLogo?.style.removeProperty("opacity");
             overlay.classList.add("hidden");
             overlay.style.display = "none";
-            sessionStorage.setItem("splashShown", "true");
-            localStorage.setItem("splashShown", "true");
+            window.UI?.storage("sessionStorage", "setItem", "splashShown", "true");
+            window.UI?.storage("localStorage", "setItem", "splashShown", "true");
             document.documentElement.classList.add("no-splash");
             document.documentElement.classList.remove("splash-reveal-logo", "splash-reveal-content");
-        }, 650);
+        }, 1050);
     } else {
         overlay.classList.add("hidden");
-        sessionStorage.setItem("splashShown", "true");
-        localStorage.setItem("splashShown", "true");
+        window.UI?.storage("sessionStorage", "setItem", "splashShown", "true");
+        window.UI?.storage("localStorage", "setItem", "splashShown", "true");
         document.documentElement.classList.add("no-splash");
 
         setTimeout(() => {
@@ -377,21 +434,8 @@ function showNotification(message, type = "info") {
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.classList.add(`toast-${type}`);
-    toast.style.padding = "12px 24px";
-    toast.style.borderRadius = "5px";
-    toast.style.color = "#fff";
-    toast.style.fontSize = "1rem";
-    toast.style.boxShadow = "0 4px 6px rgba(0,0,0,0.2)";
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
     toast.style.opacity = "0";
-    toast.style.transition = "opacity 0.3s ease";
-
-    // Color based on type
-    if (type === "error") {
-        toast.style.backgroundColor = "#d32f2f"; // Red
-    } else {
-        toast.style.backgroundColor = "#43a047"; // Green
-    }
-
     toast.textContent = message;
     container.appendChild(toast);
 
@@ -403,9 +447,8 @@ function showNotification(message, type = "info") {
     // Remove after 3 seconds
     setTimeout(() => {
         toast.style.opacity = "0";
-        toast.addEventListener("transitionend", () => {
-            toast.remove();
-        });
+        toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+        setTimeout(() => toast.remove(), 400);
     }, 3000);
 }
 
@@ -417,6 +460,7 @@ function showNotification(message, type = "info") {
  * @param {string} confirmText - Text for the confirm button.
  * @param {string} type - 'primary' or 'danger' for button styling.
  */
+let releaseConfirmation = null;
 function showModal(title, message, onConfirm, confirmText = "Confirm", type = "primary") {
     const modal = document.getElementById("confirmation-modal");
     if (!modal) {
@@ -456,7 +500,6 @@ function showModal(title, message, onConfirm, confirmText = "Confirm", type = "p
         });
 
         // Focus for accessibility
-        setTimeout(() => newConfirmBtn.focus(), 100);
     }
 
     if (cancelBtn) {
@@ -472,26 +515,36 @@ function showModal(title, message, onConfirm, confirmText = "Confirm", type = "p
         if (e.target === modal) closeModal();
     };
 
-    // Close on Escape key
-    const escHandler = (e) => {
-        if (e.key === "Escape") {
-            closeModal();
-            document.removeEventListener("keydown", escHandler);
-        }
-    };
-    document.addEventListener("keydown", escHandler);
-
     // Show modal
     modal.classList.add("active");
     modal.setAttribute("aria-hidden", "false");
+    releaseConfirmation?.();
+    releaseConfirmation = window.UI?.openDialog(
+        modal.querySelector("[role=dialog]") || modal,
+        document.activeElement,
+        closeModal
+    );
 }
 
 function closeModal() {
+    releaseConfirmation?.();
+    releaseConfirmation = null;
     const modal = document.getElementById("confirmation-modal");
     if (modal) {
         modal.classList.remove("active");
         modal.setAttribute("aria-hidden", "true");
     }
+}
+
+/** Reads an action response while preserving a recoverable page-expiry error. */
+async function readActionResponse(response) {
+    const data = await response.json();
+    if (!response.ok) {
+        const error = new Error(data.message || "Request failed.");
+        error.code = data.code;
+        throw error;
+    }
+    return data;
 }
 
 /**
@@ -512,7 +565,7 @@ function reloadLibrary() {
                     "X-CSRFToken": csrfToken,
                 },
             })
-                .then((response) => response.json())
+                .then(readActionResponse)
                 .then((data) => {
                     if (data.message.toLowerCase().includes("failed")) {
                         showNotification(data.message, "error");
@@ -522,7 +575,12 @@ function reloadLibrary() {
                 })
                 .catch((error) => {
                     console.error("Error:", error);
-                    showNotification("Could not refresh your library. Please try again in a moment.", "error");
+                    showNotification(
+                        error.code === "page_expired"
+                            ? error.message
+                            : "Could not refresh your library. Please try again in a moment.",
+                        "error"
+                    );
                 });
         },
         "Scan Now"
@@ -535,9 +593,10 @@ function reloadLibrary() {
  * @param {HTMLElement} [buttonElement] - The button that triggered the action (optional).
  */
 function deleteTorrent(torrentId, buttonElement) {
+    buttonElement?.focus({ preventScroll: true });
     showModal(
-        "Delete Torrent",
-        "Are you sure you want to remove this torrent? The downloaded files will NOT be deleted.",
+        "Remove download",
+        "Remove this download from its Download Client? Your downloaded files will be kept.",
         () => {
             const csrfMeta = document.querySelector('meta[name="csrf-token"]');
             const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
@@ -548,9 +607,9 @@ function deleteTorrent(torrentId, buttonElement) {
                     "Content-Type": "application/json",
                     "X-CSRFToken": csrfToken,
                 },
-                body: JSON.stringify({ id: torrentId }),
+                body: JSON.stringify({ id: torrentId, client: buttonElement?.dataset.client || undefined }),
             })
-                .then((response) => response.json())
+                .then(readActionResponse)
                 .then((data) => {
                     showNotification(data.message, "success");
                     if (data.message.includes("successfully")) {
@@ -559,6 +618,12 @@ function deleteTorrent(torrentId, buttonElement) {
                             const row = buttonElement.closest("tr");
                             if (row) {
                                 row.remove();
+                                const tbody = document.getElementById("status-table-body");
+                                const count = tbody?.querySelectorAll(".remove-torrent-btn").length || 0;
+                                const badge = document.getElementById("status-count-badge");
+                                if (badge) badge.textContent = `${count} Active`;
+                                if (!count && tbody) window.updateTable?.(tbody, []);
+                                document.getElementById("status-poll-indicator")?.focus();
                             } else {
                                 // Fallback if no row found (unlikely in status table)
                                 setTimeout(() => location.reload(), 1000);
@@ -570,7 +635,12 @@ function deleteTorrent(torrentId, buttonElement) {
                 })
                 .catch((error) => {
                     console.error("Error:", error);
-                    showNotification("Could not remove this download. Please try again in a moment.", "error");
+                    showNotification(
+                        error.code === "page_expired"
+                            ? error.message
+                            : "Could not remove this download. Please try again in a moment.",
+                        "error"
+                    );
                 });
         },
         "Remove",
@@ -611,19 +681,7 @@ function sendTorrent(link, title, buttonElement, client) {
         },
         body: JSON.stringify(payload),
     })
-        .then((response) => {
-            if (!response.ok) {
-                return response
-                    .json()
-                    .then((err) => {
-                        throw new Error(err.message || "Server Error");
-                    })
-                    .catch(() => {
-                        throw new Error(`Request failed with status ${response.status}`);
-                    });
-            }
-            return response.json();
-        })
+        .then(readActionResponse)
         .then((data) => {
             showNotification(data.message, "success");
             // Improve UX: Show "Sent!" state temporarily
@@ -642,7 +700,9 @@ function sendTorrent(link, title, buttonElement, client) {
         .catch((error) => {
             console.error("Download failed:", error);
             showNotification(
-                "Could not start download. Please check that your download app is running and try again.",
+                error.code === "page_expired"
+                    ? error.message
+                    : "Could not start download. Please check that your download app is running and try again.",
                 "error"
             );
             // Allow retry on error

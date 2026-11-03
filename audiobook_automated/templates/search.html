@@ -5,49 +5,14 @@
 <script src="{{ url_for('static', filename='js/search.js', v=static_version) }}" defer></script>
 {% endblock %} {% block content %}
 
+<h1 class="sr-only">Search audiobooks</h1>
 <div class="search-omnibar-container" id="search-container">
-    <div id="filter-container" class="search-omnibar">
-        <form method="get" class="omnibar-search-form" id="search-form">
-            <div class="search-input-wrapper">
-                <svg
-                    class="search-input-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    aria-hidden="true"
-                    width="18"
-                    height="18"
-                >
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-                <input
-                    type="text"
-                    name="query"
-                    placeholder="Search audiobooks by title, author, or keyword..."
-                    class="search-bar"
-                    value="{{ query }}"
-                    autocomplete="off"
-                    autocapitalize="off"
-                    spellcheck="false"
-                    enterkeyhint="search"
-                    required
-                />
-            </div>
-            <button type="submit" class="search-button">
-                <span class="button-text">Search</span>
-                <div class="button-spinner" id="button-spinner" style="display: none">
-                    <div class="spinner"></div>
-                </div>
-            </button>
-        </form>
-
-        {% if books %}
-        <div class="omnibar-controls">
-            <div class="filter-toolbar-left">
-                <button id="toolbar-filter-toggle" class="btn-glass toolbar-filter-btn" aria-label="Toggle Filter Menu">
+    <div class="search-panel">
+        <div id="filter-container" class="search-omnibar">
+            <form method="get" class="omnibar-search-form" id="search-form">
+                <div class="search-input-wrapper">
                     <svg
+                        class="search-input-icon"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -56,63 +21,138 @@
                         width="18"
                         height="18"
                     >
-                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <span>Filters</span>
-                    <span id="toolbar-filter-badge" class="filter-badge" style="display: none">0</span>
-                </button>
-
-                <button
-                    id="toolbar-clear-btn"
-                    class="toolbar-clear-btn"
-                    style="display: none"
-                    title="Reset all filters"
-                >
-                    Clear all
-                </button>
-            </div>
-
-            <!-- View Mode Switcher -->
-            <div class="filter-toolbar-right">
-                <div class="view-toggle-container">
-                    <button class="view-btn" id="view-list-btn" aria-label="List View">
+                    <input
+                        type="text"
+                        id="main-search-input"
+                        aria-label="Search audiobooks by title, author, or keyword"
+                        minlength="2"
+                        name="query"
+                        placeholder="Search audiobooks by title, author, or keyword..."
+                        class="search-bar"
+                        value="{{ query }}"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        enterkeyhint="search"
+                        required
+                    />
+                    <button
+                        type="button"
+                        id="clear-search-btn"
+                        class="clear-search-btn"
+                        aria-label="Clear search text"
+                        hidden
+                    >
                         <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
                             width="18"
                             height="18"
-                            viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
-                            stroke-width="2"
+                            stroke-width="1.8"
                         >
-                            <line x1="8" y1="6" x2="21" y2="6"></line>
-                            <line x1="8" y1="12" x2="21" y2="12"></line>
-                            <line x1="8" y1="18" x2="21" y2="18"></line>
-                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            <path d="m6 6 12 12M18 6 6 18" />
                         </svg>
-                        <span>List</span>
-                    </button>
-                    <button class="view-btn active" id="view-grid-btn" aria-label="Grid View">
-                        <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="2"
-                        >
-                            <rect x="3" y="3" width="7" height="7"></rect>
-                            <rect x="14" y="3" width="7" height="7"></rect>
-                            <rect x="14" y="14" width="7" height="7"></rect>
-                            <rect x="3" y="14" width="7" height="7"></rect>
-                        </svg>
-                        <span>Grid</span>
                     </button>
                 </div>
+                <button type="submit" class="search-button" aria-busy="false">
+                    <span class="button-spinner" id="button-spinner" style="display: none" aria-hidden="true"
+                        ><span class="spinner"></span
+                    ></span>
+                    <span class="button-text" aria-live="polite">Search</span>
+                </button>
+            </form>
+
+            {% if books %}
+            <div class="omnibar-controls">
+                <div class="filter-toolbar-left">
+                    <button
+                        aria-expanded="false"
+                        aria-controls="filter-drawer-overlay"
+                        id="toolbar-filter-toggle"
+                        class="btn-glass toolbar-filter-btn"
+                        aria-label="Toggle Filter Menu"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                            width="18"
+                            height="18"
+                        >
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                        <span>Filters</span>
+                        <span id="toolbar-filter-badge" class="filter-badge" style="display: none">0</span>
+                    </button>
+                </div>
+
+                <!-- View Mode Switcher -->
+                <div class="filter-toolbar-right">
+                    <div class="view-toggle-container" role="group" aria-label="Results view">
+                        <button
+                            class="view-btn"
+                            id="view-list-btn"
+                            type="button"
+                            aria-label="List View"
+                            title="List view"
+                            aria-pressed="false"
+                        >
+                            <svg
+                                aria-hidden="true"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                            <span>List</span>
+                        </button>
+                        <button
+                            class="view-btn active"
+                            id="view-grid-btn"
+                            type="button"
+                            aria-label="Grid View"
+                            title="Grid view"
+                            aria-pressed="true"
+                        >
+                            <svg
+                                aria-hidden="true"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                            </svg>
+                            <span>Grid</span>
+                        </button>
+                    </div>
+                </div>
             </div>
+            {% endif %}
         </div>
-        {% endif %}
+
+        <div id="recent-searches" class="recent-searches" hidden aria-label="Recent searches"></div>
     </div>
 
     <!-- Message Scroller -->
@@ -162,13 +202,31 @@
 
 <!-- Expanding Filter Drawer Popover -->
 <div id="filter-drawer-overlay" class="filter-drawer-overlay" aria-hidden="true">
-    <div class="filter-drawer-card" role="dialog" aria-labelledby="filter-drawer-title">
+    <div
+        class="filter-drawer-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="filter-drawer-title"
+        aria-describedby="filter-scope-note"
+        tabindex="-1"
+    >
         <div class="filter-drawer-header">
             <h4 id="filter-drawer-title">Filter Audiobooks</h4>
             <button id="filter-drawer-close" class="filter-drawer-close" aria-label="Close filters">&times;</button>
         </div>
 
+        <p id="filter-scope-note" class="filter-scope-note">Filters apply to results loaded so far.</p>
+
         <div class="filter-drawer-grid">
+            <div class="filter-field-group">
+                <label for="author-filter">Author / contributor</label>
+                <div class="input-icon-wrapper">
+                    <select id="author-filter" aria-describedby="author-filter-help">
+                        <option value="">All credited contributors</option>
+                    </select>
+                </div>
+                <small id="author-filter-help">Credits in loaded titles; some listings may omit them.</small>
+            </div>
             <div class="filter-field-group">
                 <label for="category-filter">
                     <svg
@@ -347,16 +405,17 @@
             </div>
         </div>
 
+        <p id="filter-validation" role="alert" hidden></p>
         <div class="filter-drawer-actions">
             <button id="filter-button" class="btn-primary">Apply Filters</button>
-            <button id="clear-button" class="btn-glass">Reset</button>
+            <button id="clear-button" class="btn-glass">Reset filters</button>
         </div>
     </div>
 </div>
 {% endif %}
 
 <!-- Floating Condensed Search & Filter HUD -->
-<aside id="floating-filter-hud" class="floating-filter-hud" aria-label="Quick Search and Filters">
+<aside id="floating-filter-hud" class="floating-filter-hud floating-control" aria-label="Quick Search and Filters">
     <div class="hud-pill">
         <form id="hud-search-form" class="hud-search-form" action="/" method="get">
             <svg
@@ -375,16 +434,21 @@
                 name="query"
                 id="hud-search-input"
                 class="hud-search-input"
+                minlength="2"
+                required
                 placeholder="Search..."
                 value="{{ query }}"
                 aria-label="Condensed Search"
             />
         </form>
+        {% if books %}
         <button
+            aria-expanded="false"
+            aria-controls="filter-drawer-overlay"
             id="hud-filter-toggle"
             class="hud-btn hud-filter-btn"
-            aria-label="Toggle Filter Tray"
-            title="Quick Filters"
+            aria-label="Open audiobook filters"
+            title="Filter audiobooks"
         >
             <svg
                 viewBox="0 0 24 24"
@@ -398,71 +462,15 @@
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
             </svg>
             <span class="hud-btn-label">Filters</span>
-            <span id="hud-filter-badge" class="hud-filter-badge" style="display: none">0</span>
-        </button>
-    </div>
-
-    <!-- Popover / Condensed Filter Tray -->
-    <div id="hud-filter-drawer" class="hud-filter-drawer" aria-hidden="true">
-        <div class="hud-drawer-header">
-            <h4>Quick Filters</h4>
-            <button id="hud-drawer-close" class="hud-drawer-close" aria-label="Close Quick Filters">&times;</button>
-        </div>
-        <div class="hud-drawer-content">
-            <div class="hud-drawer-field">
-                <label for="hud-category-filter">Category</label>
-                <select id="hud-category-filter" aria-label="Quick Category Filter">
-                    <option value="">All Categories</option>
-                    {% for cat in categories %}
-                    <option value="{{ cat }}">{{ cat }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="hud-drawer-field">
-                <label for="hud-language-filter">Language</label>
-                <select id="hud-language-filter" aria-label="Quick Language Filter">
-                    <option value="">All Languages</option>
-                    {% for lang in languages %}
-                    <option value="{{ lang }}">{{ lang }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="hud-drawer-field">
-                <label for="hud-bitrate-filter">Bitrate</label>
-                <select id="hud-bitrate-filter" aria-label="Quick Bitrate Filter">
-                    <option value="">All Bitrates</option>
-                    {% for bitrate in bitrates %}
-                    <option value="{{ bitrate }}">{{ bitrate }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="hud-drawer-field">
-                <label for="hud-format-filter">Format</label>
-                <select id="hud-format-filter" aria-label="Quick Format Filter">
-                    <option value="">All Formats</option>
-                    {% for fmt in formats %}
-                    <option value="{{ fmt }}">{{ fmt }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="hud-drawer-field">
-                <label for="hud-file-size-filter">File Size</label>
-                <select id="hud-file-size-filter" aria-label="Quick File Size Filter">
-                    <option value="">Any Size</option>
-                    <option value="under_500mb">&lt; 500 MB</option>
-                    <option value="500mb_2gb">500 MB – 2 GB</option>
-                    <option value="2gb_5gb">2 GB – 5 GB</option>
-                    <option value="over_5gb">&gt; 5 GB</option>
-                </select>
-            </div>
-            <div class="hud-drawer-actions">
-                <button id="hud-apply-filters-btn" class="btn-primary hud-action-btn">Apply</button>
-                <button id="hud-clear-filters-btn" class="btn-glass hud-action-btn">Clear</button>
-            </div>
-        </div>
+            <span id="hud-filter-badge" class="hud-filter-badge" style="display: none">0</span></button
+        >{% endif %}
     </div>
 </aside>
 
+<div id="filtered-empty" class="filtered-empty" hidden>
+    No loaded audiobooks match these filters.
+    <button id="reset-empty-filters" class="btn-glass" type="button">Reset filters</button>
+</div>
 <div
     class="table-wrapper view-grid"
     id="results-container"
@@ -472,8 +480,9 @@
     <table>
         <tbody id="results-table-body">
             {% if books %} {% set default_cover_url = url_for('static', filename='images/' + default_cover_filename,
-            v=static_version) %} {% for book in books %}
+            v=static_version) %} {% for book in books %} {% set credit = book.title|catalog_credit %}
             <tr
+                data-credits="{{ credit.credited_contributors|tojson|forceescape }}"
                 class="result-row"
                 data-category="{{ book.category|join('|') }}"
                 data-language="{{ book.language }}"
@@ -484,25 +493,43 @@
             >
                 <td class="col-cover">
                     <a href="{{ url_for('main.details', link=book.link) }}">
+                        {% if book.cover %}
                         <img
                             src="{{ book.cover if book.cover else default_cover_url }}"
-                            alt="Cover Art"
+                            alt="Cover of {{ book.title }}"
                             class="cover"
                             width="100"
                             loading="lazy"
                             decoding="async"
                             data-default-cover="{{ url_for('static', filename='images/' + default_cover_filename, v=static_version) }}"
                         />
+                        {% else %}<span class="cover-placeholder" role="img" aria-label="Cover Unavailable"></span>{%
+                        endif %}
                     </a>
                 </td>
                 <td class="col-info">
-                    <p class="book-title">{{ book.title }}</p>
+                    <p class="book-title" title="{{ book.title }}">{{ credit.display_title }}</p>
+                    <p
+                        class="book-attribution{% if not credit.author_credit %} book-attribution-empty{% endif %}"
+                        title="{{ credit.author_credit }}"
+                        {%
+                        if
+                        not
+                        credit.author_credit
+                        %}
+                        aria-hidden="true"
+                        {%
+                        endif
+                        %}
+                    >
+                        {{ credit.author_credit }}
+                    </p>
 
                     <div class="categories-container">
                         {# Render individual pills for both Grid and List views #} {% for raw_cat in book.category %} {%
                         for cat in raw_cat.split(',') %} {% if cat.strip() and cat.strip() != "Unknown" %}
                         <a
-                            href="{{ url_for('main.search', query='type:' + cat.strip()) }}"
+                            href="{{ url_for('main.search', query='category:' + cat.strip()) }}"
                             class="category-tag category-link"
                             title="Browse {{ cat.strip() }} category"
                             >{{ cat.strip() }}</a
@@ -510,13 +537,24 @@
                         {% endif %} {% endfor %} {% endfor %}
                     </div>
 
-                    <div class="property-results-container">
-                        <span class="book-language">Language: {{ book.language }}</span>
-                        <span class="book-bitrate">Bitrate: {{ book.bitrate }}</span>
-                        <span class="book-format">Format: {{ book.format }}</span>
-                        <span class="book-file_size">File Size: {{ book.file_size }}</span>
-                        <span class="book-post_date">Posted: {{ book.post_date }}</span>
-                    </div>
+                    <dl class="property-results-container">
+                        <div class="book-property">
+                            <dt>Language</dt>
+                            <dd class="book-language">{{ book.language }}</dd>
+                        </div>
+                        <div class="book-property">
+                            <dt>Bitrate</dt>
+                            <dd class="book-bitrate">{{ book.bitrate }}</dd>
+                        </div>
+                        <div class="book-property">
+                            <dt>Format</dt>
+                            <dd class="book-format">{{ book.format }}</dd>
+                        </div>
+                        <div class="book-property">
+                            <dt>File size</dt>
+                            <dd class="book-file_size">{{ book.file_size }}</dd>
+                        </div>
+                    </dl>
                 </td>
                 <td class="col-actions">
                     <div class="action-buttons">
@@ -531,6 +569,22 @@
                             Download
                         </button>
                     </div>
+                    <p class="book-posted" title="Posted to catalog">
+                        <svg
+                            aria-hidden="true"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.6"
+                        >
+                            <rect x="3" y="5" width="18" height="16" rx="2" />
+                            <path d="M16 3v4M8 3v4M3 11h18" />
+                        </svg>
+                        <span class="sr-only">Posted to catalog </span
+                        ><span class="book-post_date">{{ book.post_date }}</span>
+                    </p>
                 </td>
             </tr>
             {% endfor %} {% else %} {% if query and not error %}
@@ -544,14 +598,14 @@
         </tbody>
     </table>
     {% if books %}
-    <div id="load-more-indicator" class="load-more-container" style="display: none">
-        <div class="load-more-loading" id="load-more-loading">
+    <div id="load-more-indicator" class="load-more-container" aria-busy="false">
+        <p id="pagination-message" role="status" aria-live="polite">More results load as you scroll.</p>
+        <div class="load-more-loading" id="load-more-loading" style="display: none" aria-hidden="true">
             <span class="load-more-spinner"></span>
-            <span id="load-more-text">Finding more audiobooks...</span>
         </div>
-        <button id="load-more-btn" class="btn-glass load-more-btn" style="display: none">Load More Results</button>
+        <button id="load-more-btn" class="btn-glass load-more-btn" type="button">Load more audiobooks</button>
+        <p role="status" aria-live="polite" id="load-more-end" class="load-more-end" style="display: none"></p>
     </div>
-    <p id="load-more-end" class="load-more-end" style="display: none">You've reached the end of the results.</p>
     {% endif %}
 </div>
 

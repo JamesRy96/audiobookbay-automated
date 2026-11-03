@@ -1,6 +1,7 @@
 # File: audiobook_automated/clients/base.py
 """Base classes and types for torrent clients."""
 
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
@@ -110,6 +111,15 @@ class TorrentStatus:
             self.state = str(normalize_torrent_state(self.state).value)
 
 
+class _ClientConnections(threading.local):
+    """Initialize connection handles independently in each request thread."""
+
+    def __init__(self) -> None:
+        """Keep local SDK clients and HTTP sessions out of other request threads."""
+        self.client: Any = None
+        self.session: Any = None
+
+
 class TorrentClientPlugin(ABC):
     """Abstract base class for download client plugins."""
 
@@ -132,12 +142,31 @@ class TorrentClientPlugin(ABC):
         Accepts **kwargs to allow subclasses to accept extra parameters
         without breaking the common interface.
         """
+        self._connections = _ClientConnections()
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.scheme = scheme
         self.timeout = timeout
+
+    @property
+    def client(self) -> Any:
+        """Return this thread's SDK connection handle."""
+        return self._connections.client
+
+    @client.setter
+    def client(self, value: Any) -> None:
+        self._connections.client = value
+
+    @property
+    def session(self) -> Any:
+        """Return this thread's HTTP connection handle."""
+        return self._connections.session
+
+    @session.setter
+    def session(self, value: Any) -> None:
+        self._connections.session = value
 
     @abstractmethod
     def connect(self) -> None:

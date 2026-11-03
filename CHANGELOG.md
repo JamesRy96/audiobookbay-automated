@@ -11,9 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Shared search filters, session-scoped recent searches, explicit pagination retry/end states, and recognizable
+  contributor credits with a loaded-results filter.
+- Theme-aware cover placeholders, keyboard-safe dialogs and synchronized floating controls.
+- End-user Docker setup, configuration/troubleshooting guides, isolated browser fixtures and release instructions.
+
 - **Multi-Client Routing:** Added support for aggregating and dispatching to multiple download clients simultaneously
   using `DL_CLIENTS` (comma-separated list).
-- **API Key Authentication:** Added `DL_API_KEY` (and `DL_KEY`) support for modern qBittorrent and Put.io setups.
+- **API Key Authentication:** Added `DL_API_KEY` support for modern qBittorrent and Put.io setups.
 - **Cross-Platform Path Normalization:** Added `DL_CLIENT_OS=windows` configuration to safely format paths for Windows
   torrent client hosts without mangling POSIX paths on Linux.
 - **Dual Protocol Fallback & Latency Scoring:** Search scrapers now probe HTTPS first and gracefully fall back to HTTP
@@ -26,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   authentication and customizable target folder ID (`PUTIO_FOLDER_ID`).
 - **UI Customization & Theming:** Added `DEFAULT_THEME`, customizable `SITE_TITLE`, and `SITE_LOGO`.
 - **Animated Splash Screen Morph:** Added video splash screen with smooth transition that shrinks and fades into the
-  top-left header logo.
+  header banner.
 - **Custom Trackers Example:** Added `examples/trackers.json` demonstrating custom tracker override formats.
 - **Auto-Refresh Controls:** Added toggleable auto-refresh switches and 5-second countdown timer buttons across both
   Active Downloads (`/status`) and System Diagnostics (`/diagnostics`), allowing users to pause polling anytime while
@@ -35,6 +40,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   polling, metric rendering, and log filtering.
 
 ### Changed
+
+- Generate session/CSRF signing keys automatically; normal installation no longer requires a manual secret.
+- Explain page expiry with a refresh instruction after restarts, while retaining optional signing-key configuration.
+
+- Standardized filled covers, card/metadata/action alignment and a compact banner/menu arrangement across screen sizes.
+- Grouped Details metadata and Download information; moved search posting dates to a quiet footer.
+- Simplified refresh controls and mirror availability/ranking presentation across all 14 themes.
+- Standardized category/language/author/narrator search prefixes and concise, actionable user messages.
+- Docker now installs locked runtime dependencies without development tools. Build context excludes local audit data.
+- Release creation runs quality gates and explicitly publishes the versioned/latest image before creating the release.
+- Added an accessible search-box clear control and moved filter reset into the Filters panel.
+- Placed posting dates beneath metadata in list view while retaining the grid footer.
+- Removed obsolete credential/timeout aliases, the unused `PAGE_LIMIT` setting and compatibility behavior before
+  the first release.
 
 - **User-Centric Client Terminology:** Replaced developer jargon "Strategy" across the codebase, tests, docstrings, and
   documentation with clear Download Client plugin names (`TorrentClientPlugin`, `QBittorrentClient`, `DelugeClient`,
@@ -53,5 +72,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Fixed mobile table overflow handling in E2E tests (`overflow-x: auto` on `.table-wrapper`).
+- Isolated Download Client connections per request thread so cleanup cannot close another request's session.
+- Corrected the default client host when its setting is empty, including Put.io cloud setup.
+
+- Preserved every structured narrator/author and audio field before removing duplicate description headers.
+- Corrected initial Status recovery, selected-client removal, refresh focus preservation and filter cancellation.
+- Corrected theme contrast, search loading geometry/timers, mobile history layout and intro-to-banner handoff.
+- Corrected repository/image links, Python module startup instructions, browser test server ports and release triggers.
+
+- Replaced mock-page E2E checks with actual-template browser tests and responsive layout assertions.
 - Fixed notification toast DOM class assignment and download button data attribute fallbacks.

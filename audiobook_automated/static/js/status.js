@@ -22,6 +22,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const pollCountdownNum = document.getElementById("poll-countdown-num");
     const autoRefreshToggle = document.getElementById("auto-refresh-toggle");
 
+    const updateNote = document.getElementById("status-update-note");
+    const params = new URLSearchParams(location.search);
+    const client = params.get("client");
+    const pollUrl = "/status?json=1" + (client ? "&client=" + encodeURIComponent(client) : "");
+    let lastSuccess = document.getElementById("status-initial-error") ? null : new Date().toLocaleTimeString();
+    const markStale = () => {
+        tableBody.classList.add("is-stale");
+        if (updateNote)
+            updateNote.textContent =
+                (document.getElementById("status-initial-error") && !lastSuccess
+                    ? "Download status is unavailable"
+                    : "Couldn’t refresh. Showing previous results") +
+                (lastSuccess ? " from " + lastSuccess : "") +
+                ". Use Refresh to retry.";
+    };
     let countdown = 5;
     let isFetching = false;
 
@@ -33,8 +48,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (pollCountdownNum) pollCountdownNum.textContent = "";
         try {
             if (pollIndicator) pollIndicator.classList.add("polling");
-            const response = await fetch("/status?json=1");
+            const response = await fetch(pollUrl);
             if (!response.ok) {
+                markStale();
                 let errData = {};
                 try {
                     errData = await response.json();
@@ -58,6 +74,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
             if (Array.isArray(data)) {
                 updateTable(tableBody, data);
+                const errorPanel = document.getElementById("status-initial-error");
+                if (errorPanel) errorPanel.hidden = true;
+                const wrapper = document.getElementById("status-table-wrapper");
+                if (wrapper) wrapper.hidden = false;
+                tableBody.classList.remove("is-stale");
+                lastSuccess = new Date().toLocaleTimeString();
+                if (updateNote) updateNote.textContent = "Last updated: " + lastSuccess;
                 if (countBadge) {
                     countBadge.textContent = `${data.length} Active`;
                 }
@@ -67,6 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
         } catch (error) {
+            markStale();
             console.error("Failed to fetch status:", error);
             if (clientPill && clientPillText) {
                 clientPill.className = "status-client-pill disconnected";
@@ -115,6 +139,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (autoRefreshToggle) {
         autoRefreshToggle.addEventListener("change", () => {
+            const label = autoRefreshToggle.closest("label")?.querySelector(".auto-refresh-text");
+            if (label) label.textContent = autoRefreshToggle.checked ? "Live" : "Paused";
             if (autoRefreshToggle.checked) {
                 countdown = 5;
                 if (pollCountdownNum) pollCountdownNum.textContent = "5";
@@ -153,12 +179,26 @@ function getStatusBadgeClass(state) {
  * @param {Array<{id: string|number, name: string, progress: number, state: string, size: string}>} torrents - List of torrent objects.
  */
 function updateTable(tbody, torrents) {
+    const snapshot = JSON.stringify(torrents || []);
+    if (tbody.dataset.snapshot === snapshot) return;
+    tbody.dataset.snapshot = snapshot;
+    const focused = tbody.contains(document.activeElement) ? document.activeElement : null;
+    const restoreFocus = () => {
+        if (!focused) return;
+        const replacement = [...tbody.querySelectorAll(".remove-torrent-btn")].find(
+            (button) =>
+                button.dataset.torrentId === focused.dataset.torrentId &&
+                button.dataset.client === focused.dataset.client
+        );
+        (replacement || document.getElementById("status-poll-indicator"))?.focus();
+    };
     // If empty list, show empty message
     if (!torrents || torrents.length === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" class="empty-message" style="text-align: center; padding: 40px; color: var(--text-muted)">No active downloads found.</td>
             </tr>`;
+        restoreFocus();
         return;
     }
 
@@ -183,7 +223,7 @@ function updateTable(tbody, torrents) {
             </td>
             <td class="cell-progress">
                 <div class="progress-cell-wrap">
-                    <div class="progress-bar-container" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="progress-bar-container" role="progressbar" aria-label="Download progress for ${escapeHtml(torrent.name)}" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100">
                         <div class="progress-bar-fill ${fillCompleteClass}" style="width: ${progress}%"></div>
                     </div>
                     <span class="progress-percentage">${progress}%</span>
@@ -194,7 +234,7 @@ function updateTable(tbody, torrents) {
             </td>
             <td class="cell-size">${escapeHtml(torrent.size)}</td>
             <td class="cell-action">
-                <button class="remove-button remove-torrent-btn btn-glass-danger" data-torrent-id="${escapeHtml(String(torrent.id))}" title="Remove download">
+                <button class="remove-button remove-torrent-btn btn-glass-danger" data-torrent-id="${escapeHtml(String(torrent.id))}" data-client="${escapeHtml(torrent.client || "")}" title="Remove download">
                     <svg class="action-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <polyline points="3 6 5 6 21 6"></polyline>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -208,6 +248,7 @@ function updateTable(tbody, torrents) {
         .join("");
 
     tbody.innerHTML = rowsHtml;
+    restoreFocus();
 }
 
 /**

@@ -181,3 +181,39 @@ html.no-splash .navbar {
     transform: none;
     transition: none;
 }
+
+/* Playback, handoff image and masthead share one aspect ratio and one moving frame. */
+#splash-brand-frame {
+    position: relative;
+    width: min(90vw, 1280px);
+    aspect-ratio: var(--splash-brand-ratio, 3 / 1);
+    border-radius: 16px;
+    overflow: hidden;
+    transform-origin: center;
+    will-change: transform;
+    transition:
+        transform 0.65s cubic-bezier(0.2, 0.8, 0.2, 1),
+        border-radius 0.65s ease;
+}
+#splash-brand-frame #splash-video,
+#splash-handoff-logo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    object-fit: cover;
+    transform: none;
+    border-radius: 0;
+}
+#splash-brand-frame #splash-video {
+    transition: opacity 0.18s ease;
+}
+#splash-handoff-logo {
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+#splash-overlay.morphing #splash-handoff-logo {
+    opacity: 1;
+}

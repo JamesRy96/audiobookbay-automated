@@ -257,7 +257,7 @@ def test_sanitize_description_merging() -> None:
     html = "<div><div class='custom'>Hello</div><div class='custom'>World</div></div>"
     soup = BeautifulSoup(html, "lxml").find("div")
     assert isinstance(soup, Tag)
-    res = _sanitize_description(soup)
+    res = _sanitize_description(soup, BookMetadata())
     assert "Hello World" in res
 
 
@@ -586,3 +586,111 @@ def test_garbage_html_parsing() -> None:
     assert result["title"] == "Unknown Title"
     assert result["info_hash"] == "Unknown"
     assert result["description"] == "No description available."
+
+
+def test_details_size_from_unclassified_table_and_lowercase_label() -> None:
+    """Recognize catalog size rows without requiring one table class or case."""
+    soup = BeautifulSoup(
+        '<div class="postContent"><table><tr><td>file size:</td><td>531.35 MB</td></tr></table></div>', "html.parser"
+    )
+    assert parse_book_details(soup, "https://example.com/book")["file_size"] == "531.35 MB"
+
+
+def test_details_size_in_description_with_known_audio_format() -> None:
+    """Parse a description size even when format and bitrate are already known."""
+    soup = BeautifulSoup(
+        '<div class="postContent"><p>Format: MP3</p><p>Bitrate: 128 Kbps</p><div class="desc"><p>File Size: 42 MB</p></div></div>',
+        "html.parser",
+    )
+    assert parse_book_details(soup, "https://example.com/book")["file_size"] == "42 MB"
+
+
+def test_description_metadata_header_keeps_all_contributors_and_audio_fields() -> None:
+    """Read raw header spans before cleanup and retain the entire cast."""
+    soup = BeautifulSoup(
+        '<div class="desc"><p>Written by <span class="author" itemprop="author">Jane Doe</span>, '
+        '<span class="author" itemprop="author">John Smith</span><br>'
+        'Read by <span class="narrator" itemprop="author">Jeff Hays</span>, '
+        '<span class="narrator" itemprop="author">Annie Ellicott</span>, '
+        '<span class="narrator" itemprop="author">Jeff Hays</span><br>'
+        "Format: <span>M4B</span><br>Bitrate: <span>Variable</span><br>Dramatization</p>"
+        "<p>A <b>richly told</b> story.</p></div>",
+        "html.parser",
+    )
+    result = parse_book_details(soup, "https://example.com/book")
+    assert result["author"] == "Jane Doe, John Smith"
+    assert result["narrator"] == "Jeff Hays, Annie Ellicott"
+    # A repeated credit in the original header is not identical to the deduplicated field.
+    assert "Read by" in result["description"]
+    assert result["format"] == "M4B"
+    assert result["bitrate"] == "Variable"
+    assert "<b>richly told</b>" in result["description"]
+
+
+def test_description_removes_matching_prefix_but_keeps_unique_notes_and_synopsis() -> None:
+    """Remove BR-separated duplicates, stopping at the first unique line."""
+    soup = BeautifulSoup(
+        "<div><p>Written by <b>Matt Dinniman</b><br>Read by Jeff Hays , Annie Ellicott<br>Format:M4B<br>Bitrate: Variable<br>Dramatization</p><p>A <i>real</i> synopsis.</p></div>",
+        "html.parser",
+    ).div
+    assert isinstance(soup, Tag)
+    result = _sanitize_description(
+        soup,
+        BookMetadata(author="Matt Dinniman", narrator="Jeff Hays, Annie Ellicott", format="M4B", bitrate="Variable"),
+    )
+    assert "Written by" not in result
+    assert "Read by" not in result
+    assert "Format:" not in result
+    assert "Bitrate:" not in result
+    assert "<p>Dramatization</p>" in result
+    assert "<i>real</i>" in result
+
+
+def test_description_does_not_remove_missing_metadata_or_prose() -> None:
+    """Preserve unmatched credits and label-like sentences in the synopsis."""
+    for html in [
+        "<p>Written by Someone Else</p><p>Format: M4B</p>",
+        "<p>Written by the victor, the account is unreliable.</p>",
+        "<p>A synopsis.</p><p>Format: M4B</p>",
+        "A synopsis.<p>Format: M4B</p>",
+        "A synopsis.<br>Format: M4B",
+    ]:
+        soup = BeautifulSoup("<div>" + html + "</div>", "html.parser").div
+        assert isinstance(soup, Tag)
+        result = _sanitize_description(soup, BookMetadata(format="M4B"))
+        assert BeautifulSoup(result, "html.parser").get_text() == BeautifulSoup(html, "html.parser").get_text()
+
+
+def test_description_metadata_only_and_plain_root_lines() -> None:
+    """Handle complete duplicate blocks and direct BR lines without empty shells."""
+    for html in [
+        "<p>Author: Jane Doe</p><p>Narrator: John Smith</p><p>Format: M4B</p>",
+        "Written by Jane Doe<br>Read by John Smith<br>Format: M4B<br>",
+        "<p>Language: English</p><p>Category: Fantasy</p><p>Total Size: 42 MB</p>",
+    ]:
+        soup = BeautifulSoup("<div>" + html + "</div>", "html.parser").div
+        assert isinstance(soup, Tag)
+        assert (
+            _sanitize_description(
+                soup,
+                BookMetadata(
+                    author="Jane Doe",
+                    narrator="John Smith",
+                    format="M4B",
+                    language="English",
+                    category=["Fantasy"],
+                    file_size="42 MB",
+                ),
+            )
+            == "No description available."
+        )
+    soup = BeautifulSoup("<div>Format: M4B<br><p>Synopsis.</p></div>", "html.parser").div
+    assert isinstance(soup, Tag)
+    assert _sanitize_description(soup, BookMetadata(format="M4B")) == "<p>Synopsis.</p>"
+
+
+def test_description_unknown_structured_credit_is_retained() -> None:
+    """Do not hide an unrepresented credit merely because its label matches."""
+    soup = BeautifulSoup("<div><p>Read by Jane Doe</p><p>Synopsis.</p></div>", "html.parser").div
+    assert isinstance(soup, Tag)
+    assert "Read by Jane Doe" in _sanitize_description(soup, BookMetadata())

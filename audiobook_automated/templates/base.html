@@ -1,5 +1,5 @@
-<!doctype html>
 <!-- File: audiobook_automated/templates/base.html -->
+<!doctype html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
@@ -9,6 +9,7 @@
         <title>{% block title %}{{ site_title }}{% endblock %}</title>
         <script nonce="{{ csp_nonce() }}">
             // Immediate splash screen check to prevent FOUC
+            try {
             if (
                 {{ 'false' if splash_enabled else 'true' }} ||
                 sessionStorage.getItem("splashShown") ||
@@ -16,6 +17,8 @@
             ) {
                 document.documentElement.classList.add("no-splash");
             }
+            } catch (_) { document.documentElement.classList.add("no-splash"); }
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("no-splash");
             window.APP_VERSION = "{{ static_version }}";
             window.DEFAULT_THEME = "{{ default_theme }}";
             window.ABB_HOST = "{{ abb_host }}";
@@ -38,6 +41,7 @@
         <link rel="stylesheet" href="{{ url_for('static', filename='css/splash.css', v=static_version) }}" />
         <link rel="stylesheet" href="{{ url_for('static', filename='css/modal.css', v=static_version) }}" />
         {% block extra_css %}{% endblock %} {% block extra_js %}{% endblock %}
+        <script src="{{ url_for('static', filename='js/ui.js', v=static_version) }}"></script>
         <script src="{{ url_for('static', filename='js/theme.js', v=static_version) }}"></script>
         <script src="{{ url_for('static', filename='js/actions.js', v=static_version) }}" defer></script>
     </head>
@@ -52,19 +56,27 @@
             data-splash-enabled="{{ splash_enabled }}"
         >
             {% if splash_video or splash_video_webm %}
-            <video id="splash-video" autoplay muted playsinline>
-                {% if splash_video_webm %}
-                <source
-                    src="{{ splash_video_webm }}{% if not splash_video_webm.startswith(('http://', 'https://', 'data:')) and '?' not in splash_video_webm %}?v={{ static_version }}{% endif %}"
-                    type="video/webm"
-                />
-                {% endif %} {% if splash_video %}
-                <source
-                    src="{{ splash_video }}{% if not splash_video.startswith(('http://', 'https://', 'data:')) and '?' not in splash_video %}?v={{ static_version }}{% endif %}"
-                    type="video/mp4"
-                />
-                {% endif %}
-            </video>
+            <div id="splash-brand-frame">
+                <video id="splash-video" preload="none" muted playsinline>
+                    {% if splash_video_webm %}
+                    <source
+                        src="{{ splash_video_webm }}{% if not splash_video_webm.startswith(('http://', 'https://', 'data:')) and '?' not in splash_video_webm %}?v={{ static_version }}{% endif %}"
+                        type="video/webm"
+                    />
+                    {% endif %} {% if splash_video %}
+                    <source
+                        src="{{ splash_video }}{% if not splash_video.startswith(('http://', 'https://', 'data:')) and '?' not in splash_video %}?v={{ static_version }}{% endif %}"
+                        type="video/mp4"
+                    />
+                    {% endif %}
+                </video>
+                {% if site_logo %}<img
+                    id="splash-handoff-logo"
+                    src="{{ site_logo }}{% if not site_logo.startswith(('http://', 'https://', 'data:')) and '?' not in site_logo %}?v={{ static_version }}{% endif %}"
+                    alt=""
+                    aria-hidden="true"
+                />{% endif %}
+            </div>
             <button id="skip-splash-btn" class="skip-splash-btn" type="button" aria-label="Skip Intro Animation">
                 Skip Intro
             </button>
@@ -79,7 +91,8 @@
         </div>
         {% endif %}
 
-        <div class="navbar navbar-minimal">
+        <a class="skip-link" href="#main-content">Skip to content</a>
+        <nav class="navbar navbar-minimal" aria-label="Main navigation">
             <div class="nav-container">
                 <button
                     class="mobile-menu-btn"
@@ -247,9 +260,9 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </nav>
 
-        <!-- Option 4: Masthead Hero Showcase -->
+        <!-- Masthead -->
         <header class="masthead-showcase">
             <a href="{{ url_for('main.search') }}" class="masthead-brand" aria-label="{{ site_title }} - Home">
                 {% if site_logo %}
@@ -269,7 +282,7 @@
             <div class="client-alert-content">
                 <span class="client-alert-icon" aria-hidden="true">⚠️</span>
                 <div class="client-alert-text">
-                    <strong>Download Program Disconnected:</strong>
+                    <strong>Download Client Disconnected:</strong>
                     <span
                         >Your download client is currently offline or unreachable. You can browse books, but downloads
                         are paused until the client is connected.</span
@@ -279,25 +292,25 @@
                     href="{{ url_for('diagnostics.diagnostics_page') if diagnostics_enabled else url_for('main.status') }}"
                     class="btn-glass client-alert-btn"
                 >
-                    Check Diagnostics
+                    {{ "Check Diagnostics" if diagnostics_enabled else "Check Status" }}
                 </a>
             </div>
         </div>
 
-        <div class="content">{% block content %}{% endblock %}</div>
+        <main class="content" id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
 
         <!-- Floating Scroll to Top Button -->
         <button
             id="scroll-to-top-btn"
-            class="scroll-to-top-btn"
+            class="scroll-to-top-btn floating-control"
             type="button"
             aria-label="Scroll back to top"
             title="Scroll to top"
         >
             <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
+                width="22"
+                height="22"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"

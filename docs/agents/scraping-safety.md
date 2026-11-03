@@ -32,3 +32,13 @@
   safely formatted using Windows backslash conventions without mangling POSIX paths on Linux.
 - Collision Avoidance: Append short UUIDs (`uuid.uuid4().hex[:8]`) to sanitized or fallback directory names to guarantee
   uniqueness.
+
+## Search and Description Data
+
+- Expose `category:`, `language:`, `author:` and `narrator:` in UI links. Native category/language URLs still use the
+  catalog's `/type/` and `/tag/` segments. Do not add obsolete input aliases.
+- Progressive search fetches one page at a time and ends when the catalog returns no further results. There is no
+  `PAGE_LIMIT` application setting. Preserve request jitter and concurrency caps for every page.
+- Description cleanup is local to already-fetched HTML. Collect the complete structured cast and audio fields first;
+  remove only leading standalone duplicates that match fields displayed above. Do not discard synopsis content or
+  issue extra metadata requests.

@@ -76,6 +76,9 @@ function setupModal() {
 
 // Reset mocks before each test
 beforeEach(() => {
+    window.UI.activeDialog?.();
+    window.matchMedia = jest.fn(() => ({ matches: false }));
+    HTMLMediaElement.prototype.play = jest.fn().mockResolvedValue(undefined);
     mockFetch.mockClear();
     mockConfirm.mockClear();
     mockOpen.mockClear();
@@ -130,7 +133,8 @@ describe("actions.js - Core Functionality", () => {
     test("showNotification should handle error type", () => {
         showNotification("Error message", "error");
         const toast = document.querySelector("#notification-container > div");
-        expect(toast.style.backgroundColor).toBe("rgb(211, 47, 47)"); // #d32f2f
+        expect(toast.classList.contains("toast-error")).toBe(true);
+        expect(toast.getAttribute("role")).toBe("alert");
     });
 
     test("showModal should display modal and set content", () => {
@@ -480,8 +484,10 @@ describe("actions.js - Splash Screen & Morph Animation", () => {
         expect(video.style.transform).toContain("scale(");
         expect(video.style.opacity).toBe("0");
 
-        // After morph transition (650ms), overlay is hidden and display is none
+        // Cleanup waits until the staggered content fade has completed.
         jest.advanceTimersByTime(650);
+        expect(overlay.classList.contains("hidden")).toBe(false);
+        jest.advanceTimersByTime(400);
         expect(overlay.classList.contains("hidden")).toBe(true);
         expect(overlay.style.display).toBe("none");
         expect(sessionStorage.getItem("splashShown")).toBe("true");
@@ -532,8 +538,8 @@ describe("actions.js - Splash Screen & Morph Animation", () => {
         jest.advanceTimersByTime(200);
         expect(document.documentElement.classList.contains("splash-reveal-content")).toBe(true);
 
-        // At 650ms, overlay hides and no-splash is established
-        jest.advanceTimersByTime(300);
+        // At 1050ms, the content has finished fading before cleanup.
+        jest.advanceTimersByTime(700);
         expect(overlay.classList.contains("hidden")).toBe(true);
         expect(overlay.style.display).toBe("none");
         expect(sessionStorage.getItem("splashShown")).toBe("true");
@@ -707,4 +713,85 @@ describe("actions.js - Splash Screen & Morph Animation", () => {
             });
         });
     });
+});
+
+describe("shared UI accessibility", () => {
+    test("dialog traps Tab, closes on Escape, restores focus and background", () => {
+        document.body.innerHTML =
+            '<button id="trigger">Open</button><main id="background"></main><div id="panel"><button id="first">One</button><button id="last">Two</button></div>';
+        const trigger = document.getElementById("trigger");
+        trigger.focus();
+        let release;
+        release = window.UI.openDialog(document.getElementById("panel"), trigger, () => release());
+        expect(document.activeElement.id).toBe("first");
+        expect(document.getElementById("background").inert).toBe(true);
+        document.getElementById("last").focus();
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+        expect(document.activeElement.id).toBe("first");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        expect(document.activeElement).toBe(trigger);
+        expect(document.getElementById("background").inert).not.toBe(true);
+    });
+    test("blocked browser storage returns a fallback without throwing", () => {
+        const spy = jest.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+            throw new Error("Blocked");
+        });
+        expect(window.UI.storage("localStorage", "getItem", "theme")).toBeNull();
+        spy.mockRestore();
+    });
+});
+
+describe("release interaction regressions", () => {
+    test("removal includes the row Download Client and does not report HTTP failures as success", async () => {
+        const button = document.createElement("button");
+        button.dataset.client = "transmission";
+        document.body.append(button);
+        mockFetch.mockResolvedValue({ ok: false, json: async () => ({ message: "Could not remove" }) });
+        deleteTorrent("shared-id", button);
+        document.getElementById("modal-confirm").click();
+        await flushPromises();
+        expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ id: "shared-id", client: "transmission" });
+        expect(button.isConnected).toBe(true);
+        expect(document.querySelector(".toast-error")).not.toBeNull();
+    });
+});
+
+test("releasing an old dialog twice cannot make the active dialog background interactive", () => {
+    document.body.innerHTML =
+        '<button id="trigger">Open</button><main></main><div id="one"><button>One</button></div><div id="two"><button>Two</button></div>';
+    const trigger = document.getElementById("trigger");
+    const first = window.UI.openDialog(document.getElementById("one"), trigger, () => {});
+    const second = window.UI.openDialog(document.getElementById("two"), trigger, () => {});
+    first();
+    expect(document.querySelector("main").inert).toBe(true);
+    second();
+    expect(document.querySelector("main").inert).not.toBe(true);
+});
+
+test("returning visits do not play the hidden intro video", () => {
+    document.body.innerHTML = '<div id="splash-overlay"><video id="splash-video"></video></div>';
+    document.documentElement.classList.add("no-splash");
+    initSplashScreen();
+    expect(document.getElementById("splash-video").play).not.toHaveBeenCalled();
+});
+
+test.each(["download", "remove", "scan"])("%s explains page expiry without repeating the action", async (action) => {
+    mockFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ code: "page_expired", message: "Page expired. Refresh and try again." }),
+    });
+    const button = document.createElement("button");
+    button.textContent = "Download";
+    document.body.append(button);
+    if (action === "download") sendTorrent("https://catalog.example/book", "A book", button);
+    else {
+        if (action === "remove") deleteTorrent("test-id", button);
+        else reloadLibrary();
+        document.getElementById("modal-confirm").click();
+    }
+    await flushPromises();
+    expect(getNotificationText()).toContain("Page expired. Refresh and try again.");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(false);
 });

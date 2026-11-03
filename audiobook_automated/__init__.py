@@ -2,10 +2,12 @@
 """Main application package for AudiobookBay Automated."""
 
 import logging
+import secrets
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, request, session
+from flask import Flask, Response, jsonify, request, session
+from flask_wtf.csrf import CSRFError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import Config
@@ -21,6 +23,8 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     """Create and configure a Flask application instance."""
     app = Flask(__name__)
     app.config.from_object(config_class)
+    if not app.config.get("SECRET_KEY"):
+        app.config["SECRET_KEY"] = secrets.token_hex(32)
     # Ensure properties on config class instance are resolved into app.config
     app.config["LIBRARY_RELOAD_ENABLED"] = getattr(config_class(), "LIBRARY_RELOAD_ENABLED", False)
 
@@ -46,6 +50,11 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     # Initialize Extensions
     limiter.init_app(app)
     csrf.init_app(app)
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(_error: CSRFError) -> tuple[Response, int]:  # pyright: ignore[reportUnusedFunction]
+        """Tell users how to recover from an expired page without replaying an action."""
+        return jsonify(message="Page expired. Refresh and try again.", code="page_expired"), 400
 
     # Initialize Security Headers
     # We must allow 'unsafe-inline' for style-src because of the dynamic nature of

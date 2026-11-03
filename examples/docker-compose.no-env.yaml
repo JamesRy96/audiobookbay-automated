@@ -1,37 +1,14 @@
 # File: examples/docker-compose.no-env.yaml
 services:
   audiobookbay-automated:
-    image: ghcr.io/jamesry96/audiobookbay-automated:latest
+    image: ghcr.io/meek2100/audiobookbay-automated:latest
+    restart: unless-stopped
     ports:
       - "5078:5078"
-    container_name: audiobookbay-automated
     environment:
-      # Torrent Client Configuration
-      - DL_CLIENT=qbittorrent
-      - DL_SCHEME=http
-      - DL_HOST=192.168.1.100
-      - DL_PORT=8080
-      - DL_USERNAME=admin
-      - DL_PASSWORD=secret_password
-      - DL_CATEGORY=abb-automated
-
-      # App Configuration
-      - SAVE_PATH_BASE=/downloads/audiobooks
-      - SECRET_KEY=change_this_to_a_random_string
-      - LOG_LEVEL=INFO
-      - LISTEN_HOST=0.0.0.0
-      - LISTEN_PORT=5078
-      - TZ=America/New_York
-
-      # Scraping Options
-      - PAGE_LIMIT=3
-      - ABB_MIRRORS=audiobookbay.is,audiobookbay.se
-
-      # Optional: Audiobookshelf Integration
-      # - ABS_URL=http://192.168.1.100:13378
-      # - ABS_KEY=your_api_key
-      # - ABS_LIB=your_library_id
-
-    # Uncomment to mount a local trackers list
-    # volumes:
-    #   - ./trackers.json:/app/trackers.json:ro
+      DL_CLIENT: qbittorrent
+      DL_HOST: "192.168.1.100"
+      DL_PORT: "8080"
+      DL_USERNAME: admin
+      DL_PASSWORD: "replace-with-your-client-password"
+      SAVE_PATH_BASE: /downloads/audiobooks

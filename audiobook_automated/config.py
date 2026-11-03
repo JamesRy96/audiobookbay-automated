@@ -68,9 +68,8 @@ class Config:
     """
 
     # Core Flask Config
-    # nosec B105: Default key is intentional for development; validation logic handles warning user.
-    # noqa: S105  # Ruff flag for hardcoded password
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "change-this-to-a-secure-random-key").strip(" \"'")
+    # Optional override; create_app generates an in-memory signing key when empty.
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "").strip(" \"'")
     FLASK_DEBUG: bool = parse_bool(os.getenv("FLASK_DEBUG"), False)
     TESTING: bool = parse_bool(os.getenv("TESTING"), False)
     ENABLE_DIAGNOSTICS: bool = parse_bool(os.getenv("ENABLE_DIAGNOSTICS"), False)
@@ -124,11 +123,11 @@ class Config:
     DL_HOST: str | None = _dl_host.strip(" \"'") if _dl_host else None
     _dl_port: str | None = os.getenv("DL_PORT")
     DL_PORT: str | None = _dl_port.strip(" \"'") if _dl_port else None
-    _dl_username: str | None = os.getenv("DL_USERNAME") or os.getenv("DL_USER")
+    _dl_username: str | None = os.getenv("DL_USERNAME")
     DL_USERNAME: str | None = _dl_username.strip(" \"'") if _dl_username else None
-    _dl_password: str | None = os.getenv("DL_PASSWORD") or os.getenv("DL_PASS")
+    _dl_password: str | None = os.getenv("DL_PASSWORD")
     DL_PASSWORD: str | None = _dl_password.strip(" \"'") if _dl_password else None
-    _dl_api_key: str | None = os.getenv("DL_API_KEY") or os.getenv("DL_KEY")
+    _dl_api_key: str | None = os.getenv("DL_API_KEY")
     DL_API_KEY: str | None = _dl_api_key.strip(" \"'") if _dl_api_key else None
     DL_CATEGORY: str = os.getenv("DL_CATEGORY", "abb-automated").strip(" \"'")
     DL_SCHEME: str = os.getenv("DL_SCHEME", "http").strip(" \"'")
@@ -169,9 +168,6 @@ class Config:
     _trackers_str: str = os.getenv("MAGNET_TRACKERS", "").strip(" \"'")
     MAGNET_TRACKERS: list[str] = [t.strip() for t in _trackers_str.split(",") if t.strip()]
 
-    # Page Limit (Default 3)
-    PAGE_LIMIT: int = parse_env_int("PAGE_LIMIT", 3)
-
     # Scraper Concurrency
     # Defines the number of worker threads per worker for the scraping executor.
     SCRAPER_THREADS: int = parse_env_int("SCRAPER_THREADS", 3)
@@ -205,22 +201,6 @@ class Config:
     @classmethod
     def validate(cls, logger: logging.Logger) -> None:
         """Validate critical configuration at startup."""
-        # nosec B105
-        # The following line triggers S105/B105 but is intentional for validation.
-        if cls.SECRET_KEY == "change-this-to-a-secure-random-key":  # noqa: S105
-            if cls.FLASK_DEBUG or cls.TESTING:
-                logger.warning(
-                    "WARNING: You are using the default insecure SECRET_KEY. "
-                    "This is acceptable for development/testing but UNSAFE for production."
-                )
-            else:
-                logger.critical(
-                    "CRITICAL SECURITY ERROR: You are running in PRODUCTION with the default insecure SECRET_KEY."
-                )
-                raise ValueError(
-                    "Application refused to start: Change SECRET_KEY in your .env file for production deployment."
-                )
-
         # Validate LOG_LEVEL
         # Only validate if the user actually tried to set it
         if cls._log_level_env and not hasattr(logging, cls.LOG_LEVEL_STR):
@@ -247,14 +227,6 @@ class Config:
         if not cls.DL_CLIENT:
             logger.critical("Configuration Error: DL_CLIENT is missing.")
             raise ValueError("DL_CLIENT must be set.")
-
-        # Validate PAGE_LIMIT
-        if cls.PAGE_LIMIT < 1:
-            logger.warning(f"Invalid PAGE_LIMIT '{cls.PAGE_LIMIT}'. Resetting to 3.")
-            cls.PAGE_LIMIT = 3
-        elif cls.PAGE_LIMIT > 10:  # noqa: PLR2004
-            logger.warning(f"PAGE_LIMIT '{cls.PAGE_LIMIT}' is too high. Capping at 10 to prevent DoS.")
-            cls.PAGE_LIMIT = 10
 
         # Validate DL_SCHEME
         if cls.DL_SCHEME not in ("http", "https"):

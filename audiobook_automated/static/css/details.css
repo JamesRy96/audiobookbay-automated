@@ -28,6 +28,7 @@
 }
 
 .details-cover {
+    display: block;
     width: 100%;
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -64,7 +65,7 @@
     color: var(--accent-hover);
 }
 
-.details-info h2 {
+.details-info h1 {
     margin-top: 0;
     color: var(--text-main);
     font-size: 2.2rem;
@@ -128,7 +129,7 @@
     word-break: break-word;
 }
 
-.details-description h3 {
+.details-description h2 {
     color: var(--text-main);
     font-size: 1.3rem;
     margin-bottom: 15px;
@@ -136,7 +137,7 @@
     align-items: center;
 }
 
-.details-description h3::after {
+.details-description h2::after {
     content: "";
     flex: 1;
     height: 1px;
@@ -198,7 +199,7 @@
         text-align: left;
     }
 
-    .details-info h2 {
+    .details-info h1 {
         font-size: 1.8rem;
         text-align: center;
     }
@@ -223,7 +224,96 @@
     .details-left {
         max-width: 200px;
     }
-    .details-info h2 {
+    .details-info h1 {
         font-size: 1.5rem;
+    }
+}
+
+.details-container {
+    max-width: var(--primary-content-width);
+    margin-inline: auto;
+}
+.details-info h1 {
+    text-align: left;
+    text-shadow: none;
+}
+
+/* One book surface; hierarchy and whitespace distinguish the information inside it. */
+.details-meta-wrapper {
+    padding: 0;
+    background: transparent;
+    border: 0;
+    margin-bottom: 24px;
+}
+.details-container .meta-label {
+    color: var(--text-muted);
+}
+.details-description {
+    max-width: 72ch;
+    font-size: 1rem;
+    line-height: 1.75;
+}
+.details-description p {
+    margin: 0 0 1em;
+}
+.details-description h2::after {
+    display: none;
+}
+.technical-details {
+    margin-top: 28px;
+    padding-top: 12px;
+    border-top: var(--glass-border);
+}
+.technical-details summary {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+.details-info-hash {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 14px 0 18px;
+    color: var(--text-muted);
+}
+.details-info-hash .info-hash-value {
+    color: var(--text-main);
+}
+.tracker-list {
+    display: block;
+}
+.tracker-item {
+    padding: 4px 0;
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+[data-theme="light"] .direct-link-btn {
+    color: var(--text-main);
+}
+
+/* Pair people, catalog links, and audio specifications in a stable reading order. */
+.details-meta-wrapper .metadata-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 28px;
+    margin-bottom: 0;
+}
+.details-meta-wrapper .meta-item {
+    min-width: 0;
+}
+.details-meta-wrapper .category-tag {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+}
+.details-meta-wrapper .meta-value {
+    overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+    .details-meta-wrapper .metadata-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 18px;
     }
 }

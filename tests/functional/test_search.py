@@ -37,7 +37,7 @@ def test_search_short_query(client: Any) -> None:
     with patch("audiobook_automated.routes.search_audiobookbay") as mock_search:
         response = client.get("/?query=a")
         assert response.status_code == 200
-        assert b"Search query must be at least 2 characters long." in response.data
+        assert b"Enter at least 2 characters." in response.data
         mock_search.assert_not_called()
 
 
@@ -88,7 +88,7 @@ def test_details_route_failure(client: Any) -> None:
     with patch("audiobook_automated.routes.get_book_details", side_effect=Exception("Scrape Error")):
         response = client.get("/details?link=http://book.com")
         assert response.status_code == 200
-        assert b"Could not load details" in response.data
+        assert b"Could not load book details" in response.data
 
 
 def test_details_route_missing_link(client: Any) -> None:

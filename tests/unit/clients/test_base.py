@@ -1,6 +1,8 @@
 # File: tests/unit/clients/test_base.py
 """Unit tests for base client logic."""
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from typing import Any, override
 from unittest.mock import MagicMock
 
@@ -157,3 +159,52 @@ def test_torrent_status_state_normalization() -> None:
 
     status_enum = TorrentStatus(id="2", name="Book", progress=100.0, state=TorrentState.SEEDING, size="1GB")
     assert status_enum.state == "Seeding"
+
+
+def test_shared_plugin_connection_handles_are_isolated_between_threads() -> None:
+    """One request's cleanup must not replace another request's SDK/session."""
+    plugin = MockClient("localhost", 8080, None, None)
+    main_client, main_session = object(), object()
+    plugin.client, plugin.session = main_client, main_session
+    connections = [(object(), object()), (object(), object())]
+    barrier = Barrier(2, timeout=5)
+
+    def request_thread(index: int) -> tuple[Any, Any]:
+        assert plugin.client is None and plugin.session is None
+        plugin.client, plugin.session = connections[index]
+        barrier.wait()
+        if index == 0:
+            plugin.client = None
+            plugin.session = None
+        barrier.wait()
+        return plugin.client, plugin.session
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(request_thread, [0, 1]))
+    assert results[0] == (None, None)
+    assert results[1] == connections[1]
+    assert plugin.client is main_client and plugin.session is main_session
+
+
+def test_qbittorrent_teardown_cannot_log_out_another_request() -> None:
+    """Real plugin cleanup acts only on the calling thread's mocked connection."""
+    from audiobook_automated.clients.qbittorrent import QBittorrentClient
+
+    plugin = QBittorrentClient("localhost", 8080, "user", "password")
+    connections = [MagicMock(), MagicMock()]
+    barrier = Barrier(2, timeout=5)
+
+    def request_thread(index: int) -> Any:
+        plugin.client = connections[index]
+        barrier.wait()
+        if index == 0:
+            plugin.teardown()
+        barrier.wait()
+        return plugin.client
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(request_thread, [0, 1]))
+    assert results[0] is None
+    assert results[1] is connections[1]
+    connections[0].auth_log_out.assert_called_once()
+    connections[1].auth_log_out.assert_not_called()

@@ -23,3 +23,6 @@ global.statusJsContent = statusJsContent;
 const diagnosticsJsPath = path.resolve(__dirname, "audiobook_automated/static/js/diagnostics.js");
 const diagnosticsJsContent = fs.readFileSync(diagnosticsJsPath, "utf8");
 global.diagnosticsJsContent = diagnosticsJsContent;
+
+// Shared UI helpers are loaded before the page controllers.
+eval(fs.readFileSync(path.resolve(__dirname, "audiobook_automated/static/js/ui.js"), "utf8"));

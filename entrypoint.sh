@@ -40,17 +40,10 @@ echo "Setting permissions: UID=$PUID, GID=$PGID"
 groupmod -o -g "$PGID" appuser
 usermod -o -u "$PUID" appuser
 
-# Fix permissions for the download directory if it is mounted
-if [ -n "$SAVE_PATH_BASE" ] && [ -d "$SAVE_PATH_BASE" ]; then
-    echo "Fixing permissions for SAVE_PATH_BASE: $SAVE_PATH_BASE"
-    chown appuser:appuser "$SAVE_PATH_BASE"
-fi
-
 echo "Starting Gunicorn with 1 worker and $THREADS threads at log level $LOG_LEVEL."
 
 # Drop root privileges and execute Gunicorn as appuser
 # 'exec' ensures Gunicorn becomes PID 1 (or child of) to handle signals correctly
-# "$@" appends any arguments passed to the container (e.g. from Dockerfile CMD)
 exec gosu appuser gunicorn --preload \
     --log-level "$LOG_LEVEL" \
     --access-logfile - \
@@ -61,5 +54,4 @@ exec gosu appuser gunicorn --preload \
     --timeout "$TIMEOUT" \
     --worker-class gthread \
     --worker-tmp-dir /dev/shm \
-    "$@" \
     audiobook_automated.app:app

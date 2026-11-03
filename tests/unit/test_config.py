@@ -64,33 +64,6 @@ def test_validate_dl_client_missing(monkeypatch: MonkeyPatch, caplog: LogCapture
     assert "Configuration Error: DL_CLIENT is missing" in caplog.text
 
 
-def test_config_validate_insecure_secret_prod(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
-    """Ensure validation raises ValueError for insecure secret key in production."""
-    monkeypatch.setenv("FLASK_DEBUG", "0")
-    monkeypatch.setenv("TESTING", "0")
-
-    monkeypatch.setattr(Config, "FLASK_DEBUG", False)
-    monkeypatch.setattr(Config, "TESTING", False)
-    monkeypatch.setattr(Config, "SECRET_KEY", "change-this-to-a-secure-random-key")
-
-    with pytest.raises(ValueError, match="Application refused to start"):
-        Config.validate(logging.getLogger("test"))
-
-    assert "CRITICAL SECURITY ERROR" in caplog.text
-
-
-def test_config_validate_insecure_secret_dev(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
-    """Ensure validation only warns for insecure secret key in dev/test."""
-    monkeypatch.setenv("FLASK_DEBUG", "1")
-    monkeypatch.setattr(Config, "FLASK_DEBUG", True)
-    monkeypatch.setattr(Config, "SECRET_KEY", "change-this-to-a-secure-random-key")
-
-    # Should not raise
-    Config.validate(logging.getLogger("test"))
-
-    assert "WARNING: You are using the default insecure SECRET_KEY" in caplog.text
-
-
 def test_config_validate_invalid_log_level(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
     """Ensure validation warns on invalid LOG_LEVEL and defaults to INFO."""
     monkeypatch.setenv("LOG_LEVEL", "INVALID_LEVEL")
@@ -150,17 +123,6 @@ def test_force_https_env_var(monkeypatch: MonkeyPatch) -> None:
     assert DynamicConfig.FORCE_HTTPS is True
 
 
-def test_config_validate_page_limit_low(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
-    """Ensure validation resets PAGE_LIMIT if < 1."""
-    monkeypatch.setattr(Config, "PAGE_LIMIT", 0)
-    monkeypatch.setattr(Config, "DL_CLIENT", "qbittorrent")  # Satisfy prerequisite
-
-    Config.validate(logging.getLogger("test"))
-
-    assert Config.PAGE_LIMIT == 3
-    assert "Invalid PAGE_LIMIT '0'" in caplog.text
-
-
 def test_library_reload_enabled(monkeypatch: MonkeyPatch) -> None:
     """Test that LIBRARY_RELOAD_ENABLED property works correctly."""
     # Case 1: All required vars present
@@ -207,19 +169,6 @@ def test_parse_env_int_invalid(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("TEST_INT", "not-a-number")
     # Updated: Use public function name
     assert config.parse_env_int("TEST_INT", 10) == 10
-
-
-def test_config_page_limit_cap(caplog: LogCaptureFixture) -> None:
-    """Test that PAGE_LIMIT is capped at 10."""
-
-    class TestConfig(Config):
-        PAGE_LIMIT = 20
-
-    with caplog.at_level(logging.WARNING):
-        TestConfig.validate(logging.getLogger())
-
-    assert TestConfig.PAGE_LIMIT == 10
-    assert "PAGE_LIMIT '20' is too high" in caplog.text
 
 
 def test_parse_env_int_overflow() -> None:
@@ -289,6 +238,7 @@ def test_config_parsing_defaults() -> None:
         importlib.reload(config)
         from audiobook_automated.config import Config as ReloadedConfig
 
+        assert ReloadedConfig.SECRET_KEY == ""
         assert ReloadedConfig.ABS_URL is None
         assert ReloadedConfig.NAV_LINK_NAME is None
         assert ReloadedConfig.DL_PORT is None
@@ -319,15 +269,20 @@ def test_parse_asset_path() -> None:
     assert parse_asset_path("data:image/png;base64,...", "/default.png") == "data:image/png;base64,..."
 
 
-def test_config_credentials_alias_fallback() -> None:
-    """Test that DL_USER and DL_PASS serve as aliases for DL_USERNAME and DL_PASSWORD."""
+def test_config_credentials_from_environment() -> None:
+    """Load the documented credential settings from the environment."""
     with patch.dict(
         os.environ,
-        {"DL_USER": "alias_user", "DL_PASS": "alias_pass", "SAVE_PATH_BASE": "/tmp", "DL_CLIENT": "test"},
+        {
+            "DL_USERNAME": "configured_user",
+            "DL_PASSWORD": "configured_pass",
+            "SAVE_PATH_BASE": "/tmp",
+            "DL_CLIENT": "test",
+        },
         clear=True,
     ):
         importlib.reload(config)
         from audiobook_automated.config import Config as ReloadedConfig
 
-        assert ReloadedConfig.DL_USERNAME == "alias_user"
-        assert ReloadedConfig.DL_PASSWORD == "alias_pass"
+        assert ReloadedConfig.DL_USERNAME == "configured_user"
+        assert ReloadedConfig.DL_PASSWORD == "configured_pass"

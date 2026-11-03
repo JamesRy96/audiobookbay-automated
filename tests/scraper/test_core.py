@@ -196,11 +196,11 @@ def test_core_get_search_url_taxonomy_and_queries() -> None:
         == "https://base.com/audio-books/type/action/page/2/"
     )
 
-    # Taxonomy prefixes: type, tag, author, narrator
-    assert get_search_url("base.com", "type:Sci-Fi", page=1) == "https://base.com/audio-books/type/sci-fi/"
-    assert get_search_url("base.com", "type:Sci-Fi", page=3) == "https://base.com/audio-books/type/sci-fi/page/3/"
+    # Taxonomy prefixes: category, language, author, narrator
+    assert get_search_url("base.com", "category:Sci-Fi", page=1) == "https://base.com/audio-books/type/sci-fi/"
+    assert get_search_url("base.com", "category:Sci-Fi", page=3) == "https://base.com/audio-books/type/sci-fi/page/3/"
 
-    assert get_search_url("base.com", "tag:English", page=1) == "https://base.com/audio-books/tag/english/"
+    assert get_search_url("base.com", "language:English", page=1) == "https://base.com/audio-books/tag/english/"
     assert (
         get_search_url("base.com", "author:Brandon Sanderson", page=1)
         == "https://base.com/audio-books/author/brandon-sanderson/"
@@ -219,3 +219,20 @@ def test_core_get_search_url_taxonomy_and_queries() -> None:
     with patch("audiobook_automated.scraper.network.get_mirror_stat") as mock_stat:
         mock_stat.return_value.protocol = "http"
         assert get_search_url("http-only.com", "Dungeon", page=1) == "http://http-only.com/page/1/?s=Dungeon"
+
+
+@pytest.mark.parametrize(
+    ("query", "path"),
+    [
+        ("category:Fantasy", "type/fantasy"),
+        ("CATEGORY:Science Fiction", "type/science-fiction"),
+        ("language:German", "tag/german"),
+        ("Language: Français", "tag/français"),
+        ("author:J.R.R. Tolkien", "author/jrr-tolkien"),
+        ("narrator:Gert Heidenreich", "narrator/gert-heidenreich"),
+    ],
+)
+def test_user_facing_taxonomy_prefixes(query: str, path: str) -> None:
+    """User-facing prefixes reach the correct paginated native feeds."""
+    assert get_search_url("https://example.com", query) == f"https://example.com/audio-books/{path}/"
+    assert get_search_url("https://example.com", query, page=2) == f"https://example.com/audio-books/{path}/page/2/"

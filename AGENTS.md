@@ -12,23 +12,28 @@
 
 ## 2. Essential Commands
 
-```bash
+~~~bash
 # Install package with development dependencies (using uv or pip)
-uv sync --all-extras
+uv sync --frozen --all-extras
 # or: pip install -e ".[dev]"
 
 # Run development server
-python audiobook_automated/app.py
+uv run --env-file .env python -m audiobook_automated.app
 
 # Execute full Python test suite with 100% coverage
 pytest
 
 # Execute frontend JavaScript unit tests
-npx jest
+npm run test:js -- --runInBand
+
+# Real-template browser checks (isolated server; no live catalog or downloads)
+npm ci
+npx playwright install --with-deps
+npm run test:e2e
 
 # Run all static analysis, linting, formatting, and type checks
 pre-commit run --all-files
-```
+~~~
 
 ## 3. Core Invariants (Non-Negotiable)
 
@@ -53,7 +58,8 @@ pre-commit run --all-files
   `#content`, and no third-party domain redirects) rather than relying only on HTTP 200/root index responses.
 - **Dual Protocol Fallback & Latency Ranking:** Scrapers must probe HTTPS first, falling back to HTTP (port 80) if TLS
   handshake fails, ranking active mirrors via exponential moving average (EMA) response latency.
-- **Taxonomy Routing:** Support native `/audio-books/type/<category>/`, `/audio-books/tag/<language>/`,
+- **Taxonomy Routing:** UI/search prefixes are `category:`, `language:`, `author:`, and `narrator:`. Map to native
+  `/audio-books/type/<category>/`, `/audio-books/tag/<language>/`,
   `/audio-books/author/<slug>/`, and `/audio-books/narrator/<slug>/` feeds alongside general keyword search.
 - **Multi-Client Aggregation:** Support concurrent multi-client setups via `DL_CLIENTS` (comma-separated), unifying
   download status reporting across all active clients.
@@ -69,8 +75,9 @@ pre-commit run --all-files
   - Apply Sequential Thinking and the Hermeneutic Circle against overall architecture.
   - Follow ReAct (Thought -> Action -> Observation) and Chain of Verification (CoVe).
   - Negative constraints: No placeholders, no unprompted apologies, no conversational summaries unless requested.
-- **Definition of Done:** Plan documented in `.agents/docs/plan.md`, code validated in `.agents/scratchpad/`, deployment
-  summary presented, and deployment permission requested.
+- **Definition of Done:** Plan documented in `.agents/docs/plan.md`, code validated in `.agents/scratchpad/`, required checks
+  completed, and readiness evidence/limitations reported. Stay within the authorized scope. Ask for deployment approval
+  only when deployment is the next requested step and has not already been authorized.
 
 ## 5. Progressive Disclosure Guides
 
@@ -84,3 +91,21 @@ Consult specialized documentation for subsystem implementation details:
   client quirks, plugin creation.
 - [Testing & Quality Standards](docs/agents/testing-quality.md): 100% coverage enforcement, MyPy/Pyright strict typing,
   fixture conventions.
+
+## 6. End-User Experience and Release Maintenance
+
+- The public README is the normal prebuilt Docker installation and usage guide. Keep commands copyable, explain where
+  to run them, and describe Download Client paths from the client's perspective. Put advanced settings in
+  `docs/configuration.md` and developer/debug/test/release instructions in `docs/development.md`.
+- User-facing errors state the problem and correction briefly. Use "Enter at least 2 characters." rather than echoing
+  the current count. Keep raw exceptions and troubleshooting detail in logs or explicit debug views.
+- This project is preparing its first release. Replace superseded code, settings and tests rather than adding
+  compatibility aliases by default. Retain upstream protocol names only where the remote catalog requires them.
+- Canonical repository, issue links and image examples use `meek2100/audiobookbay-automated`. Image publishing derives
+  its owner/name from the GitHub repository context.
+- Browser checks must use the real templates, CSS and controllers. `tests/e2e/server.py` replaces only integration
+  boundaries and runs on port 5090. Never point automated Download Client actions at production clients.
+- CI checks Python 3.13/3.14, full coverage, Jest, three browser engines, static/types and a container HTTP smoke test.
+  Release publishing explicitly calls CI and the image workflow; it does not rely on token-created tag events.
+- Do not claim Docker, GitHub-hosted checks, published-image installation or real Download Client compatibility has
+  been verified unless those checks actually ran. Keep pending release actions separate from completed local evidence.

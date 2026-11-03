@@ -127,6 +127,7 @@ def _snapshot_candidate_mirrors(candidate_mirrors: list[str]) -> list[dict[str, 
             {
                 "hostname": mirror,
                 "tested": stat.total_requests > 0,
+                "total_requests": stat.total_requests,
                 "reachable": stat.success_count > 0 and not stat.is_cooling_down,
                 "latency_ms": stat.last_latency_ms,
                 "ema_latency_ms": stat.ema_latency_ms,
@@ -152,6 +153,7 @@ def _probe_candidate_mirrors(candidate_mirrors: list[str]) -> list[dict[str, Any
             {
                 "hostname": mirror,
                 "tested": True,
+                "total_requests": stat.total_requests,
                 "reachable": active,
                 "latency_ms": latency_ms,
                 "ema_latency_ms": stat.ema_latency_ms,

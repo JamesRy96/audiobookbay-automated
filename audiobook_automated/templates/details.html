@@ -3,6 +3,7 @@
 extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/details.css', v=static_version) }}" />
 {% endblock %} {% block content %} {% if error %}
+<h1 class="sr-only">Audiobook details unavailable</h1>
 <div class="error-message">
     <div class="error-message-primary">
         <span class="error-icon" aria-hidden="true">⚠️</span>
@@ -61,12 +62,15 @@ extra_css %}
 <div class="details-container">
     <div class="details-left">
         {% set default_cover_url = url_for('static', filename='images/' + default_cover_filename, v=static_version) %}
+        {% if book.cover %}
         <img
             src="{{ book.cover if book.cover else default_cover_url }}"
-            alt="Cover"
+            alt="Cover of {{ book.title }}"
             class="details-cover"
             data-default-cover="{{ default_cover_url }}"
         />
+        {% else %}<span class="details-cover cover-placeholder" role="img" aria-label="Cover Unavailable"></span>{%
+        endif %}
     </div>
 
     <div class="details-info">
@@ -77,21 +81,22 @@ extra_css %}
             ← Back to results
         </button>
 
-        <h2>{{ book.title }}</h2>
+        <h1>{{ book.title }}</h1>
 
         <div class="details-meta-wrapper">
             <div class="metadata-grid">
                 <div class="meta-item">
                     <span class="meta-label">Author</span>
                     <div class="meta-pills-wrap">
-                        {% if book.author and book.author != "Unknown" %}
+                        {% if book.author and book.author != "Unknown" %} {% for person in
+                        book.author|split_contributors %}
                         <a
-                            href="{{ url_for('main.search', query='author:' + book.author) }}"
+                            href="{{ url_for('main.search', query='author:' + person) }}"
                             class="category-tag category-link"
-                            title="Browse all audiobooks by author {{ book.author }}"
-                            >{{ book.author }}</a
+                            title="Browse all audiobooks by author {{ person }}"
+                            >{{ person }}</a
                         >
-                        {% else %}
+                        {% endfor %} {% else %}
                         <span class="meta-value">{{ book.author }}</span>
                         {% endif %}
                     </div>
@@ -99,14 +104,15 @@ extra_css %}
                 <div class="meta-item">
                     <span class="meta-label">Narrator</span>
                     <div class="meta-pills-wrap">
-                        {% if book.narrator and book.narrator != "Unknown" %}
+                        {% if book.narrator and book.narrator != "Unknown" %} {% for person in
+                        book.narrator|split_contributors %}
                         <a
-                            href="{{ url_for('main.search', query='narrator:' + book.narrator) }}"
+                            href="{{ url_for('main.search', query='narrator:' + person) }}"
                             class="category-tag category-link"
-                            title="Browse all audiobooks narrated by {{ book.narrator }}"
-                            >{{ book.narrator }}</a
+                            title="Browse all audiobooks narrated by {{ person }}"
+                            >{{ person }}</a
                         >
-                        {% else %}
+                        {% endfor %} {% else %}
                         <span class="meta-value">{{ book.narrator }}</span>
                         {% endif %}
                     </div>
@@ -116,7 +122,7 @@ extra_css %}
                     <div class="meta-pills-wrap">
                         {% if book.language and book.language != "Unknown" %}
                         <a
-                            href="{{ url_for('main.search', query='tag:' + book.language) }}"
+                            href="{{ url_for('main.search', query='language:' + book.language) }}"
                             class="category-tag category-link"
                             title="Browse all {{ book.language }} audiobooks"
                             >{{ book.language }}</a
@@ -127,20 +133,12 @@ extra_css %}
                     </div>
                 </div>
                 <div class="meta-item">
-                    <span class="meta-label">Format</span>
-                    <span class="meta-value">{{ book.format }} / {{ book.bitrate }}</span>
-                </div>
-                <div class="meta-item">
-                    <span class="meta-label">Size</span>
-                    <span class="meta-value">{{ book.file_size }}</span>
-                </div>
-                <div class="meta-item">
                     <span class="meta-label">Category</span>
                     <div class="meta-pills-wrap">
                         {% for raw_cat in book.category %} {% for cat in raw_cat.split(',') %} {% if cat.strip() and
                         cat.strip() != "Unknown" %}
                         <a
-                            href="{{ url_for('main.search', query='type:' + cat.strip()) }}"
+                            href="{{ url_for('main.search', query='category:' + cat.strip()) }}"
                             class="category-tag category-link"
                             title="Browse {{ cat.strip() }} category"
                             >{{ cat.strip() }}</a
@@ -148,10 +146,14 @@ extra_css %}
                         {% endif %} {% endfor %} {% endfor %}
                     </div>
                 </div>
-            </div>
-
-            <div class="details-info-hash">
-                <strong>Info Hash:</strong> <code class="info-hash-value">{{ book.info_hash }}</code>
+                <div class="meta-item">
+                    <span class="meta-label">Format</span>
+                    <span class="meta-value">{{ book.format }} / {{ book.bitrate }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Size</span>
+                    <span class="meta-value">{{ book.file_size }}</span>
+                </div>
             </div>
         </div>
 
@@ -170,20 +172,24 @@ extra_css %}
         </div>
 
         <div class="details-description">
-            <h3>Description</h3>
+            <h2>Description</h2>
             {{ book.description | safe }}
         </div>
 
-        {% if book.trackers %}
-        <div class="tracker-container">
-            <span class="tracker-title">Active Trackers</span>
+        <details class="technical-details">
+            <summary>Download information</summary>
+            <div class="details-info-hash">
+                <span class="meta-label">Info hash</span><code class="info-hash-value">{{ book.info_hash }}</code>
+            </div>
+            {% if book.trackers %}
+            <p class="meta-label">Trackers</p>
             <ul class="tracker-list">
                 {% for tracker in book.trackers %}
                 <li class="tracker-item">{{ tracker }}</li>
                 {% endfor %}
             </ul>
-        </div>
-        {% endif %}
+            {% endif %}
+        </details>
     </div>
 </div>
 {% endif %} {% endblock %}

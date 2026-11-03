@@ -3,7 +3,8 @@
 
 Instructions for Developers:
 1. Copy this file and rename it to your client's name (e.g., `rtorrent.py`).
-2. Implement all methods marked with `raise NotImplementedError`.
+2. Implement every API method, including safe, idempotent close().
+   See docs/agents/torrent-clients.md for the complete contract and tests.
 3. Update `DEFAULT_PORT` to the standard port for your client.
 4. Place the file in the `audiobook_automated/clients/` directory.
 5. Set `DL_CLIENT=your_filename_without_extension` (e.g., `rtorrent`) in your .env file.
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class CustomClient(TorrentClientPlugin):
-    """Client plugin implementation for [INSERT CLIENT NAME]."""
+    """Starting scaffold for a new Download Client API adapter."""
 
     # MANDATORY: Define the default WebUI/RPC port for this client.
     # This allows the app to configure itself automatically if DL_PORT is missing.
@@ -104,7 +105,7 @@ class CustomClient(TorrentClientPlugin):
             category: Filter results to this category/label only.
 
         Returns:
-            list[TorrentStatus]: A list of standardized dictionaries.
+            list[TorrentStatus]: Standardized status objects.
         """
         if not self.client:
             raise ConnectionError("Client not connected")

@@ -1,56 +1,32 @@
 # File: .github/workflows/e2e.yaml
-name: Playwright E2E Tests
-
+name: Browser tests
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
+  workflow_call:
+permissions:
+  contents: read
 jobs:
-  test-e2e:
+  browser:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
-
-      - name: Setup Python
-        uses: actions/setup-python@v7
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
+          enable-cache: true
           python-version: "3.14"
-          cache: "pip"
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
+      - run: uv sync --frozen --all-extras
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
-          cache: "npm"
-
-      - name: Install Backend
-        run: pip install ".[dev]"
-
-      - name: Install Frontend
-        run: |
-          npm ci
-          npx playwright install --with-deps
-
-      - name: Start Server and Run Tests
-        run: |
-          # Start the Flask app in the background
-          # Using nohup and redirecting output to log file
-          nohup python -m flask --app audiobook_automated run --port 5000 > flask_server.log 2>&1 &
-
-          # Wait for the server to be ready
-          echo "Waiting for server to start..."
-          sleep 10
-
-          # Run Playwright tests
-          npx playwright test
-
-      - name: Upload Playwright Report
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - name: Run against the isolated Flask fixture server
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v7
         if: always()
-        uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 30
+          name: browser-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

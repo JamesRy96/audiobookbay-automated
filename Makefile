@@ -1,10 +1,19 @@
 # File: Makefile
+.PHONY: run install test e2e check
+
 run:
-	.venv/bin/python -m audiobook_automated.app
+	uv run --env-file .env python -m audiobook_automated.app
 
-venv:
-	python3 -m venv .venv
-
-# Modern install: Installs deps AND the app in editable mode
 install:
-	.venv/bin/pip install -e ".[dev]"
+	uv sync --frozen --all-extras
+	npm ci
+
+test:
+	uv run --frozen --all-extras pytest
+	npm run test:js -- --runInBand
+
+e2e:
+	npm run test:e2e
+
+check:
+	uv run --frozen --all-extras pre-commit run --all-files

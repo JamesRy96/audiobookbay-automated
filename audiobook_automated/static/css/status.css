@@ -1,7 +1,7 @@
 /* File: audiobook_automated/static/css/status.css */
 /* --- Status Page Glass Header Hero --- */
 .status-header-glass {
-    max-width: 1200px;
+    max-width: var(--primary-content-width);
     margin: 0 auto 24px auto;
     padding: 20px 28px;
     background: var(--glass-bg, rgba(20, 20, 30, 0.65));
@@ -267,7 +267,7 @@
 
 /* --- Container & Table Layout --- */
 .status-container {
-    max-width: 1200px;
+    max-width: var(--primary-content-width);
     margin: 0 auto;
     width: 100%;
 }
@@ -287,7 +287,7 @@ table {
 thead th {
     text-align: left;
     padding: 12px 20px;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -583,7 +583,7 @@ tbody tr td:last-child {
 
     td.cell-progress::before {
         content: "Progress";
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--text-muted);
         font-weight: 600;
         font-size: 0.82rem;
         text-transform: uppercase;
@@ -597,7 +597,7 @@ tbody tr td:last-child {
 
     td.cell-state::before {
         content: "State";
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--text-muted);
         font-weight: 600;
         font-size: 0.82rem;
         text-transform: uppercase;
@@ -606,7 +606,7 @@ tbody tr td:last-child {
 
     td.cell-size::before {
         content: "Size";
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--text-muted);
         font-weight: 600;
         font-size: 0.82rem;
         text-transform: uppercase;
@@ -624,4 +624,185 @@ tbody tr td:last-child {
         font-size: 0.95rem;
         border-radius: 50px;
     }
+}
+
+@media (max-width: 600px) {
+    .status-header-title-wrap {
+        flex-wrap: wrap;
+        gap: 8px;
+        width: 100%;
+    }
+    .status-title {
+        white-space: normal;
+    }
+    .status-header-meta {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+    }
+    .status-client-pill,
+    .auto-refresh-label {
+        white-space: nowrap;
+    }
+    .status-header-glass {
+        padding: 18px;
+    }
+}
+
+@media (max-width: 600px) {
+    .status-header-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+    }
+    .status-header-meta .status-poll-indicator {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+    }
+    .status-header-meta .auto-refresh-label {
+        grid-column: 1;
+    }
+    .status-client-tabs {
+        flex-wrap: wrap;
+        overflow: visible;
+    }
+}
+
+/* One quiet control group: live updates and a separate manual refresh. */
+.refresh-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: var(--glass-border);
+    border-radius: 12px;
+    padding: 0 4px;
+    background: var(--glass-bg);
+    flex-shrink: 0;
+}
+.refresh-controls .refresh-toggle {
+    position: relative;
+    min-height: 44px;
+    padding: 0 8px;
+    gap: 7px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+.refresh-toggle input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+.refresh-toggle:focus-within {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+.refresh-switch-track {
+    width: 22px;
+    height: 12px;
+    border-radius: 12px;
+    background: var(--text-muted);
+    position: relative;
+    transition: background-color 0.2s;
+}
+.refresh-switch-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+}
+.refresh-toggle input:checked + .refresh-switch-track {
+    background: #16866b;
+}
+.refresh-toggle input:checked + .refresh-switch-track::after {
+    transform: translateX(10px);
+}
+.refresh-controls .status-poll-indicator {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 8px;
+    border: 0;
+    border-left: var(--glass-border);
+    border-radius: 0 8px 8px 0;
+    background: transparent;
+}
+.refresh-controls .status-poll-indicator:hover,
+.refresh-controls .status-poll-indicator:active {
+    transform: none;
+    background: color-mix(in srgb, var(--text-main) 6%, transparent);
+}
+.refresh-controls .poll-dial-wrap {
+    width: auto;
+    height: 24px;
+    gap: 6px;
+}
+.refresh-controls .poll-icon {
+    width: 16px;
+    height: 16px;
+}
+.refresh-controls .poll-countdown-num {
+    position: static;
+    transform: none;
+    font-size: 0.7rem;
+    font-weight: 400;
+    min-width: 14px;
+    color: var(--text-muted);
+}
+.refresh-controls .poll-countdown-num:not(:empty)::after {
+    content: "s";
+}
+@media (max-width: 600px) {
+    .status-header-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .status-header-meta .refresh-controls {
+        margin-left: auto;
+    }
+    .status-header-meta .diag-badge {
+        font-size: 0.7rem;
+    }
+}
+
+.refresh-controls .refresh-toggle input[type="checkbox"] {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    margin: 0;
+    cursor: pointer;
+}
+
+.status-client-pill,
+.badge-seeding {
+    color: var(--status-success);
+}
+.status-client-pill.disconnected,
+.status-client-pill.banned,
+.badge-error,
+.remove-button {
+    color: var(--status-error);
+}
+.status-client-pill.warning,
+.badge-paused {
+    color: var(--status-warning);
+}
+.badge-downloading {
+    color: var(--status-info);
+}
+.remove-button:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+    color: #fff;
 }

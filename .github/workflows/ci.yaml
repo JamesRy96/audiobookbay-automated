@@ -1,146 +1,98 @@
 # File: .github/workflows/ci.yaml
 name: CI
-
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
-
+  workflow_call:
+permissions:
+  contents: read
 jobs:
-  # 1. Linting & Formatting
   lint:
-    name: Lint (Pre-commit)
+    name: Formatting, lint and types
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Validate workflow semantics
+        uses: docker://rhysd/actionlint:1.7.12
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - name: Set up Python
-        run: uv python install 3.14
-
-      - name: Install Python Dependencies
-        run: uv sync --all-extras
-
-      # Set up Node.js for frontend hooks (Prettier)
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+          python-version: "3.14"
+      - run: uv sync --frozen --all-extras
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
-          cache: "npm"
-
-      # Install Node dependencies so hooks can find packages if needed
-      - name: Install Node Dependencies
-        run: npm ci
-
-      # Optimization: Cache pre-commit environments
-      - name: Cache pre-commit
-        uses: actions/cache@v6
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
-          key: pre-commit-3|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
-
-      - name: Run pre-commit hooks
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Check all tracked files
         env:
           SKIP: no-commit-to-branch
-        run: uv run --all-extras pre-commit run --all-files --show-diff-on-failure
-
-  # 2. Automated Python Tests
-  test:
-    name: Pytest (Python ${{ matrix.python-version }})
-    needs: lint
+        run: uv run --frozen --all-extras pre-commit run --all-files --show-diff-on-failure
+  python:
+    name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13", "3.14"]
+        python: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-
-      - name: Install Python Dependencies
-        run: uv sync --all-extras --python ${{ matrix.python-version }}
-
-      - name: Run MyPy Type Check
-        run: uv run --all-extras --python ${{ matrix.python-version }} mypy audiobook_automated tests
-
-      - name: Run Tests
-        env:
-          SECRET_KEY: test-key
-          SAVE_PATH_BASE: /tmp/test
-        run: |
-          uv run --all-extras --python ${{ matrix.python-version }} pytest --junitxml=test-results-${{ matrix.python-version }}.xml
-
-      - name: Upload Test Results
+          python-version: ${{ matrix.python }}
+      - run: uv sync --frozen --all-extras --python ${{ matrix.python }}
+      - name: Tests with full coverage
+        run: uv run --frozen --all-extras --python ${{ matrix.python }} pytest --junitxml=pytest-results.xml
+      - uses: actions/upload-artifact@v7
         if: always()
-        uses: actions/upload-artifact@v7
         with:
-          name: pytest-results-${{ matrix.python-version }}
-          path: test-results-${{ matrix.python-version }}.xml
-
-  # 3. Automated JavaScript Tests
-  js-test:
-    name: Jest
-    needs: lint
+          name: pytest-${{ matrix.python }}
+          path: pytest-results.xml
+  javascript:
+    name: JavaScript
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 24
-          cache: "npm"
-
-      - name: Install JS Dependencies
-        run: npm ci
-
-      - name: Run Jest Tests
-        run: npx jest
-
-  # 4. Verify Docker Build & Runtime Smoke Test
-  docker-build:
-    name: Docker Build & Smoke Test
-    needs: lint
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:js -- --runInBand
+  browser:
+    name: Real-template browser tests
+    uses: ./.github/workflows/e2e.yaml
+  docker:
+    name: Container build and HTTP health
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Build Docker Image
-        run: docker build -t audiobookbay-automated:ci-test .
-
-      - name: Test Container Startup (Smoke Test)
+      - run: docker build -t audiobookbay-automated:ci .
+      - name: Start isolated smoke container
         run: |
-          docker run -d --name smoke-test \
-            -p 5078:5078 \
-            -e SECRET_KEY=ci-smoke-test-key \
-            -e SAVE_PATH_BASE=/tmp \
-            -e DL_CLIENT=qbittorrent \
-            audiobookbay-automated:ci-test
-
-          # Give Gunicorn and entrypoint.sh time to boot
-          sleep 5
-
-          # Verify container is running and did not crash on startup
-          if ! docker ps --filter "name=smoke-test" --filter "status=running" --format '{{.Names}}' | grep -q '^smoke-test$'; then
-            echo "::error::Container failed to start or crashed on boot! Container logs:"
-            docker logs smoke-test
-            exit 1
-          fi
-
-          echo "Container started successfully. Logs:"
-          docker logs smoke-test
-
-          docker stop smoke-test
+          docker run -d --name smoke-test -p 127.0.0.1:5078:5078 \
+            -e SAVE_PATH_BASE=/downloads/audiobooks \
+            -e DL_CLIENT=qbittorrent -e DL_HOST=127.0.0.1 -e CLIENT_TIMEOUT=2 \
+            -e LISTEN_HOST=0.0.0.0 audiobookbay-automated:ci
+      - name: Wait for a healthy HTTP response
+        run: |
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --max-time 5 http://127.0.0.1:5078/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs smoke-test || true
+          docker rm -f smoke-test || true

@@ -12,6 +12,7 @@ from typing import Any, TypedDict
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
+from bs4.element import PageElement
 
 from audiobook_automated.constants import DEFAULT_COVER_FILENAME
 
@@ -29,7 +30,11 @@ RE_CATEGORY = re.compile(
 RE_LABEL_POSTED = re.compile(r"Posted:", re.IGNORECASE)
 RE_LABEL_FORMAT = re.compile(r"Format:", re.IGNORECASE)
 RE_LABEL_BITRATE = re.compile(r"Bitrate:", re.IGNORECASE)
-RE_LABEL_SIZE = re.compile(r"File\s*Size:", re.IGNORECASE)
+RE_LABEL_SIZE = re.compile(r"(?:File|Total)\s*Size:", re.IGNORECASE)
+RE_DESCRIPTION_METADATA = re.compile(
+    r"(written by|read by|narrated by|authors?|narrators?|format|bitrate|file size|total size|size|language|category)(?:\s*:\s*|\s+)(.+)",
+    re.IGNORECASE,
+)
 
 
 class BookSummary(TypedDict):
@@ -214,7 +219,48 @@ def parse_post_content(
     return meta
 
 
-def _sanitize_description(desc_tag: Tag | None) -> str:
+def _description_value(value: str) -> str:
+    """Normalize spacing and list separators for duplicate comparisons only."""
+    return re.sub(r"\s*[,;]\s*", ",", " ".join(value.split())).casefold()
+
+
+def _remove_metadata_line(nodes: list[PageElement], metadata: dict[str, str]) -> bool:
+    """Remove a standalone line only when its value is already represented."""
+    text = " ".join(node.get_text(" ", strip=True) if isinstance(node, Tag) else str(node) for node in nodes)
+    normalized = " ".join(text.split())
+    match = RE_DESCRIPTION_METADATA.fullmatch(normalized)
+    redundant = not normalized
+    if match:
+        expected = metadata[match[1].casefold()]
+        redundant = expected != "Unknown" and _description_value(match[2]) == _description_value(expected)
+    if redundant:
+        for node in nodes:
+            node.extract()
+    return redundant
+
+
+def _strip_description_prefix(container: Tag, metadata: dict[str, str]) -> bool:
+    """Stop at the first nonduplicate line, preserving the remaining synopsis."""
+    pending: list[PageElement] = []
+    for node in list(container.contents):
+        if isinstance(node, Tag) and node.name == "p":
+            if not _remove_metadata_line(pending, metadata):
+                return False
+            pending = []
+            if not _strip_description_prefix(node, metadata):
+                return False
+            node.decompose()
+        elif isinstance(node, Tag) and node.name == "br":
+            if not _remove_metadata_line(pending, metadata):
+                return False
+            pending = []
+            node.decompose()
+        else:
+            pending.append(node)
+    return _remove_metadata_line(pending, metadata)
+
+
+def _sanitize_description(desc_tag: Tag | None, meta: BookMetadata) -> str:
     """Extract and sanitize the description."""
     if not desc_tag:
         return "No description available."
@@ -226,7 +272,24 @@ def _sanitize_description(desc_tag: Tag | None) -> str:
             tag.unwrap()
         else:
             tag.attrs = {}
-    return str(desc_tag.decode_contents())
+    metadata = {
+        "written by": meta.author,
+        "author": meta.author,
+        "authors": meta.author,
+        "read by": meta.narrator,
+        "narrated by": meta.narrator,
+        "narrator": meta.narrator,
+        "narrators": meta.narrator,
+        "format": meta.format,
+        "bitrate": meta.bitrate,
+        "file size": meta.file_size,
+        "total size": meta.file_size,
+        "size": meta.file_size,
+        "language": meta.language,
+        "category": ", ".join(meta.category),
+    }
+    _strip_description_prefix(desc_tag, metadata)
+    return str(desc_tag.decode_contents()).strip() or "No description available."
 
 
 def _extract_table_data(info_table: Tag | None, file_size_fallback: str) -> tuple[list[str], str, str]:
@@ -248,7 +311,7 @@ def _extract_table_data(info_table: Tag | None, file_size_fallback: str) -> tupl
                 label_lower = label.lower()
                 if "tracker:" in label_lower or "announce url:" in label_lower:
                     trackers.append(value)
-                elif "File Size:" in label and file_size == "Unknown":
+                elif RE_LABEL_SIZE.search(label) and file_size == "Unknown":
                     file_size = value
                 elif "Info Hash:" in label:
                     info_hash = value
@@ -294,20 +357,29 @@ def parse_book_details(soup: BeautifulSoup, url: str) -> BookDetails:
     narrator_tag = soup.select_one('span.narrator[itemprop="author"]')
 
     meta = parse_post_content(content_div, post_info, author_tag, narrator_tag)
+    for contributor_field in ("author", "narrator"):
+        credits = [
+            tag.get_text(strip=True)
+            for tag in soup.select(f'span.{contributor_field}[itemprop="author"]')
+            if tag.get_text(strip=True) not in {"", "?", "Unknown"}
+        ]
+        if credits:
+            setattr(meta, contributor_field, ", ".join(dict.fromkeys(credits)))
 
     desc_tag = soup.select_one("div.desc")
-    description = _sanitize_description(desc_tag)
 
-    if desc_tag and (meta.format == "Unknown" or meta.bitrate == "Unknown"):
+    if desc_tag and (meta.format == "Unknown" or meta.bitrate == "Unknown" or meta.file_size == "Unknown"):
         _parse_body_content(desc_tag, meta)
-        _normalize_metadata(meta)
+    _normalize_metadata(meta)
 
     trackers, file_size, info_hash = _extract_table_data(
-        soup.select_one("table.torrent_info"),
+        soup.select_one("table.torrent_info") or soup.select_one(".postContent"),
         meta.file_size,
     )
 
     info_hash = _find_info_hash_fallback(soup, info_hash)
+    meta.file_size = file_size
+    description = _sanitize_description(desc_tag, meta)
 
     return {
         "title": title,

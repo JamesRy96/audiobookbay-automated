@@ -14,7 +14,7 @@ window.hideLoadingSpinner = hideLoadingSpinner;
 window.setViewMode = setViewMode;
 window.initFloatingHud = initFloatingHud;
 window.initTopFilterDrawer = initTopFilterDrawer;
-window.syncHudFilters = syncHudFilters;
+window.updateFilterBadges = updateFilterBadges;
 window.streamRemainingPages = streamRemainingPages;
 window.createResultRowElement = createResultRowElement;
 window.initHoverPrefetch = initHoverPrefetch;
@@ -25,6 +25,7 @@ window.resetPaginationState = resetPaginationState;
 // Global variables defined in the file
 let messageIndex = 0;
 let intervalId = null;
+let messageDelayId = null;
 const prefetchedQueries = new Set();
 let currentPage = 1;
 let isLoadingMore = false;
@@ -42,17 +43,49 @@ function resetPaginationState() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+    initRecentSearches();
+    const searchInput = document.getElementById("main-search-input");
+    const clearSearch = document.getElementById("clear-search-btn");
+    if (searchInput) {
+        const wrapper = searchInput.closest(".search-input-wrapper");
+        const updateOverflow = () =>
+            wrapper?.classList.toggle(
+                "has-overflow",
+                Boolean(searchInput.value) && searchInput.scrollWidth > searchInput.clientWidth + 1
+            );
+        const updateQuery = () => {
+            const query = searchInput.value.trim();
+            searchInput.setCustomValidity(query.length === 1 ? "Enter at least 2 characters." : "");
+            wrapper?.classList.toggle("has-query", Boolean(searchInput.value));
+            if (clearSearch) clearSearch.hidden = !searchInput.value;
+            requestAnimationFrame(updateOverflow);
+        };
+        searchInput.addEventListener("input", updateQuery);
+        searchInput.addEventListener("change", updateQuery);
+        searchInput.addEventListener("focus", updateQuery);
+        searchInput.addEventListener("blur", () => {
+            searchInput.scrollLeft = 0;
+            updateQuery();
+        });
+        searchInput.addEventListener("invalid", () => searchInput.setCustomValidity("Enter at least 2 characters."));
+        clearSearch?.addEventListener("click", () => {
+            searchInput.value = "";
+            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+            searchInput.focus();
+        });
+        if (typeof ResizeObserver !== "undefined") new ResizeObserver(updateOverflow).observe(searchInput);
+        updateQuery();
+    }
+
     // Initialize filtering if results are present
     if (document.querySelectorAll(".result-row").length > 0) {
         initializeFilters();
-        const filterBtn = document.getElementById("filter-button");
-        if (filterBtn) filterBtn.addEventListener("click", applyFilters);
-        const clearBtn = document.getElementById("clear-button");
-        if (clearBtn) clearBtn.addEventListener("click", clearFilters);
+        refreshFilterOptions();
+        applyFilters();
     }
 
     // Initialize View Mode (defaults to grid view)
-    const savedView = localStorage.getItem("viewMode") || "grid";
+    const savedView = window.UI?.storage("localStorage", "getItem", "viewMode") || "grid";
     setViewMode(savedView);
 
     // Bind Toggle Buttons
@@ -87,6 +120,7 @@ document.addEventListener("DOMContentLoaded", function () {
         initInfiniteScroll(query);
     }
 
+    document.getElementById("reset-empty-filters")?.addEventListener("click", clearFilters);
     initHoverPrefetch();
 });
 
@@ -98,20 +132,31 @@ function setViewMode(mode) {
     if (!container || !listBtn || !gridBtn) return;
 
     // Update localStorage
-    localStorage.setItem("viewMode", mode);
+    window.UI?.storage("localStorage", "setItem", "viewMode", mode);
 
     // Update Container Class
     container.classList.remove("view-list", "view-grid");
     container.classList.add("view-" + mode);
+    container.querySelectorAll(".result-row").forEach((row) => positionPostedDate(row, mode));
 
     // Update Buttons
     if (mode === "list") {
+        listBtn.setAttribute("aria-pressed", "true");
+        gridBtn.setAttribute("aria-pressed", "false");
         listBtn.classList.add("active");
         gridBtn.classList.remove("active");
     } else {
+        gridBtn.setAttribute("aria-pressed", "true");
+        listBtn.setAttribute("aria-pressed", "false");
         gridBtn.classList.add("active");
         listBtn.classList.remove("active");
     }
+}
+
+function positionPostedDate(row, mode) {
+    const date = row.querySelector(".book-posted");
+    const destination = row.querySelector(mode === "list" ? ".col-info" : ".col-actions");
+    if (date && destination) destination.append(date);
 }
 
 // ROBUSTNESS: Handle Browser Back/Forward Cache (BFCache)
@@ -224,6 +269,7 @@ function parsePostDate(dateStr) {
  * Applies all active filters to the result table.
  */
 function applyFilters() {
+    const author = document.getElementById("author-filter")?.value || "";
     const category = document.getElementById("category-filter")?.value || "";
     const language = document.getElementById("language-filter")?.value || "";
     const bitrate = document.getElementById("bitrate-filter")?.value || "";
@@ -233,15 +279,29 @@ function applyFilters() {
     const dateFromVal = document.getElementById("date-from-filter")?.value || "";
     const dateToVal = document.getElementById("date-to-filter")?.value || "";
 
+    const validation = document.getElementById("filter-validation");
+    const valid = !dateFromVal || !dateToVal || dateFromVal <= dateToVal;
+    if (validation) {
+        validation.hidden = valid;
+        validation.textContent = valid ? "" : "Choose an end date on or after the start date.";
+    }
+    if (!valid) {
+        document.getElementById("date-to-filter")?.focus();
+        return false;
+    }
     const dateFrom = dateFromVal ? new Date(dateFromVal + "T00:00:00") : null;
     const dateTo = dateToVal ? new Date(dateToVal + "T23:59:59") : null;
 
-    document.querySelectorAll(".result-row").forEach((row) => {
+    let hasMatches = false;
+    const rows = document.querySelectorAll(".result-row");
+    rows.forEach((row) => {
         let visible = true;
+
+        if (author && !JSON.parse(row.dataset.credits || "[]").includes(author)) visible = false;
 
         // Exact Token Match for Category
         if (category) {
-            const rowCategories = (row.dataset.category || "").split("|").map((t) => t.trim());
+            const rowCategories = (row.dataset.category || "").split(/[|,]/).map((t) => t.trim());
             if (!rowCategories.includes(category)) {
                 visible = false;
             }
@@ -279,7 +339,12 @@ function applyFilters() {
         }
 
         row.style.display = visible ? "" : "none";
+        if (visible) hasMatches = true;
     });
+    const empty = document.getElementById("filtered-empty");
+    if (empty) empty.hidden = hasMatches || rows.length === 0;
+    updateFilterBadges();
+    return true;
 }
 
 /**
@@ -287,6 +352,7 @@ function applyFilters() {
  */
 function clearFilters() {
     const fields = [
+        "author-filter",
         "category-filter",
         "language-filter",
         "bitrate-filter",
@@ -306,9 +372,7 @@ function clearFilters() {
     if (dateFromEl) dateFromEl.removeAttribute("max");
     if (dateToEl) dateToEl.removeAttribute("min");
 
-    document.querySelectorAll(".result-row").forEach((row) => {
-        row.style.display = "";
-    });
+    applyFilters();
 }
 
 /**
@@ -318,6 +382,7 @@ function showLoadingSpinner() {
     const button = document.querySelector(".search-button");
     if (button) {
         button.disabled = true;
+        button.setAttribute("aria-busy", "true");
         if (!button.dataset.originalText) {
             // FIX: Use textContent instead of innerText for JSDOM compatibility
             button.dataset.originalText = button.querySelector(".button-text").textContent;
@@ -326,18 +391,22 @@ function showLoadingSpinner() {
     }
 
     const buttonSpinner = document.getElementById("button-spinner");
-    if (buttonSpinner) buttonSpinner.style.display = "inline-block";
+    if (buttonSpinner) buttonSpinner.style.display = "inline-flex";
 
-    setTimeout(showScrollingMessages, 3000);
+    clearTimeout(messageDelayId);
+    messageDelayId = setTimeout(showScrollingMessages, 3000);
 }
 
 /**
  * Hides the loading spinner and stops the message scroller.
  */
 function hideLoadingSpinner() {
+    clearTimeout(messageDelayId);
+    messageDelayId = null;
     const button = document.querySelector(".search-button");
     if (button) {
         button.disabled = false;
+        button.setAttribute("aria-busy", "false");
         if (button.dataset.originalText) {
             // FIX: Use textContent instead of innerText for JSDOM compatibility
             button.querySelector(".button-text").textContent = button.dataset.originalText;
@@ -351,21 +420,9 @@ function hideLoadingSpinner() {
 }
 
 const messages = [
-    "Searching... This better be worth it!",
-    "Hold on, this takes a while...",
-    "Still searching... Maybe grab a snack?",
-    "Patience, young grasshopper...",
-    "Wow, this is taking a minute!",
-    "Finding the best results for you!",
-    "Hang tight! Searching magic happening!",
-    "One moment... while I consult the ancients.",
-    "Beep boop... processing... please wait...",
-    "My hamsters are running on a wheel, almost there!",
-    "Almost there... just defragmenting my brain.",
-    "Searching... because the internet is a big place!",
-    "The search is strong with this one.",
-    "Searching in hyperspace... almost there!",
-    "Just a few more gigabytes to process...",
+    "Checking the book catalog...",
+    "Still searching. Some catalog pages take longer to respond.",
+    "Results will appear as soon as the catalog responds.",
 ];
 
 function showScrollingMessages() {
@@ -416,6 +473,7 @@ function escapeHtml(str) {
 function createResultRowElement(book) {
     const row = document.createElement("tr");
     row.className = "result-row";
+    row.dataset.credits = JSON.stringify(Array.isArray(book.credited_contributors) ? book.credited_contributors : []);
     row.dataset.category = Array.isArray(book.category) ? book.category.join("|") : book.category || "";
     row.dataset.language = book.language || "Unknown";
     row.dataset.bitrate = book.bitrate || "Unknown";
@@ -425,7 +483,7 @@ function createResultRowElement(book) {
 
     const defaultCover =
         document.querySelector(".cover[data-default-cover]")?.getAttribute("data-default-cover") ||
-        "/static/images/audiobook-default-cover.png";
+        "/static/images/cover-placeholder.svg";
     const coverSrc = book.cover ? escapeHtml(book.cover) : defaultCover;
     const detailsUrl = "/details?link=" + encodeURIComponent(book.link || "");
     const title = escapeHtml(book.title || "Untitled Audiobook");
@@ -438,7 +496,7 @@ function createResultRowElement(book) {
             parts.forEach((cat) => {
                 const clean = cat.trim();
                 if (clean && clean !== "Unknown") {
-                    categoryHtml += `<a href="/?query=${encodeURIComponent("type:" + clean)}" class="category-tag category-link" title="Browse ${escapeHtml(clean)} category">${escapeHtml(clean)}</a>\n`;
+                    categoryHtml += `<a href="/?query=${encodeURIComponent("category:" + clean)}" class="category-tag category-link" title="Browse ${escapeHtml(clean)} category">${escapeHtml(clean)}</a>\n`;
                 }
             });
         });
@@ -447,29 +505,38 @@ function createResultRowElement(book) {
     row.innerHTML = `
         <td class="col-cover">
             <a href="${detailsUrl}">
-                <img src="${coverSrc}" alt="Cover Art" class="cover" width="100" loading="lazy" decoding="async" data-default-cover="${defaultCover}" />
+                ${book.cover ? `<img src="${coverSrc}" alt="Cover of ${title}" class="cover" width="100" loading="lazy" decoding="async" data-default-cover="${defaultCover}" />` : '<span class="cover-placeholder" role="img" aria-label="Cover Unavailable"></span>'}
             </a>
         </td>
         <td class="col-info">
-            <p class="book-title">${title}</p>
+            <p class="book-title" title="${title}">${escapeHtml(book.display_title || book.title || "Untitled Audiobook")}</p>
+<p class="book-attribution${book.author_credit ? "" : " book-attribution-empty"}" title="${escapeHtml(book.author_credit || "")}"${book.author_credit ? "" : ' aria-hidden="true"'}>${escapeHtml(book.author_credit || "")}</p>
             <div class="categories-container">
                 ${categoryHtml}
             </div>
-            <div class="property-results-container">
-                <span class="book-language">Language: ${escapeHtml(book.language || "Unknown")}</span>
-                <span class="book-bitrate">Bitrate: ${escapeHtml(book.bitrate || "Unknown")}</span>
-                <span class="book-format">Format: ${escapeHtml(book.format || "Unknown")}</span>
-                <span class="book-file_size">File Size: ${escapeHtml(book.file_size || "Unknown")}</span>
-                <span class="book-post_date">Posted: ${escapeHtml(book.post_date || "Unknown")}</span>
-            </div>
+<dl class="property-results-container">
+<div class="book-property"><dt>Language</dt><dd class="book-language">${escapeHtml(book.language || "Unknown")}</dd></div>
+<div class="book-property"><dt>Bitrate</dt><dd class="book-bitrate">${escapeHtml(book.bitrate || "Unknown")}</dd></div>
+<div class="book-property"><dt>Format</dt><dd class="book-format">${escapeHtml(book.format || "Unknown")}</dd></div>
+<div class="book-property"><dt>File size</dt><dd class="book-file_size">${escapeHtml(book.file_size || "Unknown")}</dd></div>
+
+</dl>
         </td>
         <td class="col-actions">
             <div class="action-buttons">
                 <a href="${detailsUrl}" class="btn-glass details-button">Details</a>
                 <button class="btn-primary send-torrent-btn" data-link="${escapeHtml(book.link || "")}" data-title="${title}">Download</button>
             </div>
+<p class="book-posted" title="Posted to catalog">
+<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg>
+<span class="sr-only">Posted to catalog </span><span class="book-post_date">${escapeHtml(book.post_date || "Unknown")}</span>
+</p>
         </td>
     `;
+    positionPostedDate(
+        row,
+        document.getElementById("results-container")?.classList.contains("view-list") ? "list" : "grid"
+    );
     return row;
 }
 
@@ -478,181 +545,182 @@ function createResultRowElement(book) {
  * @param {string} query - The search query term.
  * @returns {Promise<boolean>} - True if more results might exist, false if exhausted or errored.
  */
-function showEndOfResults() {
+let paginationState = "idle";
+
+function setPaginationState(state) {
+    paginationState = state;
     const indicator = document.getElementById("load-more-indicator");
-    const endNote = document.getElementById("load-more-end");
-    if (indicator) indicator.style.display = "none";
-    if (endNote) endNote.style.display = "block";
+    const spinner = document.getElementById("load-more-loading");
+    const button = document.getElementById("load-more-btn");
+    const end = document.getElementById("load-more-end");
+    const message = document.getElementById("pagination-message");
+    if (indicator) {
+        indicator.style.display = "flex";
+        indicator.setAttribute("aria-busy", String(state === "loading"));
+    }
+    if (spinner) spinner.style.display = state === "loading" ? "flex" : "none";
+    if (button) {
+        button.style.display = state === "exhausted" ? "none" : "inline-block";
+        button.disabled = state === "loading";
+        button.textContent =
+            state === "error"
+                ? "Retry loading audiobooks"
+                : state === "loading"
+                  ? "Loading audiobooks…"
+                  : "Load more audiobooks";
+    }
+    if (end) {
+        end.style.display = state === "exhausted" ? "block" : "none";
+        end.textContent = "End of results";
+    }
+    if (message) message.hidden = state === "exhausted";
+    if (message)
+        message.textContent = {
+            idle: "More results load as you scroll. You can also load them below.",
+            loading: "Finding more audiobooks…",
+            error: "Couldn’t load more audiobooks. Your results are still here. Please retry.",
+            exhausted: "",
+        }[state];
+}
+
+function showEndOfResults() {
+    setPaginationState("exhausted");
 }
 
 async function loadNextPage(query) {
     if (isLoadingMore || !hasMorePages || !query) return false;
-
-    const indicator = document.getElementById("load-more-indicator");
-    const loadingSpinner = document.getElementById("load-more-loading");
-    const loadMoreBtn = document.getElementById("load-more-btn");
     const tbody = document.getElementById("results-table-body");
     if (!tbody) return false;
-
     isLoadingMore = true;
-    if (indicator) indicator.style.display = "flex";
-    if (loadingSpinner) loadingSpinner.style.display = "flex";
-    if (loadMoreBtn) loadMoreBtn.style.display = "none";
-
+    setPaginationState("loading");
     const nextPage = currentPage + 1;
-
     try {
         const response = await fetch(`/api/search?query=${encodeURIComponent(query)}&page=${nextPage}`);
-        if (!response.ok) {
-            hasMorePages = false;
-            if (indicator) indicator.style.display = "none";
-            return false;
-        }
-
+        if (!response.ok) throw new Error("Page request failed");
         const data = await response.json();
-        if (!data.books || data.books.length === 0) {
-            hasMorePages = false;
-            showEndOfResults();
-            return false;
-        }
-
-        // Append rows
-        data.books.forEach((book) => {
-            const row = createResultRowElement(book);
-            tbody.appendChild(row);
-        });
-
+        if (!Array.isArray(data.books)) throw new Error("Invalid search response");
+        data.books.forEach((book) => tbody.appendChild(createResultRowElement(book)));
         currentPage = nextPage;
-        hasMorePages = Boolean(data.has_more);
-
-        // Re-apply hover prefetching and filter evaluation on newly inserted rows
+        hasMorePages = data.books.length > 0 && Boolean(data.has_more);
+        refreshFilterOptions();
         initHoverPrefetch();
         applyFilters();
-
-        if (!hasMorePages) {
-            showEndOfResults();
-        } else {
-            // Keep indicator visible so IntersectionObserver can trigger subsequent pages when user scrolls
-            if (loadingSpinner) loadingSpinner.style.display = "none";
-            if (loadMoreBtn) loadMoreBtn.style.display = "inline-block";
-            // IntersectionObserver only fires on visibility changes: re-observe so a sentinel that is
-            // still on screen after this page keeps loading automatically (the button is only a fallback).
-            if (infiniteScrollObserver && indicator) {
-                infiniteScrollObserver.unobserve(indicator);
-                infiniteScrollObserver.observe(indicator);
-            }
+        setPaginationState(hasMorePages ? "idle" : "exhausted");
+        const indicator = document.getElementById("load-more-indicator");
+        if (hasMorePages && infiniteScrollObserver && indicator) {
+            infiniteScrollObserver.unobserve(indicator);
+            infiniteScrollObserver.observe(indicator);
         }
-
         return hasMorePages;
-    } catch (err) {
-        console.warn("Infinite scroll page load interrupted:", err);
-        hasMorePages = false;
-        if (indicator) indicator.style.display = "none";
+    } catch (error) {
+        setPaginationState("error");
         return false;
     } finally {
         isLoadingMore = false;
     }
 }
 
-/**
- * Initializes continuous scroll-triggered auto-loading using IntersectionObserver.
- * @param {string} query - Search term.
- */
 function initInfiniteScroll(query) {
-    currentPage = 1;
-    isLoadingMore = false;
-    hasMorePages = true;
-
+    resetPaginationState();
+    setPaginationState("idle");
     const indicator = document.getElementById("load-more-indicator");
-    const loadMoreBtn = document.getElementById("load-more-btn");
-
-    if (indicator) {
-        indicator.style.display = "flex";
-    }
-
-    if (loadMoreBtn) {
-        loadMoreBtn.addEventListener("click", () => {
-            loadNextPage(query);
-        });
-    }
-
-    // Set up IntersectionObserver if supported
+    const button = document.getElementById("load-more-btn");
+    if (button) button.onclick = () => loadNextPage(query);
     if ("IntersectionObserver" in window && indicator) {
-        if (infiniteScrollObserver) {
-            infiniteScrollObserver.disconnect();
-        }
-
         infiniteScrollObserver = new IntersectionObserver(
             (entries) => {
-                const entry = entries[0];
-                if (entry && entry.isIntersecting && !isLoadingMore && hasMorePages) {
+                if (entries[0]?.isIntersecting && !isLoadingMore && hasMorePages && paginationState !== "error")
                     loadNextPage(query);
-                }
             },
-            {
-                root: null,
-                rootMargin: "300px",
-                threshold: 0.1,
-            }
+            { root: null, rootMargin: "300px", threshold: 0.1 }
         );
-
         infiniteScrollObserver.observe(indicator);
-    } else {
-        // Fallback for environments without IntersectionObserver: stream up to 5 pages
-        streamRemainingPages(query, 2, 5);
     }
 }
 
-/**
- * Streams remaining search result pages sequentially (fallback or testing helper).
- * @param {string} query - The search keyword.
- * @param {number} startPage - The starting background page (typically 2).
- * @param {number} maxPage - The maximum background page to fetch (typically 5).
- */
 async function streamRemainingPages(query, startPage = 2, maxPage = 5) {
-    const indicator = document.getElementById("load-more-indicator");
-    const tbody = document.getElementById("results-table-body");
-    if (!tbody || !query) return;
-
-    if (indicator) indicator.style.display = "flex";
-
+    currentPage = startPage - 1;
     for (let page = startPage; page <= maxPage; page++) {
-        try {
-            const response = await fetch(`/api/search?query=${encodeURIComponent(query)}&page=${page}`);
-            if (!response.ok) {
-                break;
-            }
-            const data = await response.json();
-            if (!data.books || data.books.length === 0) {
-                break;
-            }
+        if (!(await loadNextPage(query))) break;
+    }
+}
 
-            // Append rows
-            data.books.forEach((book) => {
-                const row = createResultRowElement(book);
-                tbody.appendChild(row);
+function refreshFilterOptions() {
+    ["author", "category", "language", "bitrate", "format"].forEach((field) => {
+        const values = new Set();
+        document.querySelectorAll(".result-row").forEach((row) => {
+            const value = row.dataset[field] || "";
+            (field === "author"
+                ? JSON.parse(row.dataset.credits || "[]")
+                : field === "category"
+                  ? value.split(/[|,]/)
+                  : [value]
+            ).forEach((item) => {
+                const clean = item.trim();
+                if (clean && clean !== "Unknown" && clean !== "None") values.add(clean);
             });
+        });
+        [field + "-filter"].forEach((id) => {
+            const select = document.getElementById(id);
+            if (!select) return;
+            const existing = new Set([...select.options].map((option) => option.value));
+            [...values].sort().forEach((value) => {
+                if (!existing.has(value)) select.add(new Option(value, value));
+            });
+        });
+    });
+}
 
-            // Re-apply hover prefetching and filter evaluation
-            initHoverPrefetch();
-            applyFilters();
-
-            currentPage = page;
-            if (!data.has_more) {
-                hasMorePages = false;
-                break;
-            }
-        } catch (err) {
-            console.warn("Background streaming interrupted:", err);
-            break;
-        }
+function initRecentSearches() {
+    const panel = document.getElementById("recent-searches");
+    const query = document.querySelector(".search-bar")?.value.trim();
+    if (query && document.querySelector(".result-row"))
+        window.UI?.storage("sessionStorage", "setItem", "resultsUrl", location.pathname + location.search);
+    if (!panel) return;
+    let recent = [];
+    try {
+        recent = JSON.parse(window.UI?.storage("sessionStorage", "getItem", "recentSearches") || "[]");
+    } catch (_) {
+        /* Empty history. */
     }
-
-    if (!hasMorePages) {
-        showEndOfResults();
-    } else if (indicator) {
-        indicator.style.display = "none";
-    }
+    if (!Array.isArray(recent)) recent = [];
+    recent = recent.filter((item) => typeof item === "string");
+    if (query) recent = [query, ...recent.filter((item) => item !== query)].slice(0, 5);
+    window.UI?.storage("sessionStorage", "setItem", "recentSearches", JSON.stringify(recent));
+    panel.replaceChildren();
+    panel.hidden = recent.length === 0;
+    if (!recent.length) return;
+    const header = document.createElement("div");
+    header.className = "recent-searches-header";
+    const label = document.createElement("span");
+    label.textContent = "Recent searches";
+    header.append(label);
+    const list = document.createElement("ul");
+    list.className = "recent-search-list";
+    recent.forEach((item) => {
+        const link = document.createElement("a");
+        link.href = "/?query=" + encodeURIComponent(item);
+        link.textContent = item;
+        link.title = item;
+        const itemElement = document.createElement("li");
+        itemElement.append(link);
+        list.append(itemElement);
+    });
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.innerHTML =
+        '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+    clear.className = "recent-history-clear";
+    clear.setAttribute("aria-label", "Clear recent searches");
+    clear.title = "Clear recent searches";
+    clear.onclick = () => {
+        window.UI?.storage("sessionStorage", "removeItem", "recentSearches");
+        panel.replaceChildren();
+        panel.hidden = true;
+        document.getElementById("main-search-input")?.focus();
+    };
+    header.append(clear);
+    panel.append(header, list);
 }
 
 /**
@@ -726,30 +794,14 @@ function initHoverPrefetch() {
 }
 
 /**
- * Syncs the quick HUD filter dropdowns with the main filter container controls,
- * and updates the active filter count badge.
+ * Updates both entry-point badges from the shared filter controls.
  */
-function syncHudFilters(fromHud = false) {
-    const fields = ["category", "language", "bitrate", "format", "file-size"];
-    let activeFilterCount = 0;
+function updateFilterBadges() {
+    let activeFilterCount = ["author", "category", "language", "bitrate", "format", "file-size"].filter(
+        (field) => document.getElementById(field + "-filter")?.value
+    ).length;
 
-    fields.forEach((field) => {
-        const mainEl = document.getElementById(`${field}-filter`);
-        const hudEl = document.getElementById(`hud-${field}-filter`);
-        if (!mainEl || !hudEl) return;
-
-        if (fromHud) {
-            mainEl.value = hudEl.value;
-        } else {
-            hudEl.value = mainEl.value;
-        }
-
-        if (mainEl.value) {
-            activeFilterCount++;
-        }
-    });
-
-    // Check date inputs for active filter count
+    // Include date range in the shared active-filter count
     const dateFrom = document.getElementById("date-from-filter")?.value;
     const dateTo = document.getElementById("date-to-filter")?.value;
     if (dateFrom || dateTo) {
@@ -776,210 +828,71 @@ function syncHudFilters(fromHud = false) {
             toolbarBadge.style.display = "none";
         }
     }
-
-    const toolbarClearBtn = document.getElementById("toolbar-clear-btn");
-    if (toolbarClearBtn) {
-        toolbarClearBtn.style.display = activeFilterCount > 0 ? "inline-block" : "none";
-    }
 }
 
 /**
  * Initializes the floating condensed HUD bar that slides into view upon scrolling.
  */
 function initFloatingHud() {
-    const hud = document.getElementById("floating-filter-hud");
-    if (!hud) return;
-
-    const hudFilterToggle = document.getElementById("hud-filter-toggle");
-    const hudFilterDrawer = document.getElementById("hud-filter-drawer");
-    const hudDrawerClose = document.getElementById("hud-drawer-close");
-    const hudApplyBtn = document.getElementById("hud-apply-filters-btn");
-    const hudClearBtn = document.getElementById("hud-clear-filters-btn");
-    const hudTopBtn = document.getElementById("hud-top-btn");
-    const hudSearchForm = document.getElementById("hud-search-form");
-    const hudSearchInput = document.getElementById("hud-search-input");
-    const mainSearchInput = document.querySelector(".search-bar");
-
-    // Scroll listener for HUD visibility
-    let ticking = false;
-    const indicator = document.getElementById("load-more-indicator");
-
-    const onScroll = () => {
-        const scrollThreshold = 350;
-        if (window.scrollY > scrollThreshold) {
-            hud.classList.add("visible");
-        } else {
-            hud.classList.remove("visible");
-            if (hudFilterDrawer) {
-                hudFilterDrawer.classList.remove("open");
-                hudFilterDrawer.setAttribute("aria-hidden", "true");
-            }
-        }
-        ticking = false;
-    };
-
-    window.addEventListener(
-        "scroll",
-        () => {
-            if (!ticking) {
-                ticking = true;
-                window.requestAnimationFrame(onScroll);
-            }
-        },
-        { passive: true }
-    );
-
-    // Initial check in case page starts scrolled
-    onScroll();
-
-    // Toggle filter drawer
-    if (hudFilterToggle && hudFilterDrawer) {
-        hudFilterToggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-            syncHudFilters(false);
-            const isOpen = hudFilterDrawer.classList.toggle("open");
-            hudFilterDrawer.setAttribute("aria-hidden", (!isOpen).toString());
-        });
-    }
-
-    // Close filter drawer button
-    if (hudDrawerClose && hudFilterDrawer) {
-        hudDrawerClose.addEventListener("click", () => {
-            hudFilterDrawer.classList.remove("open");
-            hudFilterDrawer.setAttribute("aria-hidden", "true");
-        });
-    }
-
-    // Close drawer when clicking outside
-    document.addEventListener("click", (e) => {
-        if (hudFilterDrawer && hudFilterDrawer.classList.contains("open")) {
-            if (!hudFilterDrawer.contains(e.target) && !hudFilterToggle.contains(e.target)) {
-                hudFilterDrawer.classList.remove("open");
-                hudFilterDrawer.setAttribute("aria-hidden", "true");
-            }
-        }
+    if (!document.getElementById("floating-filter-hud")) return;
+    window.UI.bindFloatingControls();
+    const form = document.getElementById("hud-search-form");
+    const input = document.getElementById("hud-search-input");
+    form?.addEventListener("submit", () => {
+        const main = document.querySelector(".search-bar");
+        if (main && input) main.value = input.value;
+        showLoadingSpinner();
     });
-
-    // Apply HUD filters
-    if (hudApplyBtn) {
-        hudApplyBtn.addEventListener("click", () => {
-            syncHudFilters(true);
-            applyFilters();
-            if (hudFilterDrawer) {
-                hudFilterDrawer.classList.remove("open");
-                hudFilterDrawer.setAttribute("aria-hidden", "true");
-            }
-        });
-    }
-
-    // Clear HUD filters
-    if (hudClearBtn) {
-        hudClearBtn.addEventListener("click", () => {
-            clearFilters();
-            syncHudFilters(false);
-            if (hudFilterDrawer) {
-                hudFilterDrawer.classList.remove("open");
-                hudFilterDrawer.setAttribute("aria-hidden", "true");
-            }
-        });
-    }
-
-    // Jump to top from HUD
-    if (hudTopBtn) {
-        hudTopBtn.addEventListener("click", () => {
-            window.scrollTo({
-                top: 0,
-                behavior: "smooth",
-            });
-        });
-    }
-
-    // Synchronize HUD search form submit with main search form spinner
-    if (hudSearchForm) {
-        hudSearchForm.addEventListener("submit", () => {
-            if (mainSearchInput && hudSearchInput) {
-                mainSearchInput.value = hudSearchInput.value;
-            }
-            showLoadingSpinner();
-        });
-    }
-
-    // Also sync badge whenever main filters change
-    const filterBtn = document.getElementById("filter-button");
-    if (filterBtn) {
-        filterBtn.addEventListener("click", () => syncHudFilters(false));
-    }
-    const clearBtn = document.getElementById("clear-button");
-    if (clearBtn) {
-        clearBtn.addEventListener("click", () => syncHudFilters(false));
-    }
 }
 
-/**
- * Initializes the top toolbar expanding filter drawer modal overlay.
- */
+/** Both entry points open the same controls, including date range. */
 function initTopFilterDrawer() {
-    const toggleBtn = document.getElementById("toolbar-filter-toggle");
+    const triggers = [
+        document.getElementById("toolbar-filter-toggle"),
+        document.getElementById("hud-filter-toggle"),
+    ].filter(Boolean);
     const overlay = document.getElementById("filter-drawer-overlay");
-    const closeBtn = document.getElementById("filter-drawer-close");
-    const applyBtn = document.getElementById("filter-button");
-    const clearBtn = document.getElementById("clear-button");
-    const toolbarClearBtn = document.getElementById("toolbar-clear-btn");
-
-    if (!toggleBtn || !overlay) return;
-
-    const openDrawer = () => {
-        overlay.classList.add("open");
-        overlay.setAttribute("aria-hidden", "false");
-    };
-
-    const closeDrawer = () => {
+    if (!triggers.length || !overlay) return;
+    let release = null;
+    const controls = ["author", "category", "language", "bitrate", "format", "file-size", "date-from", "date-to"]
+        .map((name) => document.getElementById(name + "-filter"))
+        .filter(Boolean);
+    let committed = [];
+    const close = (apply = false) => {
+        if (!apply) {
+            controls.forEach((control, index) => {
+                control.value = committed[index] || "";
+                control.dispatchEvent(new Event("change"));
+            });
+            applyFilters();
+        }
         overlay.classList.remove("open");
         overlay.setAttribute("aria-hidden", "true");
+        triggers.forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+        document.body.classList.remove("filters-open");
+        release?.();
+        release = null;
     };
-
-    toggleBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openDrawer();
+    triggers.forEach((trigger) =>
+        trigger.addEventListener("click", (event) => {
+            event.stopPropagation();
+            committed = controls.map((control) => control.value);
+            overlay.classList.add("open");
+            overlay.setAttribute("aria-hidden", "false");
+            triggers.forEach((button) => button.setAttribute("aria-expanded", "true"));
+            document.body.classList.add("filters-open");
+            release = window.UI.openDialog(overlay.querySelector("[role=dialog]") || overlay, trigger, () => close());
+        })
+    );
+    document.getElementById("filter-drawer-close")?.addEventListener("click", () => close());
+    document.getElementById("filter-button")?.addEventListener("click", () => {
+        if (applyFilters()) close(true);
     });
-
-    if (closeBtn) {
-        closeBtn.addEventListener("click", closeDrawer);
-    }
-
-    // Close when clicking backdrop outside card
-    overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) {
-            closeDrawer();
-        }
+    document.getElementById("clear-button")?.addEventListener("click", () => {
+        clearFilters();
+        committed = controls.map((control) => control.value);
     });
-
-    // Close when pressing Escape key
-    document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && overlay.classList.contains("open")) {
-            closeDrawer();
-        }
+    overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) close();
     });
-
-    // Auto-close overlay after applying filters
-    if (applyBtn) {
-        applyBtn.addEventListener("click", () => {
-            closeDrawer();
-            syncHudFilters(false);
-        });
-    }
-
-    // Toolbar clear button directly resets filters
-    if (toolbarClearBtn) {
-        toolbarClearBtn.addEventListener("click", () => {
-            clearFilters();
-            syncHudFilters(false);
-        });
-    }
-
-    if (clearBtn) {
-        clearBtn.addEventListener("click", () => {
-            syncHudFilters(false);
-        });
-    }
 }

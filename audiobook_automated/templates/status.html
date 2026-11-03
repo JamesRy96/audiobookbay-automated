@@ -1,5 +1,5 @@
 <!-- File: audiobook_automated/templates/status.html -->
-{% extends "base.html" %} {% block title %}Torrent Status{% endblock %} {% block extra_css %}
+{% extends "base.html" %} {% block title %}Active Downloads - {{ site_title }}{% endblock %} {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/status.css', v=static_version) }}" />
 {% endblock %} {% block extra_js %}
 <script src="{{ url_for('static', filename='js/status.js', v=static_version) }}" defer></script>
@@ -19,54 +19,66 @@
                     >{{ client_status_label if client_status_label else 'Client Connected' }}</span
                 >
             </div>
-            <label class="auto-refresh-label" for="auto-refresh-toggle" title="Toggle 5-second automatic refresh">
-                <input type="checkbox" id="auto-refresh-toggle" checked />
-                <span>Auto-refresh</span>
-            </label>
-            <button
-                type="button"
-                class="status-poll-indicator"
-                id="status-poll-indicator"
-                title="Click to refresh status immediately (auto-refreshes every 5s)"
-                aria-label="Refresh status"
-            >
-                <div class="poll-dial-wrap">
-                    <svg
-                        class="poll-icon poll-spinner-ring"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                    </svg>
-                    <span class="poll-countdown-num" id="poll-countdown-num">5</span>
-                </div>
-            </button>
+            <div class="refresh-controls" aria-label="Refresh controls">
+                <label
+                    class="auto-refresh-label refresh-toggle"
+                    for="auto-refresh-toggle"
+                    title="Toggle 5-second automatic refresh"
+                >
+                    <input
+                        type="checkbox"
+                        id="auto-refresh-toggle"
+                        role="switch"
+                        aria-label="Automatic refresh every five seconds"
+                        checked
+                    />
+                    <span class="refresh-switch-track" aria-hidden="true"></span
+                    ><span class="auto-refresh-text">Live</span>
+                </label>
+                <button
+                    type="button"
+                    class="status-poll-indicator"
+                    id="status-poll-indicator"
+                    title="Click to refresh status immediately (auto-refreshes every 5s)"
+                    aria-label="Refresh status"
+                >
+                    <div class="poll-dial-wrap">
+                        <svg
+                            class="poll-icon poll-spinner-ring"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                        </svg>
+                        <span class="poll-countdown-num" id="poll-countdown-num">5</span>
+                    </div>
+                </button>
+            </div>
         </div>
     </div>
     {% if clients and clients|length > 1 %}
-    <div class="status-client-tabs" role="tablist" aria-label="Filter downloads by client">
-        <a href="{{ url_for('main.status') }}" class="client-tab {{ 'active' if not active_client else '' }}" role="tab"
+    <div class="status-client-tabs" aria-label="Filter downloads by Download Client">
+        <a href="{{ url_for('main.status') }}" class="client-tab {{ 'active' if not active_client else '' }}"
             >All Clients</a
         >
         {% for c in clients %}
-        <a
-            href="{{ url_for('main.status', client=c) }}"
-            class="client-tab {{ 'active' if active_client == c else '' }}"
-            role="tab"
-            >{{ c|capitalize }}</a
+        <a href="{{ url_for('main.status', client=c) }}" class="client-tab {{ 'active' if active_client == c else '' }}"
+            >{{ {'qbittorrent': 'qBittorrent', 'transmission': 'Transmission', 'deluge': 'Deluge', 'putio':
+            'Put.io'}.get(c, c) }}</a
         >
         {% endfor %}
     </div>
     {% endif %}
 </div>
 
+<p id="status-update-note" class="update-note" role="status" aria-live="polite">Waiting for an update…</p>
 <div class="status-container">
     {% if error %}
-    <div class="error-message">
+    <div class="error-message" id="status-initial-error">
         <div class="error-message-primary">
             <span class="error-icon" aria-hidden="true">⚠️</span>
             <p>{{ error }}</p>
@@ -78,8 +90,8 @@
         </details>
         {% endif %}
     </div>
-    {% else %}
-    <div class="table-wrapper">
+    {% endif %}
+    <div class="table-wrapper" id="status-table-wrapper" {% if error %}hidden{% endif %}>
         <table>
             <caption class="sr-only">
                 List of active downloads
@@ -118,6 +130,7 @@
                             <div
                                 class="progress-bar-container"
                                 role="progressbar"
+                                aria-label="Download progress for {{ torrent.name }}"
                                 aria-valuenow="{{ torrent.progress }}"
                                 aria-valuemin="0"
                                 aria-valuemax="100"
@@ -138,6 +151,7 @@
                         <button
                             class="remove-button remove-torrent-btn btn-glass-danger"
                             data-torrent-id="{{ torrent.id }}"
+                            data-client="{{ torrent.client or '' }}"
                             title="Remove download"
                         >
                             <svg
@@ -171,6 +185,5 @@
             </tbody>
         </table>
     </div>
-    {% endif %}
 </div>
 {% endblock %}

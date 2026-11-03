@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "audiobookbay_automated"
 version = "1.0.0"
-description = "Automated AudiobookBay downloader and torrent manager"
+description = "Search AudiobookBay and send books to your Download Client"
+readme = "README.md"
 requires-python = ">=3.13"
 authors = [
     { name = "meek2100", email = "meek2100@users.noreply.github.com" },
@@ -51,7 +52,7 @@ dev = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/jamesry96/audiobookbay-automated"
+"Homepage" = "https://github.com/meek2100/audiobookbay-automated"
 
 [tool.setuptools.packages.find]
 where = ["."]

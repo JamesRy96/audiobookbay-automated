@@ -23,12 +23,12 @@ from flask import (
 
 from audiobook_automated.constants import (
     ABS_TIMEOUT_SECONDS,
-    DEFAULT_COVER_FILENAME,
     ERROR_HASH_NOT_FOUND,
     MIN_SEARCH_QUERY_LENGTH,
 )
 from audiobook_automated.errors import AppError, InvalidRequestError, TorrentClientError
 
+from .contributors import catalog_credit, split_contributors
 from .extensions import limiter, talisman, torrent_manager
 from .scraper import extract_magnet_link, get_book_details, search_audiobookbay
 from .scraper.parser import BookSummary
@@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
 
 # Create the Blueprint
 main_bp = Blueprint("main", __name__)
+main_bp.add_app_template_filter(catalog_credit)
+main_bp.add_app_template_filter(split_contributors)
 
 
 @main_bp.errorhandler(AppError)
@@ -74,7 +76,7 @@ def inject_global_vars() -> dict[str, Any]:
         "nav_link_url": current_app.config.get("NAV_LINK_URL"),
         "library_reload_enabled": library_reload_enabled,
         "static_version": static_version,
-        "default_cover_filename": DEFAULT_COVER_FILENAME,
+        "default_cover_filename": "cover-placeholder.svg",
         "splash_enabled": current_app.config.get("SPLASH_ENABLED", True),
         "splash_title": current_app.config.get("SPLASH_TITLE", ""),
         "splash_message": current_app.config.get("SPLASH_MESSAGE", ""),
@@ -168,7 +170,7 @@ def search() -> str | Response:
         if query:
             # Minimum length check to prevent scraping spam
             if len(query) < MIN_SEARCH_QUERY_LENGTH:
-                error_message = f"Search query must be at least {MIN_SEARCH_QUERY_LENGTH} characters long."
+                error_message = f"Enter at least {MIN_SEARCH_QUERY_LENGTH} characters."
                 return render_template("search.html", books=[], error=error_message, query=query)
 
             # AudiobookBay requires lowercase search terms
@@ -273,7 +275,13 @@ def api_search() -> Response | tuple[Response, int]:
     try:
         search_query = query.lower()
         books = search_audiobookbay(search_query, max_pages=1, start_page=page)
-        return jsonify({"books": list(books), "has_more": len(books) > 0, "page": page}), 200
+        return jsonify(
+            {
+                "books": [{**book, **catalog_credit(book["title"])} for book in books],
+                "has_more": len(books) > 0,
+                "page": page,
+            }
+        ), 200
     except Exception as e:
         logger.error(f"API search failed for '{query}' (page {page}): {e}")
         return jsonify({"error": str(e), "books": [], "has_more": False, "page": page}), 500
@@ -299,6 +307,8 @@ def details() -> str | Response:
 
     try:
         book_details = get_book_details(link)
+        if not book_details:
+            raise ConnectionError("Audiobook details could not be retrieved. Please try again.")
         return render_template("details.html", book=book_details)
     except Exception as e:
         logger.error(f"Failed to fetch details: {e}", exc_info=True)
@@ -405,11 +415,7 @@ def send() -> Response | tuple[Response, int]:
         target_client = client_name or torrent_manager.client_type
         logger.info(f"Successfully sent '{title}' to {target_client}")
         return (
-            jsonify(
-                {
-                    "message": "Download added successfully! This may take some time; the download will show in Audiobookshelf when completed."
-                }
-            ),
+            jsonify({"message": "Sent to your Download Client. Check Downloads for progress."}),
             200,
         )
     except AppError:
@@ -438,6 +444,9 @@ def delete_torrent() -> Response | tuple[Response, int]:
         raise InvalidRequestError("Invalid JSON format")
 
     torrent_id = data.get("id") if data else None
+    client_name = data.get("client")
+    if client_name is not None and (not isinstance(client_name, str) or not client_name.strip()):
+        raise InvalidRequestError("A valid Download Client is required")
 
     if not torrent_id:
         raise InvalidRequestError("Torrent ID is required")
@@ -445,7 +454,14 @@ def delete_torrent() -> Response | tuple[Response, int]:
     try:
         # Security: only delete torrents managed by this application (matched by our category label)
         torrents = torrent_manager.get_status()
-        target_torrent = next((t for t in torrents if str(t.id) == str(torrent_id)), None)
+        matches = [
+            torrent
+            for torrent in torrents
+            if str(torrent.id) == str(torrent_id) and (not client_name or torrent.client == client_name)
+        ]
+        if len(matches) > 1:
+            return jsonify({"status": "error", "message": "Choose the Download Client for this download."}), 409
+        target_torrent = matches[0] if matches else None
 
         if not target_torrent:
             return jsonify({"status": "error", "message": "Torrent not found"}), 404
@@ -461,7 +477,12 @@ def delete_torrent() -> Response | tuple[Response, int]:
                 }
             ), 403
 
-        torrent_manager.remove_torrent(str(torrent_id))
+        if target_torrent.client:
+            removed = torrent_manager.remove_torrent(str(torrent_id), client_name=target_torrent.client)
+        else:
+            removed = torrent_manager.remove_torrent(str(torrent_id))
+        if not removed:
+            return jsonify({"status": "error", "message": "The Download Client could not remove this download."}), 502
         return jsonify({"message": "Torrent removed successfully."})
     except Exception as e:
         logger.error(f"Failed to remove torrent: {e}", exc_info=True)

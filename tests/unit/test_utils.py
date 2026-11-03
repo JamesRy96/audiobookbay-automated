@@ -407,22 +407,22 @@ def test_format_user_error() -> None:
 
     # Case 1: Client error
     friendly_client, debug_client = format_user_error(Exception("Host unreachable"), context="client")
-    assert "Error connecting to client" in friendly_client
+    assert "Couldn't reach your Download Client" in friendly_client
     assert debug_client == "Host unreachable"
 
     # Case 2: Search error
     friendly_search, debug_search = format_user_error("Timeout", context="search")
-    assert "Search Failed" in friendly_search
+    assert "Couldn't reach the book catalog" in friendly_search
     assert debug_search == "Timeout"
 
     # Case 3: Details error
     friendly_details, debug_details = format_user_error(ValueError("Invalid HTML"), context="details")
-    assert "Could not load details" in friendly_details
+    assert "Could not load book details" in friendly_details
     assert debug_details == "Invalid HTML"
 
     # Case 4: General error with empty string
     friendly_gen, debug_gen = format_user_error("", context="unknown")
-    assert "An unexpected error occurred" in friendly_gen
+    assert "Something went wrong" in friendly_gen
     assert debug_gen is None
 
 
@@ -441,7 +441,7 @@ def test_build_github_issue_url() -> None:
         context="search",
     )
 
-    assert "https://github.com/theurer/audiobookbay-automated/issues/new?" in url
+    assert "https://github.com/meek2100/audiobookbay-automated/issues/new?" in url
     assert "title=" in url
     assert "Bug%3A+%5BSearch%5D+Search+query+timed+out" in url or "Bug%3A" in url
     assert "labels=bug%2Cautomated-report" in url

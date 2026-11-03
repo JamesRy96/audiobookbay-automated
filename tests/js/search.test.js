@@ -19,7 +19,7 @@ const getGlobalFunctions = () => {
         setViewMode: window.setViewMode,
         initFloatingHud: window.initFloatingHud,
         initTopFilterDrawer: window.initTopFilterDrawer,
-        syncHudFilters: window.syncHudFilters,
+        updateFilterBadges: window.updateFilterBadges,
         streamRemainingPages: window.streamRemainingPages,
         createResultRowElement: window.createResultRowElement,
         initHoverPrefetch: window.initHoverPrefetch,
@@ -321,7 +321,7 @@ describe("search.js UI Spinner Logic", () => {
         expect(button.disabled).toBe(true);
         // FIX: Use textContent for JSDOM compatibility
         expect(button.querySelector(".button-text").textContent).toBe("Searching...");
-        expect(spinner.style.display).toBe("inline-block");
+        expect(spinner.style.display).toBe("inline-flex");
     });
 
     test("hideLoadingSpinner should re-enable button and hide spinner", () => {
@@ -382,7 +382,7 @@ describe("search.js Unit Tests - Progressive Search & Prefetch", () => {
         expect(row.querySelector(".book-title").textContent).toBe("Dune");
         const catLink = row.querySelector(".category-link");
         expect(catLink.textContent).toBe("Sci-Fi");
-        expect(catLink.getAttribute("href")).toBe("/?query=type%3ASci-Fi");
+        expect(catLink.getAttribute("href")).toBe("/?query=category%3ASci-Fi");
         expect(row.querySelector(".send-torrent-btn").dataset.title).toBe("Dune");
     });
 
@@ -569,94 +569,29 @@ describe("search.js Unit Tests - Progressive Search & Prefetch", () => {
         expect(localStorage.getItem("viewMode")).toBe("list");
     });
 
-    test("initFloatingHud toggles visibility on scroll and manages drawer", () => {
-        const { initFloatingHud, syncHudFilters } = getGlobalFunctions();
-
-        // Build mock HUD elements
-        const hud = document.createElement("aside");
-        hud.id = "floating-filter-hud";
-        const toggleBtn = document.createElement("button");
-        toggleBtn.id = "hud-filter-toggle";
-        const drawer = document.createElement("div");
-        drawer.id = "hud-filter-drawer";
-        const closeBtn = document.createElement("button");
-        closeBtn.id = "hud-drawer-close";
-        const applyBtn = document.createElement("button");
-        applyBtn.id = "hud-apply-filters-btn";
-        const clearBtn = document.createElement("button");
-        clearBtn.id = "hud-clear-filters-btn";
-        const topBtn = document.createElement("button");
-        topBtn.id = "hud-top-btn";
-        const badge = document.createElement("span");
-        badge.id = "hud-filter-badge";
-
-        // Main selects are already set up in setup(): category-filter, language-filter, bitrate-filter, format-filter
-
-        // HUD selects
-        ["category", "language", "bitrate", "format"].forEach((field) => {
-            const hudSelect = document.createElement("select");
-            hudSelect.id = `hud-${field}-filter`;
-            const optNone = document.createElement("option");
-            optNone.value = "";
-            const optVal = document.createElement("option");
-            optVal.value = "TestVal";
-            hudSelect.appendChild(optNone);
-            hudSelect.appendChild(optVal);
-            document.body.appendChild(hudSelect);
-        });
-
-        // Add matching option to main category select
-        const catSelect = document.getElementById("category-filter");
-        if (catSelect) {
-            const opt = document.createElement("option");
-            opt.value = "TestVal";
-            catSelect.appendChild(opt);
-        }
-
-        document.body.appendChild(hud);
-        document.body.appendChild(toggleBtn);
-        document.body.appendChild(drawer);
-        document.body.appendChild(closeBtn);
-        document.body.appendChild(applyBtn);
-        document.body.appendChild(clearBtn);
-        document.body.appendChild(topBtn);
-        document.body.appendChild(badge);
-
-        window.scrollTo = jest.fn();
-        window.requestAnimationFrame = (cb) => cb();
-
-        initFloatingHud();
-
-        // Simulate scroll past 350
-        Object.defineProperty(window, "scrollY", { value: 400, writable: true });
-        window.dispatchEvent(new Event("scroll"));
-        expect(hud.classList.contains("visible")).toBe(true);
-
-        // Toggle drawer
-        toggleBtn.click();
-        expect(drawer.classList.contains("open")).toBe(true);
-
-        // Close drawer via closeBtn
-        closeBtn.click();
-        expect(drawer.classList.contains("open")).toBe(false);
-
-        // Test top button
-        topBtn.click();
-        expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
-
-        // Test syncHudFilters
-        const hudCatSelect = document.getElementById("hud-category-filter");
-        hudCatSelect.value = "TestVal";
-        syncHudFilters(true);
-        expect(catSelect.value).toBe("TestVal");
-        expect(badge.textContent).toBe("1");
-        expect(badge.style.display).toBe("inline-block");
-
-        // Clear
-        catSelect.value = "";
-        hudCatSelect.value = "";
-        syncHudFilters(false);
-        expect(badge.style.display).toBe("none");
+    test("toolbar and floating buttons share one filter panel and values", () => {
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            '<aside id="floating-filter-hud"></aside><button id="hud-filter-toggle">Filters</button><button id="toolbar-filter-toggle">Filters</button><div id="filter-drawer-overlay"><div role="dialog"><button id="filter-drawer-close">Close</button></div></div><span id="hud-filter-badge"></span>'
+        );
+        const category = document.getElementById("category-filter");
+        category.add(new Option("New", "New"));
+        category.value = "New";
+        window.initFloatingHud();
+        window.initTopFilterDrawer();
+        const top = document.getElementById("toolbar-filter-toggle");
+        const floating = document.getElementById("hud-filter-toggle");
+        floating.click();
+        expect(document.getElementById("filter-drawer-overlay").classList.contains("open")).toBe(true);
+        document.getElementById("filter-drawer-close").click();
+        top.click();
+        expect(document.getElementById("category-filter")).toBe(category);
+        expect(category.value).toBe("New");
+        window.updateFilterBadges();
+        expect(document.getElementById("hud-filter-badge").textContent).toBe("1");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        expect(document.activeElement).toBe(top);
+        expect(document.body.classList.contains("filters-open")).toBe(false);
     });
 
     test("initTopFilterDrawer manages overlay opening, closing, and resets", () => {
@@ -674,13 +609,10 @@ describe("search.js Unit Tests - Progressive Search & Prefetch", () => {
             applyBtn.id = "filter-button";
             document.body.appendChild(applyBtn);
         }
-        const toolbarClearBtn = document.createElement("button");
-        toolbarClearBtn.id = "toolbar-clear-btn";
 
         document.body.appendChild(toggleBtn);
         document.body.appendChild(overlay);
         document.body.appendChild(closeBtn);
-        document.body.appendChild(toolbarClearBtn);
 
         initTopFilterDrawer();
 
@@ -706,10 +638,150 @@ describe("search.js Unit Tests - Progressive Search & Prefetch", () => {
         applyBtn.click();
         expect(overlay.classList.contains("open")).toBe(false);
 
-        // Toolbar clear button
+        // Reset from the filter panel
         const catSelect = document.getElementById("category-filter");
         if (catSelect) catSelect.value = "Fiction";
-        toolbarClearBtn.click();
+        document.getElementById("clear-button").click();
         if (catSelect) expect(catSelect.value).toBe("");
     });
+});
+
+describe("pagination recovery and result discovery", () => {
+    beforeEach(() => {
+        setup();
+        window.resetPaginationState();
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div id="load-more-indicator"><span id="pagination-message"></span><span id="load-more-loading"></span><button id="load-more-btn"></button><p id="load-more-end"></p></div><div id="filtered-empty" hidden></div>'
+        );
+    });
+    test("a failed page remains retryable and an empty retry announces the end", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce({ ok: false })
+            .mockResolvedValueOnce({ ok: true, json: async () => ({ books: [], has_more: false }) });
+        await window.loadNextPage("books");
+        expect(document.getElementById("pagination-message").textContent).toContain("Couldn’t load");
+        expect(document.getElementById("load-more-btn").disabled).toBe(false);
+        await window.loadNextPage("books");
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(global.fetch.mock.calls[0][0]).toBe(global.fetch.mock.calls[1][0]);
+        expect(document.getElementById("load-more-end").textContent).toBe("End of results");
+    });
+    test("appended metadata becomes selectable without losing the selected filter", async () => {
+        const language = document.getElementById("language-filter");
+        language.value = "English";
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                books: [
+                    {
+                        title: "French book",
+                        link: "/french",
+                        language: "French",
+                        category: ["New category"],
+                        format: "M4B",
+                    },
+                ],
+                has_more: true,
+            }),
+        });
+        await window.loadNextPage("books");
+        expect([...language.options].some((o) => o.value === "French")).toBe(true);
+        expect(language.value).toBe("English");
+        expect(document.querySelector('[data-language="French"]').style.display).toBe("none");
+    });
+    test("idle initialization does not claim that a request is running", () => {
+        global.IntersectionObserver = jest.fn(() => ({ observe: jest.fn(), disconnect: jest.fn() }));
+        window.initInfiniteScroll("books");
+        expect(document.getElementById("load-more-loading").style.display).toBe("none");
+        expect(document.getElementById("load-more-btn").disabled).toBe(false);
+    });
+});
+
+test("closing filters discards uncommitted changes instead of changing later loaded results", () => {
+    setup();
+    document.body.insertAdjacentHTML(
+        "beforeend",
+        '<button id="toolbar-filter-toggle">Filters</button><div id="filter-drawer-overlay"><div role="dialog"><button id="filter-drawer-close">Close</button></div></div>'
+    );
+    const category = document.getElementById("category-filter");
+    category.add(new Option("New", "New"));
+    window.initTopFilterDrawer();
+    document.getElementById("toolbar-filter-toggle").click();
+    category.value = "New";
+    document.getElementById("filter-drawer-close").click();
+    expect(category.value).toBe("");
+});
+
+test("credit filtering uses individual contributors and preserves the original download title", () => {
+    setup();
+    document.body.insertAdjacentHTML(
+        "beforeend",
+        '<select id="author-filter"><option value="">All</option><option value="Jane Doe">Jane Doe</option></select><span id="hud-filter-badge"></span>'
+    );
+    const row = window.createResultRowElement({
+        title: "A title - Jane Doe and John Smith",
+        display_title: "A title",
+        author_credit: "Jane Doe and John Smith",
+        credited_contributors: ["Jane Doe", "John Smith"],
+        link: "/book",
+    });
+    const other = window.createResultRowElement({ title: "Unknown credit", link: "/other" });
+    document.body.append(row, other);
+    expect(row.querySelector(".book-title").textContent).toBe("A title");
+    expect(row.querySelector(".book-attribution").textContent).toBe("Jane Doe and John Smith");
+    expect(row.querySelector(".send-torrent-btn").dataset.title).toBe("A title - Jane Doe and John Smith");
+    document.getElementById("author-filter").value = "Jane Doe";
+    window.applyFilters();
+    expect(row.style.display).toBe("");
+    expect(other.style.display).toBe("none");
+    expect(document.getElementById("hud-filter-badge").textContent).toBe("1");
+    window.clearFilters();
+    expect(document.getElementById("author-filter").value).toBe("");
+    expect(other.style.display).toBe("");
+});
+
+test("credit text from streaming is escaped", () => {
+    setup();
+    const row = window.createResultRowElement({
+        title: "Original",
+        display_title: "<img src=x onerror=alert(1)>",
+        author_credit: "<svg onload=alert(1)>",
+        credited_contributors: ["Jane Doe"],
+    });
+    expect(row.querySelector(".book-attribution svg")).toBeNull();
+    expect(row.querySelector(".book-title img")).toBeNull();
+    expect(row.querySelector(".book-title").textContent).toContain("<img");
+});
+
+test("search loading state cancels delayed feedback when it finishes early", () => {
+    setup();
+    jest.useFakeTimers();
+    window.showLoadingSpinner();
+    expect(document.querySelector(".search-button").getAttribute("aria-busy")).toBe("true");
+    window.hideLoadingSpinner();
+    jest.advanceTimersByTime(3500);
+    expect(document.querySelector(".search-button").getAttribute("aria-busy")).toBe("false");
+    expect(document.getElementById("message-scroller").style.display).toBe("none");
+    jest.useRealTimers();
+});
+
+test("switching representations retains exactly one posting date per book", () => {
+    document.body.innerHTML = "";
+    document.body.insertAdjacentHTML(
+        "beforeend",
+        '<button id="view-list-btn"></button><button id="view-grid-btn"></button><div id="results-container" class="view-grid"><table><tbody id="results-table-body"></tbody></table></div>'
+    );
+    const row = window.createResultRowElement({ title: "A book", post_date: "14 Oct 2026" });
+    document.getElementById("results-table-body").append(row);
+    window.setViewMode("list");
+    expect(row.querySelector(".col-info .book-posted")).not.toBeNull();
+    const next = window.createResultRowElement({ title: "Another book", post_date: "15 Oct 2026" });
+    document.getElementById("results-table-body").append(next);
+    expect(next.querySelector(".col-info .book-posted")).not.toBeNull();
+    window.setViewMode("grid");
+    window.setViewMode("list");
+    expect(document.querySelectorAll(".book-posted")).toHaveLength(2);
+    expect(document.querySelectorAll(".col-info .book-posted")).toHaveLength(2);
 });

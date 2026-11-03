@@ -1,9 +1,12 @@
 # File: audiobook_automated/healthcheck.py
 """Healthcheck script for Docker."""
 
+import logging
 import os
 import sys
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 
 def health_check(timeout: int = 3) -> None:
@@ -40,13 +43,14 @@ def health_check(timeout: int = 3) -> None:
             if response.status == 200:  # noqa: PLR2004
                 sys.exit(0)  # Success
             else:
-                print(f"Health check failed with status: {response.status}", file=sys.stderr)
+                logger.error("Health check failed with status: %s", response.status)
                 sys.exit(1)
     except Exception as e:
-        # Print error to stderr so it shows up in docker logs if healthcheck fails
-        print(f"Health check failed: {e}", file=sys.stderr)
+        # Log the failure so the container health status includes a useful reason
+        logger.error("Health check failed: %s", e)
         sys.exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
+    logging.basicConfig(level=logging.ERROR)
     health_check(timeout=3)

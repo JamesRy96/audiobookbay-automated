@@ -34,8 +34,8 @@ def get_search_url(base_url: str, query: str | None, page: int = 1) -> str:
 
     Supports:
       - Direct taxonomy prefixes:
-          'type:<category>'     -> /audio-books/type/<category>/page/<N>/
-          'tag:<tag>'           -> /audio-books/tag/<tag>/page/<N>/
+          'category:<category>' -> /audio-books/type/<category>/page/<N>/
+          'language:<language>' -> /audio-books/tag/<language>/page/<N>/
           'author:<author>'     -> /audio-books/author/<author>/page/<N>/
           'narrator:<narrator>' -> /audio-books/narrator/<narrator>/page/<N>/
       - Direct path input:
@@ -66,9 +66,14 @@ def get_search_url(base_url: str, query: str | None, page: int = 1) -> str:
         return f"{base_url}{path}/"
 
     # Case 2: Taxonomy prefix detected
-    for prefix in ("type:", "tag:", "author:", "narrator:"):
+    taxonomy_prefixes = {
+        "category:": "type",
+        "language:": "tag",
+        "author:": "author",
+        "narrator:": "narrator",
+    }
+    for prefix, tax_type in taxonomy_prefixes.items():
         if q_strip.lower().startswith(prefix):
-            tax_type = prefix[:-1]
             raw_val = q_strip[len(prefix) :].strip()
             slug = slugify_taxonomy(raw_val)
             path = f"/audio-books/{tax_type}/{slug}"

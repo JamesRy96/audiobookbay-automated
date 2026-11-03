@@ -17,40 +17,54 @@ endblock %} {% block extra_css %}
         </div>
         <div class="status-header-meta">
             <span id="last-updated-badge" class="diag-badge">Last updated: -</span>
-            <label class="auto-refresh-label" for="auto-refresh-toggle" title="Toggle 5-second automatic refresh">
-                <input type="checkbox" id="auto-refresh-toggle" checked />
-                <span>Auto-refresh</span>
-            </label>
-            <button
-                type="button"
-                class="status-poll-indicator"
-                id="diag-poll-indicator"
-                title="Click to refresh diagnostics immediately (auto-refreshes every 5s)"
-                aria-label="Refresh diagnostics"
-            >
-                <div class="poll-dial-wrap">
-                    <svg
-                        class="poll-icon poll-spinner-ring"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                    </svg>
-                    <span class="poll-countdown-num" id="poll-countdown-num">5</span>
-                </div>
-            </button>
+            <div class="refresh-controls" aria-label="Refresh controls">
+                <label
+                    class="auto-refresh-label refresh-toggle"
+                    for="auto-refresh-toggle"
+                    title="Toggle 5-second automatic refresh"
+                >
+                    <input
+                        type="checkbox"
+                        id="auto-refresh-toggle"
+                        role="switch"
+                        aria-label="Automatic refresh every five seconds"
+                        checked
+                    />
+                    <span class="refresh-switch-track" aria-hidden="true"></span
+                    ><span class="auto-refresh-text">Live</span>
+                </label>
+                <button
+                    type="button"
+                    class="status-poll-indicator"
+                    id="diag-poll-indicator"
+                    title="Click to refresh diagnostics immediately (auto-refreshes every 5s)"
+                    aria-label="Refresh diagnostics"
+                >
+                    <div class="poll-dial-wrap">
+                        <svg
+                            class="poll-icon poll-spinner-ring"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                        </svg>
+                        <span class="poll-countdown-num" id="poll-countdown-num">5</span>
+                    </div>
+                </button>
+            </div>
         </div>
     </div>
 </div>
 
+<p id="logs-update-note" class="update-note" role="status" aria-live="polite">Waiting for logs…</p>
 <div class="diag-container">
     <div class="diag-card">
         <div class="diag-header">
-            <span class="diag-title">
+            <span class="diag-title" role="heading" aria-level="2">
                 <span>⚡ System Health & Environment</span>
                 <span id="health-spinner" class="card-spinner" style="display: none"></span>
             </span>
@@ -77,18 +91,22 @@ endblock %} {% block extra_css %}
 
     <div class="diag-card">
         <div class="diag-header">
-            <span class="diag-title">
-                <span>🌐 Mirror Probes & Performance Rankings</span>
+            <span class="diag-title" role="heading" aria-level="2">
+                <span>🌐 Catalog Mirrors & Availability</span>
             </span>
         </div>
-        <div class="diag-grid" id="mirror-metrics">
+        <p class="mirror-explanation">
+            The app chooses a working mirror automatically. Only verified, available mirrors receive a performance rank.
+        </p>
+        <p id="mirror-summary" class="mirror-summary" role="status" aria-live="polite"></p>
+        <div class="mirror-list" id="mirror-metrics">
             <!-- Populated via JS -->
         </div>
     </div>
 
     <div class="diag-card">
         <div class="diag-header">
-            <span class="diag-title">
+            <span class="diag-title" role="heading" aria-level="2">
                 <span>📥 Download Clients</span>
             </span>
         </div>
@@ -100,7 +118,7 @@ endblock %} {% block extra_css %}
     <!-- Live Application Logs Card -->
     <div class="diag-card">
         <div class="diag-header">
-            <span class="diag-title">
+            <span class="diag-title" role="heading" aria-level="2">
                 <span>📜 Real-Time Scrubbed Application Logs</span>
                 <span id="logs-spinner" class="card-spinner" style="display: none"></span>
             </span>
@@ -123,7 +141,7 @@ endblock %} {% block extra_css %}
 
     <div class="diag-card">
         <div class="diag-header">
-            <span class="diag-title">
+            <span class="diag-title" role="heading" aria-level="2">
                 <span>🔍 Live Parser & Metadata Inspector</span>
             </span>
         </div>

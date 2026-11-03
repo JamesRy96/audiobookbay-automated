@@ -1,0 +1,16 @@
+<!-- File: audiobook_automated/static/images/cover-placeholder.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450" fill="none" stroke="#18232f" stroke-linecap="round" stroke-linejoin="round">
+ <title>Cover Unavailable</title>
+ <rect x="18" y="24" width="264" height="402" rx="38" stroke-width=".8" opacity=".45"/>
+ <rect x="25" y="31" width="250" height="388" rx="32" stroke-width=".5" opacity=".3"/>
+ <path d="M115 54h25m20 0h25M150 45l5 9-5 9-5-9zM108 390h32m20 0h32M150 382l4 8-4 8-4-8z" stroke-width="1"/>
+ <path d="M48 120c-8 35-7 76 3 107m201-107c8 35 7 76-3 107" stroke-width=".7" opacity=".5"/>
+ <path d="M48 160c-16-8-16-20-14-23 12 5 17 12 14 23zm-3 29c-16-4-20-15-19-19 13 2 20 8 19 19zm3 30c-16 1-23-8-23-12 13-3 21 0 23 12zm204-59c16-8 16-20 14-23-12 5-17 12-14 23zm3 29c16-4 20-15 19-19-13 2-20 8-19 19zm-3 30c16 1 23-8 23-12-13-3-21 0-23 12z" stroke-width=".8" opacity=".55"/>
+ <path d="M69 242V150a81 81 0 01162 0v92" stroke-width=".7" opacity=".35"/>
+ <path d="M84 196q31-12 66 4 35-16 66-4v57q-32-10-66 4-34-14-66-4zM150 200v57M91 204v43q27-8 52 3m65-46v43q-27-8-51 3" stroke-width="1.4"/>
+ <path d="M98 215q21-5 39 2m-39 8q21-5 39 2m26-10q18-7 38-2m-38 12q18-7 38-2" stroke-width=".65" opacity=".65"/>
+ <path d="M139 189c-9-31 0-61 39-77-1 32-14 57-39 77zm0 0 29-61m-23 46 17-7m-11-5 19-8m-13-5 17-8m-29 20-5-14m12-1-4-14" stroke-width="1"/>
+ <path d="M211 98a17 17 0 11-19-24 14 14 0 0019 24zM91 106v12m-6-6h12m110 50v10m-5-5h10M113 278h74" stroke-width=".8"/>
+ <path d="m74 80 2 5 5 2-5 2-2 5-2-5-5-2 5-2zm153 190 2 6 6 2-6 2-2 6-2-6-6-2 6-2z" stroke-width=".8"/>
+ <circle cx="117" cy="92" r="1" fill="#18232f" stroke="none"/><circle cx="224" cy="132" r="1" fill="#18232f" stroke="none"/><circle cx="77" cy="277" r="1" fill="#18232f" stroke="none"/>
+</svg>

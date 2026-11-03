@@ -1,67 +1,83 @@
 # File: .github/workflows/release.yaml
 name: Create Release
-
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "New Version (e.g. 1.1.0)"
+        description: "Version already committed in pyproject.toml, for example 1.0.0"
         required: true
         type: string
-
 permissions:
-  contents: write
-  pull-requests: write
-
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
-  release:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Update Version in pyproject.toml
-        # Uses sed to update the version line.
-        # Assumes format: version = "x.x.x"
-        run: |
-          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' pyproject.toml
-
-      - name: Update Changelog
-        # Simple changelog management: Adds new version header
-        run: |
-          DATE=$(date +%Y-%m-%d)
-          HEADER="## [${{ inputs.version }}] - $DATE"
-
-          # Ensure CHANGELOG.md exists
-          touch CHANGELOG.md
-
-          # If [Unreleased] header exists, replace it. Otherwise, prepend.
-          if grep -q "## \[Unreleased\]" CHANGELOG.md; then
-            sed -i "s/## \[Unreleased\]/$HEADER/" CHANGELOG.md
-            sed -i "1i ## [Unreleased]\n" CHANGELOG.md
-          else
-            echo -e "## [Unreleased]\n\n$HEADER\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
-          fi
-
-      - name: Commit and Tag
-        run: |
-          git add pyproject.toml CHANGELOG.md
-          git commit -m "chore: release v${{ inputs.version }}"
-          git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
-          git push origin HEAD:main --tags
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+      - uses: astral-sh/setup-uv@v7
         with:
-          tag_name: v${{ inputs.version }}
-          name: Release v${{ inputs.version }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+          python-version: "3.14"
+      - name: Validate release version and branch
+        env:
+          VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+          uv run --no-project python - <<'PY'
+          import datetime
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+          version = os.environ["VERSION"]
+          if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
+              raise SystemExit("Use a version such as 1.0.0, without a leading v.")
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          if project["version"] != version:
+              raise SystemExit("Commit the matching pyproject.toml version before releasing.")
+          section = re.search(
+              rf"^## \[{re.escape(version)}\] - (\d{{4}}-\d{{2}}-\d{{2}})\s*$",
+              Path("CHANGELOG.md").read_text(),
+              re.MULTILINE,
+          )
+          if section is None:
+              raise SystemExit("Add a dated changelog section for this version before releasing.")
+          try:
+              datetime.date.fromisoformat(section[1])
+          except ValueError:
+              raise SystemExit("Use a valid YYYY-MM-DD date in the release changelog heading.") from None
+          PY
+          if git rev-parse --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "::error::This version tag already exists."
+            exit 1
+          fi
+  checks:
+    needs: validate
+    uses: ./.github/workflows/ci.yaml
+  image:
+    needs: checks
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-publish.yaml
+    with:
+      version: ${{ inputs.version }}
+  release:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the tag and release for the checked commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$VERSION" --target "$GITHUB_SHA" \
+            --title "Release v$VERSION" --generate-notes

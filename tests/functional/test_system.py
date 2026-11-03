@@ -82,7 +82,8 @@ def test_status_route_error(client: Any) -> None:
 
         response = client.get("/status")
         assert response.status_code == 200
-        assert b"Error connecting to client" in response.data
+        assert b"Download Client" in response.data
+        assert b"connection settings" in response.data
         assert b"Database Locked" in response.data
 
 

@@ -35,3 +35,7 @@ MD035:
 # MD049: Set emphasis style to UNDERSCORE (to match Prettier/existing files)
 MD049:
   style: underscore
+
+# Preserve the project code-fence convention.
+MD048:
+  style: tilde

@@ -211,3 +211,42 @@ describe("diagnostics.js - Dashboard Controller", () => {
         expect(output.textContent).toContain('"type": "search"');
     });
 });
+
+describe("mirror observations", () => {
+    test("untested candidates never outrank verified mirrors or show invented measurements", () => {
+        document.body.innerHTML = '<p id="mirror-summary"></p><div id="mirror-metrics"></div>';
+        window.renderMirrors({
+            active_mirror: "ready.example",
+            mirrors: [
+                { hostname: "unknown.example", tested: false, reachable: false, score: 1140, success_rate: 100 },
+                {
+                    hostname: "ready.example",
+                    tested: true,
+                    reachable: true,
+                    score: 800,
+                    ema_latency_ms: 250,
+                    success_rate: 90,
+                    total_requests: 10,
+                },
+            ],
+        });
+        const rows = document.querySelectorAll(".mirror-row");
+        expect(rows[0].dataset.hostname).toBe("ready.example");
+        expect(rows[0].textContent).toContain("250 ms average");
+        expect(rows[0].textContent).toContain("10 checks");
+        expect(rows[1].textContent).toContain("No observations");
+        expect(rows[1].textContent).not.toContain("100%");
+        expect(rows[1].querySelector(".mirror-tags").textContent).not.toContain("Rank");
+    });
+    test("polling preserves an expanded mirror explanation and keyboard focus", () => {
+        document.body.innerHTML = '<div id="mirror-metrics"></div>';
+        const mirror = { hostname: "ready.example", tested: true, reachable: true, score: 800, latency_ms: 250 };
+        window.renderMirrors({ mirrors: [mirror] });
+        const details = document.querySelector(".mirror-details");
+        details.open = true;
+        details.querySelector("summary").focus();
+        window.renderMirrors({ mirrors: [{ ...mirror, latency_ms: 300 }] });
+        expect(document.querySelector(".mirror-details").open).toBe(true);
+        expect(document.activeElement.tagName).toBe("SUMMARY");
+    });
+});

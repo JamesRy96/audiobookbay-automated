@@ -328,25 +328,13 @@ def format_user_error(err: Exception | str, context: str = "general") -> tuple[s
     raw_error = str(err).strip()
 
     if context == "client":
-        friendly = (
-            "Error connecting to client: We couldn't reach your download program. "
-            "Please check that your downloader is turned on and ready."
-        )
+        friendly = "Couldn't reach your Download Client. Check that it is running and that its connection settings are correct."
     elif context == "search":
-        friendly = (
-            "Search Failed: We couldn't reach the book catalog right now. "
-            "The website might be having trouble or taking a quick break. "
-            "Please wait a moment and try again."
-        )
+        friendly = "Couldn't reach the book catalog. Try again in a moment."
     elif context == "details":
-        friendly = (
-            "Could not load details: We couldn't open this book's information. "
-            "It may have been moved or removed. Please try choosing a different book."
-        )
+        friendly = "Could not load book details. Try again, or choose another book."
     else:
-        friendly = (
-            "An unexpected error occurred: Something went wrong. Please refresh the page or try again in a moment."
-        )
+        friendly = "Something went wrong. Refresh the page and try again."
 
     return friendly, raw_error if raw_error else None
 
@@ -360,7 +348,7 @@ def build_github_issue_url(
 
     Scrubs PII and attaches sanitized environment details, mirror states, and logs.
     """
-    repo_url = "https://github.com/theurer/audiobookbay-automated/issues/new"
+    repo_url = "https://github.com/meek2100/audiobookbay-automated/issues/new"
     title = f"Bug: [{context.title()}] {error_summary[:60]}"
 
     # Pull sanitized logs if available
@@ -379,17 +367,17 @@ def build_github_issue_url(
 - **OS Platform**: {platform.platform()}
 
 ### Technical Error Details
-```
+~~~
 {technical_details or "None"}
-```
+~~~
 
 ### Recent Application Logs (Sanitized)
 <details>
 <summary>Click to view recent logs</summary>
 
-```
+~~~
 {recent_logs}
-```
+~~~
 </details>
 
 *Generated automatically via AudiobookBay Automated 1-Click Issue Reporter.*

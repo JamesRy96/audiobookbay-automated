@@ -20,7 +20,7 @@ def test_health_check_success() -> None:
         assert e.value.code == 0
 
 
-def test_health_check_failure_status(capsys: pytest.CaptureFixture[str]) -> None:
+def test_health_check_failure_status(caplog: pytest.LogCaptureFixture) -> None:
     """Test that health_check exits with 1 on non-200 HTTP status and logs to stderr."""
     with patch("urllib.request.urlopen") as mock_open:
         mock_resp = MagicMock()
@@ -31,19 +31,17 @@ def test_health_check_failure_status(capsys: pytest.CaptureFixture[str]) -> None
             health_check()
         assert e.value.code == 1
 
-    captured = capsys.readouterr()
-    assert "Health check failed with status: 500" in captured.err
+    assert "Health check failed with status: 500" in caplog.text
 
 
-def test_health_check_exception(capsys: pytest.CaptureFixture[str]) -> None:
+def test_health_check_exception(caplog: pytest.LogCaptureFixture) -> None:
     """Test that health_check exits with 1 on connection exception and logs to stderr."""
     with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
         with pytest.raises(SystemExit) as e:
             health_check()
         assert e.value.code == 1
 
-    captured = capsys.readouterr()
-    assert "Health check failed: Connection refused" in captured.err
+    assert "Health check failed: Connection refused" in caplog.text
 
 
 @pytest.mark.parametrize(

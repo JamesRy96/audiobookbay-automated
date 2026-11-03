@@ -86,7 +86,7 @@ describe("status.js - UI Logic", () => {
 
         // The innerHTML should NOT contain the script tag literally interpreted
         expect(tbody.innerHTML).toContain("&lt;script&gt;alert('xss')&lt;/script&gt;");
-        expect(tbody.innerHTML).not.toContain("<script>alert");
+        expect(tbody.querySelector("script")).toBeNull();
     });
 
     test("getStatusBadgeClass should return appropriate badge class for various states", () => {
@@ -255,4 +255,38 @@ describe("status.js - Polling Mechanism", () => {
         jest.advanceTimersByTime(10000);
         expect(mockFetch).not.toHaveBeenCalled();
     });
+});
+
+test("polling preserves a selected Download Client and marks failures stale", async () => {
+    jest.useFakeTimers();
+    history.replaceState(null, "", "/status?client=qbittorrent");
+    document.body.innerHTML = '<p id="status-update-note"></p><table><tbody id="status-table-body"></tbody></table>';
+    mockFetch.mockResolvedValue({ ok: false, json: async () => ({}) });
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    await flushPromises();
+    expect(mockFetch).toHaveBeenCalledWith("/status?json=1&client=qbittorrent");
+    expect(document.getElementById("status-table-body").classList.contains("is-stale")).toBe(true);
+    expect(document.getElementById("status-update-note").textContent).toContain("previous results");
+    clearInterval(window.statusInterval);
+    history.replaceState(null, "", "/");
+    jest.useRealTimers();
+});
+
+test("changing download progress preserves keyboard focus on the same client row", () => {
+    document.body.innerHTML = '<table><tbody id="status-table-body"></tbody></table>';
+    const tbody = document.getElementById("status-table-body");
+    const download = {
+        id: "shared",
+        client: "transmission",
+        name: "A book",
+        progress: 10,
+        state: "Downloading",
+        size: "1 GB",
+    };
+    window.updateTable(tbody, [download]);
+    tbody.querySelector("button").focus();
+    window.updateTable(tbody, [{ ...download, progress: 20 }]);
+    expect(document.activeElement.dataset.torrentId).toBe("shared");
+    expect(document.activeElement.dataset.client).toBe("transmission");
+    expect(tbody.querySelector('[role="progressbar"]').getAttribute("aria-label")).toContain("A book");
 });

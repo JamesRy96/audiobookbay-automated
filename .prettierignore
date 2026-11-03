@@ -1,0 +1,3 @@
+# File: .prettierignore
+# Markdown uses markdownlint to preserve tilde code fences.
+**/*.md

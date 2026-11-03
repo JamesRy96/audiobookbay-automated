@@ -1,19 +1,26 @@
 # File: .dockerignore
-__pycache__
-*.py[cod]
-*$py.class
-.git
-.gitignore
+.git/
+.github/
+.agents/
 .env
-.venv
+.env.*
+.venv/
 env/
 venv/
-*.md
-LICENSE
-# JavaScript/Node Exclusions
 node_modules/
-package.json
-package-lock.json
-jest.config.js
-# Test File Exclusions (Python tests are sometimes needed for cache, but JS tests are not)
-tests/js/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+build/
+dist/
+tests/
+test-results/
+playwright-report/
+docs/
+examples/
+*.log

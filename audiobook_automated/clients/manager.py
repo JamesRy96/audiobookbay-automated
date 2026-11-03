@@ -94,7 +94,7 @@ class TorrentManager:
 
             # Instantiate the client plugin
             # Extract configuration from app.config to pass explicitly
-            host = app.config.get("DL_HOST", "localhost")
+            host = app.config.get("DL_HOST") or "localhost"
             port: Any = app.config.get("DL_PORT")
             if port is None:
                 port = getattr(client_class, "DEFAULT_PORT", 8080)
@@ -108,11 +108,11 @@ class TorrentManager:
             except (ValueError, TypeError):
                 port_int = 8080
 
-            username = app.config.get("DL_USERNAME") or app.config.get("DL_USER")
-            password = app.config.get("DL_PASSWORD") or app.config.get("DL_PASS")
-            api_key = app.config.get("DL_API_KEY") or app.config.get("DL_KEY")
+            username = app.config.get("DL_USERNAME")
+            password = app.config.get("DL_PASSWORD")
+            api_key = app.config.get("DL_API_KEY")
             scheme = app.config.get("DL_SCHEME", "http")
-            timeout = app.config.get("CLIENT_TIMEOUT") or app.config.get("DL_TIMEOUT", 30)
+            timeout = app.config.get("CLIENT_TIMEOUT", 30)
 
             client_cls: type[TorrentClientPlugin] = client_class
 

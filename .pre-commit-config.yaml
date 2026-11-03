@@ -37,7 +37,7 @@ repos:
     rev: "v3.9.10"
     hooks:
       - id: prettier
-        types_or: [css, javascript, html, json, yaml, markdown]
+        types_or: [css, javascript, ts, html, json, yaml]
         args: ["--config", ".prettierrc.yaml"]
 
   # ------------------------------------------------------------------
@@ -55,7 +55,8 @@ repos:
     hooks:
       - id: context-headers
         args: ["--fix"]
-        exclude: ^(audiobook_automated/static/vendor/|package-lock.json)
+        # AGENTS.md requires the base template path comment before its doctype.
+        exclude: ^(audiobook_automated/static/vendor/|package-lock.json|audiobook_automated/templates/base.html$)
 
   # ------------------------------------------------------------------
   # 4. LINTERS (Logic & Validity)

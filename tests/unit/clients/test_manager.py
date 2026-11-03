@@ -70,7 +70,7 @@ def test_manager_load_client_success(app: Flask, caplog: LogCaptureFixture) -> N
 
 
 def test_manager_load_client_default_port(app: Flask, caplog: LogCaptureFixture) -> None:
-    """Test default port loading."""
+    """Use documented defaults when host and port are unset."""
     manager = TorrentManager()
 
     mock_module = MagicMock()
@@ -78,13 +78,14 @@ def test_manager_load_client_default_port(app: Flask, caplog: LogCaptureFixture)
 
     with patch("importlib.import_module", return_value=mock_module):
         app.config["DL_CLIENT"] = "mock_client"
-        app.config["DL_HOST"] = "1.2.3.4"
+        app.config["DL_HOST"] = None
         # DL_PORT missing or None to trigger default logic
         app.config["DL_PORT"] = None
 
         manager.init_app(app)
 
         assert isinstance(manager.client, MockClient)
+        assert manager.client.host == "localhost"
         assert manager.client.port == 1234  # MockClient.DEFAULT_PORT
 
 

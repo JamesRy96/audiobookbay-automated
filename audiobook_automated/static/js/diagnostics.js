@@ -84,64 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 cacheEl.textContent = `${data.cache.details_cache_size} / ${data.cache.details_cache_max}`;
             }
 
-            // Mirror Probes & Performance Rankings
-            const mirrorContainer = document.getElementById("mirror-metrics");
-            if (mirrorContainer) {
-                mirrorContainer.innerHTML = "";
-                const mirrorsList = [...(data.mirrors.mirrors || [])];
-                mirrorsList.sort((a, b) => (b.score || 0) - (a.score || 0));
-
-                mirrorsList.forEach((m, index) => {
-                    const metric = document.createElement("div");
-                    metric.className = "diag-metric";
-                    const isParked = m.is_parked;
-                    const isCooling = m.cooling_down && !isParked;
-                    const isUntested = m.tested === false;
-                    const latencyText = m.reachable ? `${m.latency_ms} ms` : "Offline";
-                    const statusColor = isUntested
-                        ? "var(--text-muted, #94a3b8)"
-                        : isParked
-                          ? "#ef4444"
-                          : isCooling
-                            ? "#f59e0b"
-                            : m.reachable
-                              ? "#4ade80"
-                              : "#f87171";
-                    const statusLabel = isUntested
-                        ? "Not tested yet"
-                        : isParked
-                          ? "Parked / Invalid"
-                          : isCooling
-                            ? "Cooldown"
-                            : m.reachable
-                              ? latencyText
-                              : "Offline";
-                    const isTopRanked = index < 3 && m.reachable && !isCooling && !isParked;
-                    const rankBadgeColor = isTopRanked ? "#38bdf8" : "var(--text-muted, #94a3b8)";
-                    const protoLabel = (m.protocol || "https").toUpperCase();
-                    const protoColor = protoLabel === "HTTPS" ? "#38bdf8" : "#fbbf24";
-
-                    metric.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <span class="diag-label" style="font-weight: 700; color: ${rankBadgeColor}">#${index + 1} Rank</span>
-                            <div style="display: flex; gap: 4px; align-items: center;">
-                                <span class="diag-badge" style="font-size: 0.7rem; padding: 2px 6px; color: ${protoColor}; border-color: ${protoColor}40;">${protoLabel}</span>
-                                <span class="diag-badge" style="font-size: 0.75rem; padding: 2px 8px;">Score: ${m.score !== undefined ? m.score : "-"}</span>
-                            </div>
-                        </div>
-                        <span class="diag-label" style="word-break: break-all; color: #fff; font-size: 0.9rem;">${m.hostname}</span>
-                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px;">
-                            <span class="diag-val" style="color: ${statusColor}; font-size: 1.15rem;">
-                                ${statusLabel}
-                            </span>
-                            <span style="font-size: 0.8rem; color: var(--text-muted, #94a3b8);">
-                                Rate: ${m.success_rate || 0}%
-                            </span>
-                        </div>
-                    `;
-                    mirrorContainer.appendChild(metric);
-                });
-            }
+            renderMirrors(data.mirrors || {});
 
             // Download Clients
             const clientContainer = document.getElementById("client-metrics");
@@ -151,13 +94,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     const metric = document.createElement("div");
                     metric.className = "diag-metric";
                     const statusText = c.status || (c.connected ? "Connected" : "Disconnected");
-                    let statusColor = "#4ade80"; // green
+                    let statusColor = "var(--status-success)"; // green
                     if (statusText === "IP Banned") {
-                        statusColor = "#ef4444"; // red
+                        statusColor = "var(--status-error)"; // red
                     } else if (statusText === "Auth Failed" || statusText === "Auth Cooldown") {
-                        statusColor = "#f59e0b"; // amber
+                        statusColor = "var(--status-warning)"; // amber
                     } else if (!c.connected) {
-                        statusColor = "#f87171"; // soft red
+                        statusColor = "var(--status-error)"; // soft red
                     }
 
                     metric.innerHTML = `
@@ -175,6 +118,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 lastUpdatedBadge.textContent = "Last updated: " + formatTime(new Date());
             }
         } catch (e) {
+            document.getElementById("mirror-metrics")?.classList.add("is-stale");
+            const mirrorNote = document.getElementById("mirror-summary");
+            if (mirrorNote)
+                mirrorNote.textContent = "Couldn’t update mirror health. Showing the previous observations.";
             console.error("Failed to load health metrics", e);
             if (lastUpdatedBadge) {
                 lastUpdatedBadge.textContent = "Update failed: " + formatTime(new Date());
@@ -196,7 +143,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await res.json();
             currentLogs = data.logs || [];
             renderLogs();
+            const note = document.getElementById("logs-update-note");
+            if (note) note.textContent = "Logs updated: " + formatTime(new Date());
         } catch (e) {
+            const note = document.getElementById("logs-update-note");
+            if (note)
+                note.textContent = "Couldn’t refresh logs. Showing the last available entries. Use Refresh to retry.";
             console.error("Failed to fetch logs", e);
         } finally {
             isFetchingLogs = false;
@@ -301,6 +253,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (autoRefreshToggle) {
         autoRefreshToggle.addEventListener("change", () => {
+            const label = autoRefreshToggle.closest("label")?.querySelector(".auto-refresh-text");
+            if (label) label.textContent = autoRefreshToggle.checked ? "Live" : "Paused";
             if (autoRefreshToggle.checked) {
                 countdown = 5;
                 window.diagState.countdown = countdown;
@@ -342,3 +296,99 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initial load
     refreshAll();
 });
+
+function renderMirrors(data) {
+    const container = document.getElementById("mirror-metrics");
+    if (!container) return;
+    container.classList.remove("is-stale");
+    const available = (mirror) =>
+        mirror.tested !== false && mirror.reachable && !mirror.cooling_down && !mirror.is_parked;
+    const state = (mirror) =>
+        available(mirror)
+            ? "available"
+            : mirror.tested === false
+              ? "untested"
+              : mirror.is_parked
+                ? "invalid"
+                : mirror.cooling_down
+                  ? "cooldown"
+                  : "offline";
+    const priority = { available: 0, untested: 1, cooldown: 2, offline: 3, invalid: 4 };
+    const mirrors = [...(data.mirrors || [])].sort(
+        (a, b) =>
+            priority[state(a)] - priority[state(b)] ||
+            (b.score || 0) - (a.score || 0) ||
+            a.hostname.localeCompare(b.hostname)
+    );
+    const summary = document.getElementById("mirror-summary");
+    const ready = mirrors.filter(available).length;
+    const waiting = mirrors.filter((m) => state(m) === "untested").length;
+    if (summary)
+        summary.textContent = mirrors.length
+            ? `${ready} available · ${waiting} awaiting a first check · ${mirrors.length - ready - waiting} unavailable`
+            : "No mirror observations yet. Checks run in the background.";
+    const signature = JSON.stringify([data.active_mirror, mirrors]);
+    if (container.dataset.snapshot === signature) return;
+    const expanded = new Set(
+        [...container.querySelectorAll("details[open]")].map((el) => el.closest(".mirror-row").dataset.hostname)
+    );
+    const focused = document.activeElement?.closest(".mirror-row")?.dataset.hostname;
+    container.dataset.snapshot = signature;
+    container.replaceChildren();
+    let rank = 0;
+    const activeHost = String(data.active_mirror || "")
+        .replace(/^https?:\/\//, "")
+        .replace(/\/$/, "");
+    mirrors.forEach((m) => {
+        const row = document.createElement("article");
+        const category = state(m);
+        row.className = "mirror-row diag-metric";
+        row.dataset.hostname = m.hostname;
+        row.innerHTML =
+            '<div class="mirror-identity"><strong class="mirror-host"></strong><span class="mirror-tags"></span></div><span class="mirror-state"></span><div class="mirror-latency"></div><div class="mirror-success"></div><details class="mirror-details"><summary>Check details</summary><p></p></details>';
+        row.querySelector(".mirror-host").textContent = m.hostname;
+        const selected = m.hostname === activeHost;
+        const badges = row.querySelector(".mirror-tags");
+        const addBadge = (label) => {
+            const badge = document.createElement("span");
+            badge.className = "diag-badge";
+            badge.textContent = label;
+            badges.append(badge);
+        };
+        if (available(m)) addBadge("Rank " + ++rank);
+        if (selected) addBadge(available(m) ? "In use" : "Last used");
+        if (m.tested !== false) addBadge(String(m.protocol || "https").toUpperCase());
+        const status = row.querySelector(".mirror-state");
+        status.classList.add("mirror-state-" + category);
+        status.textContent = {
+            available: "Available",
+            untested: "Not tested yet",
+            invalid: "Parked / Invalid",
+            cooldown: "Retrying after cooldown",
+            offline: "Unavailable",
+        }[category];
+        const average = Number(m.ema_latency_ms);
+        const latency = average > 0 ? average : Number(m.latency_ms);
+        row.querySelector(".mirror-latency").textContent =
+            m.tested === false || !(latency > 0)
+                ? "Response time: —"
+                : `Response time: ${Math.round(latency)} ms ${average > 0 ? "average" : "latest"}`;
+        const observations = Number(m.total_requests);
+        const success = Number(m.success_rate);
+        row.querySelector(".mirror-success").textContent =
+            m.tested === false
+                ? "No observations"
+                : Number.isFinite(success)
+                  ? `${success}% observed success${observations > 0 ? " · " + observations + " check" + (observations === 1 ? "" : "s") : ""}`
+                  : "Success rate: —";
+        const details = row.querySelector("details");
+        details.open = expanded.has(m.hostname);
+        details.querySelector("p").textContent =
+            m.tested === false
+                ? "No measured latency or success rate yet. This mirror will be checked as needed."
+                : `Selection score: ${m.score ?? "—"} (higher is better). Reliability, average latency, and protocol contribute to selection. ${m.is_parked ? "This mirror did not return a valid catalog." : m.cooling_down ? "Checks are temporarily backed off to avoid repeated requests." : ""}`;
+        container.append(row);
+        if (focused === m.hostname) details.querySelector("summary").focus();
+    });
+}
+window.renderMirrors = renderMirrors;
