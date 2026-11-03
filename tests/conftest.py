@@ -52,8 +52,7 @@ def mock_global_dependencies() -> Generator[None]:
 
     This fixture runs automatically for every test. It mocks the heavy
     lifters (TorrentManager) to prevent the application from trying to
-    connect to a real torrent client during startup (verify_credentials)
-    or request handling.
+    contact real Download Clients while checking status or dispatching requests.
     """
     # Patch the methods on the REAL instance object directly.
     # Patching the module attribute ("audiobook_automated.extensions.torrent_manager")
@@ -68,7 +67,7 @@ def mock_global_dependencies() -> Generator[None]:
         with patch.object(torrent_manager, "get_status", return_value=[]):
             with patch.object(torrent_manager, "add_magnet", return_value="OK", create=True):
                 with patch.object(torrent_manager, "remove_torrent", return_value="OK"):
-                    # Mock init_app to prevent real connection attempts
+                    # Keep plugin discovery isolated from unrelated tests
                     with patch.object(torrent_manager, "init_app"):
                         with patch("audiobook_automated.routes.get_book_details", return_value=None):
                             yield
@@ -91,7 +90,7 @@ def app(mock_global_dependencies: None) -> Generator[Flask]:
 
     Uses TestConfig to ensure configuration is present before extension initialization.
     Explicitly depends on mock_global_dependencies to ensure TorrentManager is mocked
-    before create_app triggers the startup connection check.
+    before create_app initializes the Download Client plugins.
     """
     app = create_app(TestConfig)
     yield app

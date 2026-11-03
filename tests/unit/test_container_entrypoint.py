@@ -3,7 +3,13 @@
 
 import os
 import shutil
+import socket
 import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -140,3 +146,76 @@ def test_startup_exports_main_emits_assignments(capsys: pytest.CaptureFixture[st
     with patch.dict(os.environ, {"listen_port": "5099"}, clear=True):
         main()
     assert capsys.readouterr().out == "listen_port\nLISTEN_PORT=5099\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Gunicorn requires POSIX")
+def test_gunicorn_preload_and_health_never_contact_download_client(tmp_path: Path) -> None:
+    """Real Gunicorn binds and serves health/home even if a client connection would hang."""
+    root = Path(__file__).resolve().parents[2]
+    marker = tmp_path / "client-connection-attempted"
+    module = tmp_path / "blocked_client_app.py"
+    module.write_text(
+        "# File: blocked_client_app.py\n"
+        "from pathlib import Path\n"
+        "from threading import Event\n"
+        "import audiobook_automated.clients.qbittorrent as adapter\n"
+        "def blocked_client(*args, **kwargs):\n"
+        f"    Path({str(marker)!r}).touch()\n"
+        "    Event().wait(30)\n"
+        "    raise RuntimeError('Client boundary must not be contacted')\n"
+        "adapter.QbClient = blocked_client\n"
+        "from audiobook_automated import create_app\n"
+        "app = create_app()\n"
+    )
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        port = reservation.getsockname()[1]
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() not in {"PUBLIC_URL", "TRUSTED_PROXIES", "DL_CLIENT"}
+        and not key.upper().startswith("QBITTORRENT_")
+    }
+    environment.update(DL_CLIENT="qbittorrent", QBITTORRENT_HOST="127.0.0.1", QBITTORRENT_API_KEY="isolated-test-key")
+    with (tmp_path / "gunicorn.log").open("w+") as output:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "gunicorn",
+                "--preload",
+                "--workers",
+                "1",
+                "--threads",
+                "8",
+                "--bind",
+                f"127.0.0.1:{port}",
+                "--pythonpath",
+                str(tmp_path),
+                "blocked_client_app:app",
+            ],
+            cwd=root,
+            env=environment,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            deadline = time.monotonic() + 10
+            payload = b""
+            while time.monotonic() < deadline and process.poll() is None:
+                try:
+                    with opener.open(f"http://127.0.0.1:{port}/health", timeout=0.5) as response:
+                        payload = response.read()
+                    break
+                except (urllib.error.URLError, TimeoutError):
+                    threading.Event().wait(0.05)
+            output.flush()
+            assert b'"healthy"' in payload, (tmp_path / "gunicorn.log").read_text()
+            with opener.open(f"http://127.0.0.1:{port}/", timeout=2) as response:
+                assert response.status == 200
+                assert b"Search" in response.read()
+            assert not marker.exists(), "Startup or health opened a Download Client connection"
+        finally:
+            process.terminate()
+            process.wait(timeout=5)

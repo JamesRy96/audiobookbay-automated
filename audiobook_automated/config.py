@@ -110,6 +110,30 @@ def validate_client_connections(connections: dict[str, dict[str, str]]) -> None:
             raise ValueError(f"{name.upper()}_SCHEME must be http or https.")
 
 
+def log_client_setup(connections: dict[str, dict[str, str]], logger: logging.Logger) -> None:
+    """Explain incomplete built-in client login settings without contacting clients or logging secrets."""
+    for name, values in connections.items():
+        if name == "qbittorrent" and not values.get("API_KEY"):
+            missing = [f"QBITTORRENT_{field}" for field in ("USERNAME", "PASSWORD") if not values.get(field)]
+            if missing:
+                logger.warning(
+                    "qBittorrent login is incomplete. Set %s, or set QBITTORRENT_API_KEY. "
+                    "If qBittorrent allows access without signing in, these can stay empty.",
+                    " and ".join(missing),
+                )
+        elif name == "deluge" and not values.get("PASSWORD"):
+            logger.warning("Deluge needs its Web interface password. Set DELUGE_PASSWORD and restart this app.")
+        elif name == "putio" and not values.get("TOKEN"):
+            logger.warning("Put.io needs an access token. Set PUTIO_TOKEN and restart this app.")
+        elif name == "transmission" and bool(values.get("USERNAME")) != bool(values.get("PASSWORD")):
+            missing_setting = "TRANSMISSION_PASSWORD" if values.get("USERNAME") else "TRANSMISSION_USERNAME"
+            logger.warning(
+                "Transmission login is incomplete. Set %s, or leave both login settings empty "
+                "if Transmission allows access without signing in.",
+                missing_setting,
+            )
+
+
 class Config:
     """Centralized configuration for the Flask application.
 
@@ -241,8 +265,9 @@ class Config:
         # Allow any string identifier to support drop-in client plugins without hardcoded enum restriction.
         # The Manager will fail later if the module doesn't exist.
         if not cls.DL_CLIENT:
-            logger.critical("Configuration Error: DL_CLIENT is missing.")
-            raise ValueError("DL_CLIENT must be set.")
+            message = "Choose a Download Client. Set DL_CLIENT=qbittorrent, deluge, transmission or putio; use commas for several clients."
+            logger.critical(message)
+            raise ValueError(message)
 
         names = [name.strip() for name in cls.DL_CLIENT.split(",")]
         for name in names:

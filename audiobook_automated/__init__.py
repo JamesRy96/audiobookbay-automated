@@ -9,7 +9,7 @@ from typing import Any
 from flask import Flask, Response, jsonify, request
 from flask_wtf.csrf import CSRFError
 
-from .config import Config
+from .config import Config, log_client_setup
 from .diagnostics import diagnostics_bp
 from .extensions import csrf, executor, limiter, register_shutdown_handlers, talisman, torrent_manager
 from .logging_buffer import log_ring_buffer
@@ -83,11 +83,12 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     torrent_manager.init_app(app)
     # Note: Request teardown is handled per-client to prevent connection storms.
 
-    # Verify torrent client connection at startup.
-    # This allows admins to see immediate feedback in logs if the client is unreachable.
-    # We do NOT block startup, as the app should remain accessible for debugging.
-    if not torrent_manager.verify_credentials():
-        app.logger.warning("Startup Check: Torrent client is NOT connected. Downloads will fail until resolved.")
+    # Gunicorn preloads this factory before binding its HTTP socket. Never connect here.
+    log_client_setup(app.config["CLIENT_CONNECTIONS"], app.logger)
+    app.logger.info(
+        "Download Client setup loaded. Open Status to check connections; "
+        "an offline client does not prevent the website from starting."
+    )
 
     # Initialize Scraper Executor
     executor.init_app(app)

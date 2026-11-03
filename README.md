@@ -127,6 +127,7 @@ docker compose down
 | --- | --- |
 | The image cannot be downloaded | Check your internet connection and the image name. A first release must be published before `latest` exists. |
 | The app will not start | Check `.env` for a valid `DL_CLIENT` and its connection settings. Run `docker compose logs --tail=50` to see the reason. |
+| Setup warning about a missing login | Add the setting named in the log to `.env`, then recreate the app with `docker compose up -d`. The website can still open while a client is offline. |
 | The browser cannot open the app | Check that Docker is running, port `5078` is available, and you used the correct server address. |
 | Download Client disconnected | Check its web interface, address, port, and credentials. In this container, `localhost` refers to this app, not your other server or container. |
 | Search is unavailable | Wait a moment and retry. If it continues, check your internet/VPN connection. Enable [Diagnostics](docs/configuration.md#diagnostics-and-network) to see mirror availability. |

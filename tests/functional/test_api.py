@@ -20,7 +20,7 @@ def test_health_check(client: FlaskClient) -> None:
     """Test the health check endpoint."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json == {"status": "ok", "app": "healthy", "client": "connected"}
+    assert response.json == {"status": "ok", "app": "healthy"}
 
 
 def test_health_check_client_disconnected_app_still_healthy(client: FlaskClient) -> None:
@@ -30,10 +30,13 @@ def test_health_check_client_disconnected_app_still_healthy(client: FlaskClient)
     from audiobook_automated.extensions import torrent_manager
 
     # We patch the instance that is already imported
-    with patch.object(torrent_manager, "verify_credentials", return_value=False):
+    with patch.object(
+        torrent_manager, "verify_credentials", side_effect=AssertionError("Health attempted a connection")
+    ) as verify:
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json == {"status": "ok", "app": "healthy", "client": "disconnected"}
+        assert response.json == {"status": "ok", "app": "healthy"}
+        verify.assert_not_called()
 
 
 def test_search_endpoint_valid(client: FlaskClient) -> None:

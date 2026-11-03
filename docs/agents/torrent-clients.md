@@ -54,7 +54,9 @@ The inherited `verify_credentials()` calls `connect()` and returns a boolean. Ov
 prove that the configured credentials work. An unreachable or unauthenticated client must not report success.
 Before dispatch, status or removal, the manager connects the current thread when both transport handles are absent.
 It registers application-context teardown to release that thread's connection at the end of the request. Repeated
-operations within one request reuse the handle; startup verification does not connect future request threads.
+operations within one request reuse the handle. Plugin constructors, app creation and `/health` must never contact
+Download Clients. Connectivity belongs to the client/status endpoints and dispatch/removal requests; an unavailable
+client must not prevent Gunicorn from binding or cause the container liveness check to time out.
 The inherited `teardown()` calls `close()` after a web request. Override it only for a documented, thread-isolated
 connection lifecycle. Never close or log out another request's connection.
 

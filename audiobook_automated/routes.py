@@ -114,18 +114,8 @@ def serve_root_asset(filename: str) -> Response | tuple[Response, int]:
 @main_bp.route("/health")
 @talisman(force_https=False)  # type: ignore[untyped-decorator, unused-ignore]
 def health() -> Response | tuple[Response, int]:
-    """Perform application health check.
-
-    Verifies the web appliance is running and responding.
-    Client connectivity is reported for informational purposes but does NOT
-    degrade container health (HTTP 200 is always returned when the app is up).
-
-    Returns:
-        Response: JSON with status details (HTTP 200).
-    """
-    is_connected = torrent_manager.verify_credentials()
-    client_status = "connected" if is_connected else "disconnected"
-    return jsonify({"status": "ok", "app": "healthy", "client": client_status}), 200
+    """Check HTTP availability without contacting Download Clients or the catalog."""
+    return jsonify({"status": "ok", "app": "healthy"}), 200
 
 
 @main_bp.route("/api/clients")

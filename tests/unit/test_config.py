@@ -54,8 +54,8 @@ def test_validate_dl_client_missing(monkeypatch: MonkeyPatch, caplog: LogCapture
     with pytest.raises(ValueError) as exc:
         Config.validate(logging.getLogger("test"))
 
-    assert "DL_CLIENT must be set" in str(exc.value)
-    assert "Configuration Error: DL_CLIENT is missing" in caplog.text
+    assert "Set DL_CLIENT=qbittorrent" in str(exc.value)
+    assert "Choose a Download Client" in caplog.text
 
 
 def test_config_validate_invalid_log_level(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
@@ -421,3 +421,35 @@ def test_proxy_allowlist_validation() -> None:
     assert [str(item) for item in parse_trusted_proxies("10.0.0.5, 2001:db8::/64")] == ["10.0.0.5/32", "2001:db8::/64"]
     with pytest.raises(ValueError, match="TRUSTED_PROXIES"):
         parse_trusted_proxies("*")
+
+
+@pytest.mark.parametrize(
+    ("name", "values", "expected"),
+    [
+        ("qbittorrent", {}, "QBITTORRENT_USERNAME and QBITTORRENT_PASSWORD"),
+        ("qbittorrent", {"USERNAME": "private-user"}, "Set QBITTORRENT_PASSWORD"),
+        ("qbittorrent", {"PASSWORD": "private-secret"}, "Set QBITTORRENT_USERNAME"),
+        ("qbittorrent", {"USERNAME": "private-user", "PASSWORD": "private-secret"}, ""),
+        ("qbittorrent", {"API_KEY": "private-secret"}, ""),
+        ("deluge", {}, "Set DELUGE_PASSWORD"),
+        ("deluge", {"PASSWORD": "private-secret"}, ""),
+        ("putio", {}, "Set PUTIO_TOKEN"),
+        ("putio", {"TOKEN": "private-secret"}, ""),
+        ("transmission", {"USERNAME": "private-user"}, "Set TRANSMISSION_PASSWORD"),
+        ("transmission", {"PASSWORD": "private-secret"}, "Set TRANSMISSION_USERNAME"),
+        ("transmission", {}, ""),
+        ("transmission", {"USERNAME": "private-user", "PASSWORD": "private-secret"}, ""),
+        ("custom_plugin", {}, ""),
+    ],
+)
+def test_client_setup_messages(name: str, values: dict[str, str], expected: str, caplog: LogCaptureFixture) -> None:
+    """Incomplete credentials name the correction without leaking secrets or blocking startup."""
+    from audiobook_automated.config import log_client_setup
+
+    log_client_setup({name: values}, logging.getLogger("test"))
+    if expected:
+        assert expected in caplog.text
+    else:
+        assert not caplog.text
+    assert "private-user" not in caplog.text
+    assert "private-secret" not in caplog.text

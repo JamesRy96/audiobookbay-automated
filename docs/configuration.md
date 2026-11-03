@@ -242,7 +242,10 @@ they cannot guarantee the catalog will never block an IP. If blocked, stop retry
 to expire. Changing mirror names may still reach the same server/IP.
 
 The container health check uses Python and `/health`; curl is not required. It checks the app's HTTP availability,
-not catalog reachability, Download Client connectivity or completed transfers.
+not catalog reachability, Download Client connectivity or completed transfers. Startup also makes no Download Client
+connections. A loaded plugin is not a confirmed connection: open **Status** to check each client. Missing login
+settings produce warnings naming the setting to add, without showing passwords or tokens. After changing settings,
+recreate the app container with `docker compose up -d` from the folder containing your Compose file.
 
 ## Reverse proxy and HTTPS
 

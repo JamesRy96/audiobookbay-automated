@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Start the website and answer health checks without waiting for Download Clients. Explain missing login settings
+  in startup logs without revealing credentials; check actual connectivity through Status.
+
 - Ignore untrusted forwarded headers; optional `TRUSTED_PROXIES` enables one allowlisted proxy hop. Select Secure
   cookies per request and preserve internal HTTP health checks behind an HTTPS public URL.
 
