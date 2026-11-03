@@ -97,14 +97,25 @@ are replaced; it does not substitute page HTML or send live downloads. Port 5090
 `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome` selects an installed Chrome instead of Playwright's bundled Chromium. CI uses
 the bundled browsers. These are development options, not Docker installation settings.
 
-To refresh the README screenshots, start the fixture server in one terminal:
+To refresh README screenshots, run a local app with the default branding and a real catalog connection. Configure
+its proxy and Download Client using the settings in [configuration.md](configuration.md), then run in another terminal:
 
 ~~~shell
-uv run --frozen --all-extras python tests/e2e/server.py
+npm run screenshots
 ~~~
 
-In another terminal, run `npm run screenshots`. Review the resulting `docs/images/` files before committing. The
-screenshots show fictional example books using the default theme, not personal catalog or Download Client data.
+The capture script defaults to `http://127.0.0.1:5078` and a `dune` search. All three images use the same
+1440 × 1100 browser viewport, without content-specific crops, and must have identical computed theme backgrounds.
+It opens Search, a returned Details link and
+Downloads without clicking Download or Remove. It requires decoded covers for every first-row search card and the
+Details artwork; failed image loads must be corrected before using the screenshots.
+
+Optional environment variables are `SCREENSHOT_BASE_URL`, `SCREENSHOT_QUERY`, `SCREENSHOT_DETAILS_LINK` (the app's
+`/details?link=...` URL), and `SCREENSHOT_PROXY` for browser cover requests. The browser proxy bypasses localhost.
+The Python app's proxy settings are separate and must also be configured. `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome`
+selects installed Chrome. Use default branding, review the complete `docs/images/` images, and check that no private
+client information appears before committing. An empty Downloads view is valid when no matching tasks exist; do not
+start a download merely to populate a documentation screenshot. Isolated fixtures remain for browser regression tests.
 
 ## CI and release flow
 
