@@ -1,33 +1,37 @@
 # File: tests/e2e/server.py
-"""Serve actual application pages with isolated integrations for browser tests."""
+"""Serve real application flows, replacing only catalog transport and the qBittorrent SDK."""
 
+import json
 import os
 import signal
 import sys
 from contextlib import ExitStack
-from html import escape
 from pathlib import Path
-from types import FrameType
+from threading import RLock
+from types import FrameType, SimpleNamespace
 from typing import Any
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from flask import Response, jsonify, request
+from flask_wtf.csrf import CSRFError
 
 from audiobook_automated import create_app
-from audiobook_automated.clients.base import TorrentStatus
 from audiobook_automated.config import Config
-from audiobook_automated.extensions import torrent_manager
-from audiobook_automated.scraper.parser import parse_book_details, parse_html
+from audiobook_automated.extensions import csrf
+from audiobook_automated.scraper import core, network
 
 
 class BrowserConfig(Config):
-    """Use normal templates and security without any external connections."""
+    """Use normal controllers/security with isolated external integration boundaries."""
 
     TESTING = False
     DL_CLIENT = "qbittorrent"
     DL_HOST = "127.0.0.1"
+    DL_API_KEY = "isolated-browser-fixture"
+    DL_CATEGORY = "abb-automated"
     SAVE_PATH_BASE = "/downloads/audiobooks"
     FORCE_HTTPS = False
     RATELIMIT_ENABLED = False
@@ -42,87 +46,165 @@ class BrowserConfig(Config):
     ABS_LIB = None
 
 
-TITLES = [
-    "The Clockmaker's Voyage - Mira Sol",
-    "A Long Journey: The Last Map, Book 2 - Owen Vale",
-    "The Last Map",
-    "The Lantern Keeper - Mira Sol",
-    "Across the Silver Sea - Ada Moon",
-    "A Quiet Harbor - Owen Vale",
-]
-BOOKS: list[dict[str, Any]] = [
-    {
-        "title": title,
-        "link": f"/abss/book-{index}/",
-        "cover": f"/e2e/cover/{index}.svg" if index != 2 else None,
-        "category": ["Fantasy", "Adventure"] if index % 2 == 0 else ["Mystery"],
-        "language": "English",
-        "format": "M4B",
-        "bitrate": "128 Kbps",
-        "file_size": "420 MB",
-        "post_date": "14 Oct 2026",
-    }
-    for index, title in enumerate(TITLES)
-]
+CATALOG = Path(__file__).parent / "catalog"
+CAPTURED = json.loads((CATALOG / "captured/manifest.json").read_text())
+lock = RLock()
+jobs: dict[str, Any] = {}
+events: list[dict[str, Any]] = []
+controls = {"fail_add": False}
+csrf_failures: list[str] = []
 
 
-def search_books(query: str, **kwargs: Any) -> list[dict[str, Any]]:
-    """Provide two pages and empty/error states without a catalog request."""
-    if query == "unavailable":
-        raise ConnectionError("Fixture catalog unavailable")
-    if query == "empty" or kwargs.get("start_page", 1) > 2:
-        return []
-    return (
-        BOOKS
-        if kwargs.get("start_page", 1) == 1
-        else [{**BOOKS[0], "title": "The Winter Clock - Ada Moon", "language": "French"}]
-    )
+def reset_state() -> None:
+    """Isolate each browser test without hiding application transport or parsing behavior."""
+    with lock:
+        jobs.clear()
+        jobs["fixture-1"] = SimpleNamespace(
+            hash="fixture-1",
+            name="The Clockmaker's Voyage - Mira Sol",
+            state="downloading",
+            total_size=440401920,
+            progress=0.42,
+            category="abb-automated",
+            save_path="/downloads/audiobooks/existing",
+        )
+        events.clear()
+        csrf_failures.clear()
+        controls["fail_add"] = False
+    with network.CACHE_LOCK:
+        network.search_cache.clear()
+    with core.CACHE_LOCK:
+        network.details_cache.clear()
 
 
-def details(link: str) -> dict[str, Any]:
-    """Exercise the real parser with a metadata header and rich synopsis."""
-    book = next((book for book in BOOKS if book["link"] == link), BOOKS[0])
-    html = f"""<div class="postTitle"><h1>{escape(book["title"])}</h1></div>
-    <div class="desc"><p>Written by <span class="author" itemprop="author">Mira Sol</span><br>
-    Read by <span class="narrator" itemprop="author">Jane Doe, John Smith, full cast</span><br>
-    Format: <span>M4B</span><br>Bitrate: <span>128 Kbps</span></p>
-    <p>A journey through a world of lost clocks and hidden harbors.</p></div>"""
-    parsed = parse_book_details(parse_html(html), link)
-    return {
-        **parsed,
-        **book,
-        "description": parsed["description"],
-        "info_hash": "a" * 40,
-        "trackers": ["udp://tracker.example:80/announce"],
-    }
+class CatalogTransport:
+    """Return catalog-shaped HTML at the HTTP boundary; fail closed on unknown paths."""
+
+    def get(self, url: str, **kwargs: Any) -> Any:
+        """Let the real core and parsers consume catalog responses."""
+        parsed = urlparse(url)
+        if parsed.netloc not in {"catalog.example", "audiobookbay.lu"}:
+            raise AssertionError(f"Unexpected external request: {url}")
+        query = parse_qs(parsed.query).get("s", [""])[0]
+        path = parsed.path
+        status = 200
+        if path.startswith("/page/") or path.startswith("/audio-books/"):
+            page_number = int(path.strip("/").split("/")[-1]) if path.startswith("/page/") else 1
+            if query == "unavailable":
+                status, name = 503, "empty.html"
+            elif query == "recorded-encoded":
+                name = "captured/search-encoded.html" if page_number == 1 else "empty.html"
+            elif query == "recorded-hobbit":
+                name = "captured/search-hobbit.html" if page_number == 1 else "empty.html"
+            elif query == "empty" or page_number > 2:
+                name = "empty.html"
+            elif query == "missing-hash":
+                name = "missing-search.html"
+            else:
+                name = f"search-{page_number}.html"
+        elif path.startswith("/abss/"):
+            captured = next((book for book in CAPTURED["details"] if book["path"] == path), None)
+            name = "captured/" + captured["file"] if captured else path.strip("/").split("/")[-1] + ".html"
+        else:
+            raise AssertionError(f"Unexpected catalog route: {url}")
+        fixture = CATALOG / name
+        response = network.requests.Response()
+        response.url = url
+        response.status_code = status if fixture.is_file() else 404
+        response.encoding = "utf-8"
+        text = fixture.read_text() if fixture.is_file() else "Unknown fixture book"
+        local = f"http://127.0.0.1:{os.environ.get('E2E_PORT', '5090')}"
+        response._content = text.replace("{{COVER_BASE}}", local).encode()  # pyright: ignore[reportPrivateUsage]
+        return response
 
 
+class IsolatedQbitSDK:
+    """Stateful qBittorrent SDK boundary used by the actual manager and client adapter."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Create a request-local handle onto shared isolated client state."""
+        self.app = SimpleNamespace(version="v5.3.0")
+        self._http_session: Any = None
+
+    def torrents_add(self, urls: str, save_path: str, category: str) -> str:
+        """Record the actual extracted magnet and destination, or reject dispatch."""
+        with lock:
+            if controls["fail_add"]:
+                raise ConnectionError("Isolated Download Client rejected the request")
+            parameters = parse_qs(urlparse(urls).query)
+            hash_id = parameters["xt"][0].removeprefix("urn:btih:")
+            if len(hash_id) != 40 or any(c not in "0123456789abcdef" for c in hash_id):
+                raise ValueError("Invalid fixture magnet")
+            name = parameters["dn"][0]
+            jobs[hash_id] = SimpleNamespace(
+                hash=hash_id,
+                name=name,
+                state="metaDL",
+                total_size=-1,
+                progress=0,
+                category=category,
+                save_path=save_path,
+            )
+            events.append(
+                {
+                    "action": "add",
+                    "hash": hash_id,
+                    "name": name,
+                    "magnet": urls,
+                    "save_path": save_path,
+                    "category": category,
+                }
+            )
+            return "Ok."
+
+    def torrents_info(self, category: str) -> list[Any]:
+        """Return the client's real current test state through the adapter."""
+        with lock:
+            return [job for job in jobs.values() if job.category == category]
+
+    def torrents_delete(self, torrent_hashes: str, delete_files: bool) -> None:
+        """Require a known task and record whether removal preserves its files."""
+        with lock:
+            del jobs[torrent_hashes]
+            events.append({"action": "remove", "hash": torrent_hashes, "delete_files": delete_files})
+
+
+reset_state()
 stack = ExitStack()
-client_mocks: list[tuple[str, dict[str, Any]]] = [
-    ("init_app", {"return_value": None}),
-    ("verify_credentials", {"return_value": True}),
-    ("list_clients", {"return_value": ["qbittorrent"]}),
-    (
-        "get_status",
-        {"return_value": [TorrentStatus("fixture-1", TITLES[0], 42, "Downloading", "420 MB", client="qbittorrent")]},
-    ),
-    ("add_magnet", {"return_value": None}),
-    ("remove_torrent", {"return_value": True}),
-]
-for target, options in client_mocks:
-    stack.enter_context(patch.object(torrent_manager, target, **options))
-stack.enter_context(patch("audiobook_automated.routes.search_audiobookbay", side_effect=search_books))
-stack.enter_context(patch("audiobook_automated.routes.get_book_details", side_effect=details))
 stack.enter_context(
-    patch("audiobook_automated.routes.extract_magnet_link", return_value=("magnet:?xt=urn:btih:" + "a" * 40, None))
+    patch("audiobook_automated.scraper.network.find_best_mirror", return_value="https://catalog.example")
 )
 stack.enter_context(
-    patch(
-        "audiobook_automated.scraper.network.get_session",
-        side_effect=AssertionError("External network disabled in browser tests"),
-    )
+    patch("audiobook_automated.scraper.network.get_mirrors", return_value=["catalog.example", "audiobookbay.lu"])
 )
+stack.enter_context(patch("audiobook_automated.scraper.network.get_session", return_value=CatalogTransport()))
+stack.enter_context(patch("audiobook_automated.scraper.core.time.sleep"))
+stack.enter_context(patch("audiobook_automated.clients.qbittorrent.QbClient", side_effect=IsolatedQbitSDK))
 app = create_app(BrowserConfig)
+original_csrf_handler = app.error_handler_spec[None][400][CSRFError]
+
+
+@app.errorhandler(CSRFError)
+def observe_csrf_failure(error: CSRFError) -> Any:
+    """Retain the actual security failure reason without exposing cookies or tokens."""
+    with lock:
+        csrf_failures.append(error.description or "CSRF validation failed")
+    return original_csrf_handler(error)
+
+
+@app.route("/e2e/client", methods=["GET", "POST"])
+@csrf.exempt  # type: ignore[untyped-decorator]
+def fixture_client() -> Response:
+    """Expose isolated effects to tests; this route exists only in the test server."""
+    if request.method == "POST":
+        data = request.get_json() or {}
+        if data.get("reset"):
+            reset_state()
+        with lock:
+            if "fail_add" in data:
+                controls["fail_add"] = bool(data["fail_add"])
+    with lock:
+        return jsonify(events=events, torrents=[vars(job) for job in jobs.values()], csrf_failures=csrf_failures)
 
 
 @app.before_request
@@ -154,8 +236,6 @@ def diagnostics_fixture() -> Response | None:
         )
     if request.path == "/api/diagnostics/logs":
         return jsonify(logs=["[INFO] Browser fixture ready."])
-    if request.path == "/api/diagnostics/inspect":
-        return jsonify(book=details(BOOKS[0]["link"]))
     return None
 
 

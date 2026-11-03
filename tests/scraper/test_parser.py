@@ -694,3 +694,24 @@ def test_description_unknown_structured_credit_is_retained() -> None:
     soup = BeautifulSoup("<div><p>Read by Jane Doe</p><p>Synopsis.</p></div>", "html.parser").div
     assert isinstance(soup, Tag)
     assert "Read by Jane Doe" in _sanitize_description(soup, BookMetadata())
+
+
+def test_captured_encoded_catalog_posts() -> None:
+    """All nine listings shown by the real mirror must survive five encoded posts."""
+    from audiobook_automated.scraper.parser import parse_html, parse_search_results
+
+    source = Path(__file__).parents[1] / "e2e/catalog/captured/search-encoded.html"
+    books = parse_search_results(parse_html(source.read_text()), "https://audiobookbay.lu")
+    assert len(books) == 9
+    assert any(book["title"] == "Rose Gardner Investigations Series - Denise Grover Swank" for book in books)
+
+
+def test_invalid_encoded_posts_preserve_other_results() -> None:
+    """Invalid base64 and non-UTF-8 payloads must not discard valid neighboring books."""
+    from audiobook_automated.scraper.parser import parse_html, parse_search_results
+
+    html = """<div class="post re-ab">not!base64</div><div class="post re-ab">/w==</div><div class="post re-ab">é</div>
+    <div class="post"><div class="postTitle"><h2><a href="/abss/plain/">Plain book</a></h2></div>
+    <div class="postContent"><p>Format: MP3</p></div></div>"""
+    books = parse_search_results(parse_html(html), "https://audiobookbay.lu")
+    assert [book["title"] for book in books] == ["Plain book"]

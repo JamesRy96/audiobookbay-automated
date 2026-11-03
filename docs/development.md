@@ -109,7 +109,8 @@ screenshots show fictional example books using the default theme, not personal c
 ## CI and release flow
 
 - **CI** runs formatting/types, both Python versions, Jest, real-template browser tests, and a Docker build/HTTP smoke test.
-- **Browser tests** is a reusable workflow called by CI, so it does not produce a second independent run for every push.
+- **Browser tests** is called by CI and can also be run manually from Actions. It does not create a duplicate run on
+  every push.
 - **Create Release** is a manual workflow. It validates the version and default branch, runs CI on that commit, calls
   the image publishing workflow, then creates the GitHub tag and release for the checked commit.
 - **Build test image** publishes separate test tags from a chosen source ref, without creating a release.

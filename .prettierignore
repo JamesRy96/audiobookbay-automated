@@ -1,3 +1,6 @@
 # File: .prettierignore
 # Markdown uses markdownlint to preserve tilde code fences.
 **/*.md
+
+# Preserve captured catalog whitespace and irregular markup as parser inputs.
+tests/e2e/catalog/captured/

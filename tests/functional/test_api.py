@@ -911,3 +911,16 @@ def test_send_catalog_relative_search_link(client: FlaskClient, link: str) -> No
         details.assert_called_once_with(link)
         magnet.assert_called_once_with(link)
         manager.add_magnet.assert_called_once()
+
+
+@pytest.mark.parametrize("url", ["/static/css/style.css", "/api/search?query=a", "/api/clients", "/health"])
+def test_background_response_does_not_delete_page_session(url: str) -> None:
+    """A late cookie-less resource must not erase the page's valid CSRF session."""
+    app = create_app(SessionConfig)
+    page = app.test_client()
+    token = page_token(page)
+    background = app.test_client(use_cookies=False)
+    response = background.get(url)
+    assert response.status_code == 200
+    assert "Set-Cookie" not in response.headers
+    assert page.post("/delete", json={"id": "absent"}, headers={"X-CSRFToken": token}).status_code == 404

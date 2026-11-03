@@ -1,5 +1,5 @@
 // File: tests/e2e/layout.spec.ts
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("navigation and metadata align using the actual templates", async ({ page }) => {
     const errors: string[] = [];

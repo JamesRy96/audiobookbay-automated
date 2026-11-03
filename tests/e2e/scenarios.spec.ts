@@ -1,5 +1,5 @@
 // File: tests/e2e/scenarios.spec.ts
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("search, narrow loaded results, inspect details and send to the isolated client", async ({ page }) => {
     await page.goto("/");
@@ -66,7 +66,7 @@ test("status and diagnostics expose usable live controls", async ({ page }) => {
     }
 });
 
-test("an expired page explains how to recover without sending a download", async ({ page }) => {
+test("an expired page explains how to recover without sending a download", async ({ page, request }) => {
     await page.goto("/?query=voyage");
     await page
         .locator('meta[name="csrf-token"]')
@@ -75,6 +75,7 @@ test("an expired page explains how to recover without sending a download", async
     await download.click();
     await expect(page.locator(".toast")).toContainText("Page expired. Refresh and try again.");
     await expect(download).toBeEnabled();
+    expect((await (await request.get("/e2e/client")).json()).events).toHaveLength(0);
     await page.reload();
     await page.locator(".send-torrent-btn").first().click();
     await expect(page.locator(".toast")).toContainText("Sent to your Download Client");
@@ -117,7 +118,7 @@ test("a slow next page has a single loading row and no duplicate loading button"
 });
 
 for (const mode of ["grid", "list"]) {
-    test(`Download accepts relative links from initial and appended ${mode} results`, async ({ page }) => {
+    test(`Download accepts relative links from initial and appended ${mode} results`, async ({ page, request }) => {
         await page.goto("/?query=voyage");
         await page.locator(`#view-${mode}-btn`).click();
         const first = page.locator(".send-torrent-btn").first();
@@ -130,6 +131,15 @@ for (const mode of ["grid", "list"]) {
         const initial = await initialResponse;
         expect(initial.status()).toBe(200);
         expect(initial.request().postDataJSON().link).toBe(initialLink);
+        let state = await (await request.get("/e2e/client")).json();
+        expect(state.events).toHaveLength(1);
+        expect(state.events[0]).toMatchObject({
+            action: "add",
+            hash: "1".repeat(40),
+            name: "The Clockmaker's Voyage - Mira Sol",
+            category: "abb-automated",
+            save_path: "/downloads/audiobooks/The Clockmaker's Voyage - Mira Sol",
+        });
         await expect(page.locator(".toast").last()).toContainText("Sent to your Download Client");
         await page.locator("#load-more-indicator").scrollIntoViewIfNeeded();
         await expect(page.locator(".result-row")).toHaveCount(7);
@@ -140,5 +150,13 @@ for (const mode of ["grid", "list"]) {
         );
         await appended.click();
         expect((await appendedResponse).status()).toBe(200);
+        state = await (await request.get("/e2e/client")).json();
+        expect(state.events).toHaveLength(2);
+        expect(state.events[1]).toMatchObject({
+            action: "add",
+            hash: "7".repeat(40),
+            name: "The Winter Clock - Ada Moon",
+        });
+        expect(state.torrents.some((job: any) => job.hash === "7".repeat(40))).toBe(true);
     });
 }

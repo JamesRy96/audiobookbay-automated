@@ -2,6 +2,7 @@
 name: Browser tests
 on:
   workflow_call:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

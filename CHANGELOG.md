@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Captured catalog HTML and stateful browser contract tests through the real parser, magnet extraction and client
+  adapter; assert task identity, dispatch/removal effects and error recovery. Browser tests can also run manually.
+
 - Manual branch/tag/commit test-image builds with separate GHCR tags and copyable image references.
 
 - Shared search filters, session-scoped recent searches, explicit pagination retry/end states, and recognizable
@@ -73,6 +76,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`pre-commit`, `mypy`, `pytest`) are available on all runners.
 
 ### Fixed
+
+- Decode catalog `post re-ab` listings so JavaScript-revealed books are included without additional requests.
+- Stop cookie-less background responses from deleting an existing page session and invalidating CSRF tokens.
 
 - Accept catalog-relative book links when downloading from search results, including newly loaded grid/list cards.
 

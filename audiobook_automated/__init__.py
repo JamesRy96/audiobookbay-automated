@@ -6,7 +6,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, jsonify, request, session
+from flask import Flask, Response, jsonify, request
 from flask_wtf.csrf import CSRFError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -132,15 +132,6 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         """Add Cache-Control headers to static files."""
         if request.path.startswith("/static"):
             response.headers["Cache-Control"] = "public, max-age=31536000"
-        return response
-
-    # Inject the CSRF cookie on every response so the JS token is always present.
-    # Addresses browsers that do not send cookies on first request (e.g. direct IP access).
-    @app.after_request
-    def ensure_session_cookie(response: Response) -> Response:  # pyright: ignore[reportUnusedFunction]
-        """Ensure session cookie is set if missing."""
-        if not request.cookies.get(app.config["SESSION_COOKIE_NAME"]):
-            session.modified = True
         return response
 
     # ProxyFix for Docker/Ingress
