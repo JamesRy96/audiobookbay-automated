@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
+import pytest
 import requests
 import requests_mock
 
@@ -385,8 +386,8 @@ def test_fetch_page_timeout(mock_sleep: Any) -> None:
 
     with patch("audiobook_automated.scraper.core.network.get_session", return_value=session):
         with patch("audiobook_automated.scraper.core.network.get_semaphore"):
-            results = fetch_and_parse_page(hostname, query, page, user_agent, 30)
-            assert results == []
+            with pytest.raises(requests.Timeout):
+                fetch_and_parse_page(hostname, query, page, user_agent, 30)
 
 
 def test_fetch_and_parse_page_consistency_checks(mock_sleep: Any) -> None:
@@ -454,7 +455,5 @@ def test_fetch_page_connection_error(mock_sleep: Any) -> None:
 
     with patch("audiobook_automated.scraper.core.network.get_session", return_value=mock_session):
         with patch("audiobook_automated.scraper.core.network.get_semaphore"):
-            # Should catch exception and return empty list
-            results = fetch_and_parse_page(hostname, query, page, "ua", 30)
-
-    assert results == []
+            with pytest.raises(requests.ConnectionError):
+                fetch_and_parse_page(hostname, query, page, "ua", 30)

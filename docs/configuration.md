@@ -24,14 +24,17 @@ Enable its web interface, then use its address, port, username and password. The
 
 ### Transmission
 
-Enable remote/web access and use `DL_CLIENT=transmission`. The usual port is `9091`.
-Its access rules must allow connections from the app's container or server.
+Use Transmission 4.x with remote/web access enabled and `DL_CLIENT=transmission`. The usual port is `9091`.
+Its access rules must allow connections from the app's container or server. Labels keep app downloads visible in
+Downloads; a rejected label is an error rather than a second, unlabelled dispatch.
 
 ### Deluge
 
 Enable Deluge Web, use `DL_CLIENT=deluge`, and set `DL_PORT=8112` unless you changed it.
 `DL_PASSWORD` is your Deluge Web password. Enable the **Label** plugin for category-based organization.
-Without it, Deluge may show downloads outside this app's category.
+Without it, Deluge may show downloads outside this app's category. Use a Deluge 2.x daemon connected to the Web UI.
+For a reverse-proxy path, set `DL_URL=https://downloads.example/deluge/`; the SDK adds `/json` automatically.
+The app requests new transfers unpaused, but queue limits, missing peers and daemon settings can still delay progress.
 
 ### Put.io
 
@@ -125,7 +128,7 @@ a response code alone does not prove that a mirror serves the catalog.
 | `ABB_MIRRORS` | Optional comma-separated additional mirrors |
 | `ABB_MIRRORS_REMOTE_URL` | Optional source for an additional mirror list |
 | `LOG_LEVEL` | `INFO`; use `DEBUG` only while investigating a problem |
-| `LISTEN_HOST`, `LISTEN_PORT` | `0.0.0.0`, `5078`; app listening address/port |
+| `LISTEN_HOST`, `LISTEN_PORT` | Container detects IPv6 (`[::]`) or IPv4 (`0.0.0.0`); port `5078` |
 | `THREADS` | `8`; keep the container's single Gunicorn worker |
 | `SCRAPER_THREADS` | `3`; bounded concurrent catalog requests |
 | `SCRAPER_TIMEOUT` | `30` seconds |
@@ -143,6 +146,19 @@ NO_PROXY=localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 
 Configure the Download Client's network separately; sending it a magnet link does not change how it connects.
 
+If the app shares Gluetun's network with `network_mode: service:gluetun`, publish the app's port on the Gluetun service.
+Omit the app's `ports` key entirely; an empty `ports:` value is invalid Compose. When the Download Client shares that
+same network, use `DL_HOST=127.0.0.1` and its actual Web UI port. A separate client needs an address reachable from
+the app's network. Unraid users should enter the documented `DL_CLIENT=qbittorrent` setting; `DOWNLOAD_CLIENT` is
+not an app setting.
+
+Search loads one catalog page at a time, with request delays and bounded concurrency. These controls reduce traffic;
+they cannot guarantee the catalog will never block an IP. If blocked, stop retrying and allow the site's restriction
+to expire. Changing mirror names may still reach the same server/IP.
+
+The container health check uses Python and `/health`; curl is not required. It checks the app's HTTP availability,
+not catalog reachability, Download Client connectivity or completed transfers.
+
 ## Custom trackers
 
 `MAGNET_TRACKERS` accepts a comma-separated list of tracker URLs. Alternatively, mount a JSON file at
@@ -157,3 +173,6 @@ was already open before using Download, Remove or library scan controls.
 For advanced setups that need open pages to remain valid across restarts, optionally set `SECRET_KEY` to a long random
 value (at least 32 letters/numbers) and keep it private and unchanged. Leave it unset for normal installation.
 A fixed key preserves signing continuity; it does not disable token expiry or other request checks.
+
+If freshly opened pages repeatedly show a page-expired message, check that the app server's clock is synchronized.
+A clock moving backward can invalidate a newly signed session. Refresh after correcting the server time.

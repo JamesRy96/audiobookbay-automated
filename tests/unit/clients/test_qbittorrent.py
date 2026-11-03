@@ -243,8 +243,9 @@ def test_qbittorrent_api_key_auth(app: Flask) -> None:
         client.connect()
         assert client.api_key == "test_api_key"
         MockQbClient.assert_called_with(
-            host="localhost",
+            host="http://localhost",
             port=8080,
+            FORCE_SCHEME_FROM_HOST=True,
             username="meek2100",
             api_key="test_api_key",
             REQUESTS_ARGS={"timeout": 30},
@@ -267,8 +268,9 @@ def test_qbittorrent_password_prefixed_api_key(app: Flask) -> None:
         client.connect()
         assert client.api_key == "qbt_abc123key"
         MockQbClient.assert_called_with(
-            host="localhost",
+            host="http://localhost",
             port=8080,
+            FORCE_SCHEME_FROM_HOST=True,
             username="meek2100",
             api_key="qbt_abc123key",
             REQUESTS_ARGS={"timeout": 30},
@@ -362,3 +364,51 @@ def test_qbittorrent_stopped_and_pending_metadata(raw_state: str, raw_size: int,
     status = client.get_status("audit")[0]
     assert status.state == "Paused"
     assert status.size == expected_size
+
+
+def test_qbittorrent_real_sdk_https_contract() -> None:
+    """Honor HTTPS and exercise real SDK add/list/delete API parameters."""
+    from urllib.parse import parse_qs
+
+    import requests_mock
+
+    info_hash = "c" * 40
+    base = "https://client.example:8443/api/v2"
+    with requests_mock.Mocker() as mock:
+        mock.get(base + "/app/version", text="v5.3.0")
+        mock.get(base + "/app/webapiVersion", text="2.14.1")
+        mock.post(base + "/torrents/add", text="Ok.")
+        mock.post(
+            base + "/torrents/info",
+            json=[
+                {
+                    "hash": info_hash,
+                    "name": "Public-domain book",
+                    "progress": 0.425,
+                    "state": "downloading",
+                    "total_size": 1024,
+                }
+            ],
+        )
+        mock.post(base + "/torrents/delete", text="")
+        client = QBittorrentClient(
+            "client.example", 8443, None, None, scheme="https", timeout=7, api_key="test-api-key"
+        )
+        client.connect()
+        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, "/downloads/book", "books")
+        add = mock.last_request
+        assert add is not None
+        assert parse_qs(add.text) == {
+            "urls": ["magnet:?xt=urn:btih:" + info_hash],
+            "savepath": ["/downloads/book"],
+            "category": ["books"],
+        }
+        status = client.get_status("books")
+        assert mock.last_request is not None
+        assert parse_qs(mock.last_request.text)["category"] == ["books"]
+        client.remove_torrent(info_hash)
+        assert mock.last_request is not None
+        removal = parse_qs(mock.last_request.text)
+        assert removal == {"hashes": [info_hash], "deleteFiles": ["False"]}
+        client.close()
+    assert status[0].progress == 42.5

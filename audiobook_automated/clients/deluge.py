@@ -2,6 +2,7 @@
 """Download client plugin for Deluge."""
 
 import logging
+import threading
 from typing import Any, override
 
 from deluge_web_client import DelugeWebClient
@@ -12,6 +13,14 @@ from audiobook_automated.utils import format_size
 from .base import TorrentClientPlugin, TorrentStatus
 
 logger = logging.getLogger(__name__)
+
+
+class _DelugeState(threading.local):
+    """Keep daemon plugin observations with the request's connection."""
+
+    def __init__(self) -> None:
+        """Start each thread without a daemon plugin observation."""
+        self.label_plugin_enabled = False
 
 
 class DelugeClient(TorrentClientPlugin):
@@ -30,7 +39,16 @@ class DelugeClient(TorrentClientPlugin):
         super().__init__(*args, **kwargs)
         self.dl_url = dl_url
         self.client: DelugeWebClient | None = None
-        self.label_plugin_enabled: bool = False
+        self._deluge_state = _DelugeState()
+
+    @property
+    def label_plugin_enabled(self) -> bool:
+        """Return Label support for this request's daemon connection."""
+        return self._deluge_state.label_plugin_enabled
+
+    @label_plugin_enabled.setter
+    def label_plugin_enabled(self, enabled: bool) -> None:
+        self._deluge_state.label_plugin_enabled = enabled
 
     @override
     def connect(self) -> None:
@@ -40,7 +58,7 @@ class DelugeClient(TorrentClientPlugin):
         self.client = DelugeWebClient(url=url, password=self.password or "")
 
         # Check login result
-        response = self.client.login()
+        response = self.client.login(timeout=self.timeout)
         # Explicitly check for RPC errors as the client might not raise them automatically
         if response.error:
             # Raise exception so TorrentManager knows connection failed and can retry/log
@@ -48,10 +66,11 @@ class DelugeClient(TorrentClientPlugin):
 
         # Detect Plugins (Specifically 'Label')
         try:
-            plugins_resp = self.client.get_plugins()
-            # Narrow the type: verify it is a list or dict before checking for membership
-            # plugins_resp itself might be None if the client returns unexpected data
-            if plugins_resp and isinstance(plugins_resp.result, (list, dict)) and "Label" in plugins_resp.result:
+            plugins_resp = self.client.execute_call(
+                {"method": "core.get_enabled_plugins", "params": []}, timeout=self.timeout
+            )
+            # The daemon list, unlike web.get_plugins, describes actual core Label support.
+            if plugins_resp and isinstance(plugins_resp.result, list) and "Label" in plugins_resp.result:
                 self.label_plugin_enabled = True
                 logger.info("Deluge 'Label' plugin detected.")
             else:
@@ -64,8 +83,12 @@ class DelugeClient(TorrentClientPlugin):
     @override
     def close(self) -> None:
         """Close the Deluge client session."""
-        # DelugeWebClient doesn't hold a persistent socket, just release the object
-        self.client = None
+        try:
+            if self.client:
+                self.client.close_session()
+        finally:
+            self.client = None
+            self.label_plugin_enabled = False
 
     @override
     def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
@@ -73,39 +96,20 @@ class DelugeClient(TorrentClientPlugin):
         if not self.client:
             raise ConnectionError("Deluge client not connected")
 
-        # Configure options based on plugin availability
-        if self.label_plugin_enabled:
-            options = TorrentOptions(download_location=save_path, label=category)
-        else:
-            options = TorrentOptions(download_location=save_path)
-
-        try:
-            self.client.add_torrent_magnet(magnet_link, torrent_options=options)
-        except Exception as e:
-            # Fallback: If we tried with a label and it failed, retry without it
-            # This handles cases where detection gave a false positive or transient error
-            error_msg = str(e).lower()
-            if self.label_plugin_enabled and ("label" in error_msg or "unknown parameter" in error_msg):
-                logger.warning(
-                    f"Deluge Label error despite plugin detection ({e}). "
-                    "Downgrading to label-less download for this torrent."
-                )
-                try:
-                    fallback_options = TorrentOptions(download_location=save_path)
-                    self.client.add_torrent_magnet(magnet_link, torrent_options=fallback_options)
-                    return
-                except Exception as e2:  # pragma: no cover
-                    logger.error(f"Deluge fallback failed: {e2}", exc_info=True)
-                    raise e2
-
-            raise
+        options = TorrentOptions(
+            download_location=save_path,
+            label=category if self.label_plugin_enabled else None,
+            add_paused=False,
+        )
+        # Label errors can occur after acceptance; never blindly submit a second add.
+        self.client.add_torrent_magnet(magnet_link, torrent_options=options, timeout=self.timeout)
 
     @override
     def remove_torrent(self, torrent_id: str) -> None:
         """Remove a torrent from Deluge."""
         if not self.client:  # pragma: no cover
             raise ConnectionError("Deluge client not connected")
-        self.client.remove_torrent(torrent_id, remove_data=False)
+        self.client.remove_torrent(torrent_id, remove_data=False, timeout=self.timeout)
 
     @override
     def get_status(self, category: str) -> list[TorrentStatus]:
@@ -125,6 +129,7 @@ class DelugeClient(TorrentClientPlugin):
         deluge_torrents = self.client.get_torrents_status(
             filter_dict=filter_dict,
             keys=["name", "state", "progress", "total_size"],
+            timeout=self.timeout,
         )
 
         if deluge_torrents.result is not None:

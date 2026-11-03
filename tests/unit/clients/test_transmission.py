@@ -25,37 +25,19 @@ def test_transmission_add_magnet(app: Flask) -> None:
         client.add_magnet("magnet:?xt=urn:btih:DEF", "/downloads/Book", "audiobooks")
 
         mock_instance.add_torrent.assert_called_with(
-            "magnet:?xt=urn:btih:DEF", download_dir="/downloads/Book", labels=["audiobooks"]
+            "magnet:?xt=urn:btih:DEF", download_dir="/downloads/Book", labels=["audiobooks"], paused=False
         )
 
 
-def test_transmission_add_magnet_fallback(app: Flask) -> None:
-    """Test Transmission fallback for older versions without labels."""
-    with (
-        patch("audiobook_automated.clients.transmission.TxClient") as MockTxClient,
-        app.app_context(),
-    ):
-        from flask import current_app
-
-        current_app.config["CLIENT_TIMEOUT"] = 30
-        mock_instance = MockTxClient.return_value
-        # Simulate label error on first call
-        mock_instance.add_torrent.side_effect = [
-            Exception("Invalid argument: labels"),
-            None,  # Success on second call
-        ]
-
-        client = TransmissionClient("localhost", 9091, "admin", "admin")
+def test_transmission_label_rejection_does_not_dispatch_an_untracked_task() -> None:
+    """Do not retry without labels after a server rejects the requested options."""
+    with patch("audiobook_automated.clients.transmission.TxClient") as sdk:
+        sdk.return_value.add_torrent.side_effect = RuntimeError("Invalid argument: labels")
+        client = TransmissionClient("localhost", 9091, None, None)
         client.connect()
-        client.add_magnet("magnet:?xt=urn:btih:DEF", "/downloads/Book", "audiobooks")
-
-        assert mock_instance.add_torrent.call_count == 2
-        # First call has labels
-        mock_instance.add_torrent.assert_any_call(
-            "magnet:?xt=urn:btih:DEF", download_dir="/downloads/Book", labels=["audiobooks"]
-        )
-        # Second call has NO labels
-        mock_instance.add_torrent.assert_any_call("magnet:?xt=urn:btih:DEF", download_dir="/downloads/Book")
+        with pytest.raises(RuntimeError, match="labels"):
+            client.add_magnet("magnet:?xt=urn:btih:" + "a" * 40, "/downloads/book", "books")
+        sdk.return_value.add_torrent.assert_called_once()
 
 
 def test_transmission_add_magnet_generic_error(app: Flask) -> None:
@@ -249,3 +231,71 @@ def test_transmission_not_connected() -> None:
 
     with pytest.raises(ConnectionError, match="Transmission client not connected"):
         client.get_status("cat")
+
+
+def test_transmission_closes_http_session() -> None:
+    """Releasing a request must close the SDK's connection pool."""
+    client = TransmissionClient("localhost", 9091, None, None)
+    sdk = MagicMock()
+    client.client = sdk
+    client.close()
+    client.close()
+    sdk._http_session.close.assert_called_once()
+    assert client.client is None
+
+
+def test_transmission_real_sdk_rpc_contract() -> None:
+    """Validate SDK session negotiation, dispatch, labels and file-preserving removal."""
+    from typing import Any
+
+    import requests_mock
+
+    calls: list[dict[str, Any]] = []
+    info_hash = "b" * 40
+
+    def rpc(request: Any, context: Any) -> dict[str, Any]:
+        """Emulate only the remote RPC transport using official response shapes."""
+        payload = request.json()
+        calls.append(payload)
+        context.headers["X-Transmission-Session-Id"] = "isolated-session"
+        if len(calls) == 1:
+            context.status_code = 409
+            return {}
+        assert request.headers["X-Transmission-Session-Id"] == "isolated-session"
+        method = payload["method"]
+        results = {
+            "session-get": {"version": "4.0.6", "rpc-version": 17, "rpc-version-minimum": 1},
+            "torrent-add": {"torrent-added": {"id": 7, "hashString": info_hash, "name": "Public-domain book"}},
+            "torrent-get": {
+                "torrents": [
+                    {
+                        "id": 7,
+                        "name": "Public-domain book",
+                        "percentDone": 0.425,
+                        "status": 4,
+                        "totalSize": 1024,
+                        "labels": ["books"],
+                    }
+                ]
+            },
+            "torrent-remove": {},
+        }
+        assert method in results
+        return {"result": "success", "arguments": results[method]}
+
+    with requests_mock.Mocker() as mock:
+        mock.post("http://localhost:9091/transmission/rpc", json=rpc)
+        client = TransmissionClient("localhost", 9091, None, None, timeout=7)
+        client.connect()
+        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, "/downloads/book", "books")
+        status = client.get_status("books")
+        client.remove_torrent("7")
+        client.close()
+    assert status[0].progress == 42.5
+    assert status[0].state == "Downloading"
+    add = next(call for call in calls if call["method"] == "torrent-add")
+    assert add["arguments"]["filename"] == "magnet:?xt=urn:btih:" + info_hash
+    assert add["arguments"]["download-dir"] == "/downloads/book"
+    assert add["arguments"]["labels"] == ["books"]
+    assert add["arguments"]["paused"] is False
+    assert calls[-1]["arguments"] == {"ids": [7], "delete-local-data": False}

@@ -10,7 +10,8 @@ import pytest
 
 
 @pytest.mark.skipif(os.name == "nt" or shutil.which("sh") is None, reason="The container entrypoint uses a POSIX shell")
-def test_entrypoint_keeps_one_worker_and_does_not_change_download_folder(tmp_path: Path) -> None:
+@pytest.mark.parametrize("host,port", [("0.0.0.0", "5078"), ("[::]", "5088"), ("127.0.0.1", "5099")])
+def test_entrypoint_keeps_one_worker_and_does_not_change_download_folder(tmp_path: Path, host: str, port: str) -> None:
     """Preserve the client's directory ownership and the single-worker invariant."""
     commands = tmp_path / "bin"
     commands.mkdir()
@@ -31,8 +32,8 @@ def test_entrypoint_keeps_one_worker_and_does_not_change_download_folder(tmp_pat
     environment = {
         **os.environ,
         "PATH": str(commands) + os.pathsep + os.environ["PATH"],
-        "LISTEN_HOST": "0.0.0.0",
-        "LISTEN_PORT": "5078",
+        "LISTEN_HOST": host,
+        "LISTEN_PORT": port,
         "THREADS": "8",
         "SAVE_PATH_BASE": str(destination),
         "ENTRYPOINT_ARGS": str(recorded),
@@ -41,6 +42,7 @@ def test_entrypoint_keeps_one_worker_and_does_not_change_download_folder(tmp_pat
     script = Path(__file__).resolve().parents[2] / "entrypoint.sh"
     subprocess.run(["sh", str(script), "--workers", "3"], env=environment, check=True, capture_output=True)
     arguments = recorded.read_text().splitlines()
+    assert arguments[arguments.index("--bind") + 1] == f"{host}:{port}"
     assert arguments.count("--workers") == 1
     assert arguments[arguments.index("--workers") + 1] == "1"
     assert arguments[arguments.index("--threads") + 1] == "8"

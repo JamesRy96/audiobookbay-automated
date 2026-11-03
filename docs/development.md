@@ -97,6 +97,10 @@ are replaced; it does not substitute page HTML or send live downloads. Port 5090
 `PLAYWRIGHT_CHROMIUM_CHANNEL=chrome` selects an installed Chrome instead of Playwright's bundled Chromium. CI uses
 the bundled browsers. These are development options, not Docker installation settings.
 
+The isolated fixture uses a monotonic advancing signing clock so VM clock corrections cannot invalidate freshly
+created test sessions. It retains real CSRF/session checks; production signing behavior is unchanged. Failed runs
+record security failure reasons without cookie or token values.
+
 To refresh README screenshots, run a local app with the default branding and a real catalog connection. Configure
 its proxy and Download Client using the settings in [configuration.md](configuration.md), then run in another terminal:
 
@@ -116,6 +120,9 @@ The Python app's proxy settings are separate and must also be configured. `PLAYW
 selects installed Chrome. Use default branding, review the complete `docs/images/` images, and check that no private
 client information appears before committing. An empty Downloads view is valid when no matching tasks exist; do not
 start a download merely to populate a documentation screenshot. Isolated fixtures remain for browser regression tests.
+
+For the upstream issue inventory, client API references and verification limits, see the
+[November 2026 upstream review](agents/upstream-review-2026-11-03.md).
 
 ## CI and release flow
 

@@ -141,3 +141,25 @@ test("a late cookie-less background response cannot invalidate Download", async 
     await expect(page.locator(".toast")).toContainText("Sent to your Download Client");
     expect((await (await request.get("/e2e/client")).json()).events).toHaveLength(1);
 });
+
+test("different books dispatch independently without dismissing a notification", async ({ page, request }) => {
+    let count = 0;
+    const bothRequested = Promise.withResolvers<void>();
+    await page.route("**/send", async (route) => {
+        count++;
+        if (count === 1) await bothRequested.promise;
+        else bothRequested.resolve();
+        await route.continue();
+    });
+    await page.goto("/?query=voyage");
+    const buttons = page.locator(".send-torrent-btn");
+    await buttons.nth(0).click();
+    await expect(buttons.nth(0)).toBeDisabled();
+    await expect(buttons.nth(1)).toBeEnabled();
+    await buttons.nth(1).click();
+    await expect.poll(async () => (await (await request.get("/e2e/client")).json()).events.length).toBe(2);
+    const state = await (await request.get("/e2e/client")).json();
+    expect(state.events.map((event: any) => event.hash).sort()).toEqual(["1".repeat(40), "2".repeat(40)]);
+    expect(count).toBe(2);
+    await expect(page.locator("#confirmation-modal")).toBeHidden();
+});

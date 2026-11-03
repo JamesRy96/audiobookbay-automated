@@ -4,6 +4,7 @@
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from flask import Flask
 
 from audiobook_automated.scraper.core import search_audiobookbay
@@ -92,6 +93,5 @@ def test_search_pipeline_network_error(app: Flask) -> None:
     """Test search pipeline with network error."""
     with patch("audiobook_automated.scraper.core.network.find_best_mirror", return_value="m"):
         with patch("audiobook_automated.scraper.core.fetch_page_results", side_effect=Exception("Net")):
-            res = search_audiobookbay("q", 1)
-            # Should catch exception and log
-            assert res == []
+            with pytest.raises(ConnectionError, match="Net"):
+                search_audiobookbay("q", 1)

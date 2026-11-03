@@ -27,6 +27,7 @@ arguments so the common constructor works for every client, and call `super().__
 If a client needs a new setting, add a typed parser in `Config`, pass its value through the common construction path,
 and document it in the configuration guide and settings example. An arbitrary new `.env` name is not automatically
 forwarded to plugins. Keep client-specific API behavior in the plugin, not in `TorrentManager` or Flask routes.
+The common construction path also forwards the optional Deluge `dl_url` override.
 
 `DL_CLIENTS` can enable several clients. They currently share the host, credentials and common connection settings;
 an unset port permits each plugin's default. Different hosts/credentials require separate app instances.
@@ -110,3 +111,27 @@ update the supported-client list, setup notes and changelog once the integration
 
 The success message should say the book was sent to the Download Client. An optional Audiobookshelf scan does not
 prove that a file has been downloaded or imported into that library.
+
+## API references and compatibility evidence
+
+Review these primary sources when changing an adapter, and validate serialization through the real installed SDK
+at its HTTP boundary. A mock accepting a Python method call does not establish the remote API contract.
+
+| Client | Primary API reference | Contract to preserve |
+| --- | --- | --- |
+| qBittorrent | [Web API 5.x](https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-%28qBittorrent-5.0%29), [API keys](https://github.com/qbittorrent/qBittorrent/wiki/API-Key-Authentication-%28%E2%89%A5v5.2.0%29) | `urls`, `savepath`, category; fractional progress; delete with `deleteFiles=false`; configured HTTP/HTTPS |
+| Transmission | [4.0.6 RPC](https://github.com/transmission/transmission/blob/4.0.6/docs/rpc-spec.md), [current RPC](https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md) | Session-ID negotiation; labels; destination; percentage conversion; removal without local data |
+| Deluge | [2.x Web JSON-RPC](https://deluge.readthedocs.io/en/deluge-2.0.5/reference/webapi.html), [core RPC](https://deluge.readthedocs.io/en/deluge-2.0.5/reference/api.html) | Magnet plus options; daemon `core.get_enabled_plugins`; Label assignment; `remove_data=false` |
+| Put.io | [API](https://api.put.io/v2/docs), [vendor transfer implementation](https://github.com/putdotio/go-putio/blob/master/transfers.go) | Bearer authentication; form `url`/`save_parent_id`; `percent_done`; transfer cancellation without file deletion |
+
+Transmission 4.1 introduces JSON-RPC 2.0 and snake_case, while its specification retains the older protocol within
+Transmission 4. The pinned Python SDK currently uses that older protocol; do not claim compatibility with a future
+server that removes it. Keep protocol upgrades in the adapter/SDK rather than adding URL/field aliases in UI code.
+
+Deluge's `web.get_plugins` reports Web UI plugins, not the daemon's enabled plugins. Query the core list for Label
+support. Store that observation per thread, pass `CLIENT_TIMEOUT` to every SDK request, and close the SDK session
+without disconnecting other Web UI users from their daemon.
+
+Put.io's HTML API guide was not retrievable during the November 3, 2026 review; the vendor-maintained transfer client
+provided the endpoint and form-field reference. HTTP-boundary tests are not substitutes for a live account test.
+See [the upstream review](upstream-review-2026-11-03.md) for the issue inventory and remaining live-verification limits.

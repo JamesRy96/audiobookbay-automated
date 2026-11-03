@@ -431,3 +431,14 @@ def test_manager_registers_request_cleanup() -> None:
     with isolated.app_context():
         pass
     plugin.teardown.assert_called_once()
+
+
+def test_manager_passes_deluge_url(app: Flask) -> None:
+    """A documented reverse-proxy URL must reach the Deluge adapter."""
+    from audiobook_automated.clients.deluge import DelugeClient
+
+    app.config.update(DL_CLIENT="deluge", DL_URL="https://downloads.example/deluge/", DL_PORT=None)
+    manager = TorrentManager()
+    manager.init_app(app)
+    assert isinstance(manager.client, DelugeClient)
+    assert manager.client.dl_url == "https://downloads.example/deluge/"

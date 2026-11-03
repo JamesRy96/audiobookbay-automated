@@ -200,3 +200,47 @@ def test_putio_manager_integration(app: Flask) -> None:
     assert manager.client.token == "manager-token"
     assert manager.client.folder_id == "99"
     assert manager.client_type == "PutioClient"
+
+
+def test_putio_status_rejects_api_error() -> None:
+    """An HTTP 200 API failure must not look like an empty healthy client."""
+    client = PutioClient("localhost", 443, None, "test-token")
+    with requests_mock.Mocker() as mock:
+        mock.get("https://api.put.io/v2/transfers/list", json={"status": "ERROR", "error_message": "Access denied"})
+        with pytest.raises(RuntimeError, match="Access denied"):
+            client.get_status("books")
+    client.close()
+
+
+def test_putio_http_contract_preserves_files_and_credentials() -> None:
+    """Use the vendor's transfer endpoints and form fields without leaking tokens in URLs."""
+    from urllib.parse import parse_qs
+
+    client = PutioClient("localhost", 443, None, None, token="isolated-token", folder_id="42", timeout=7)
+    magnet = "magnet:?xt=urn:btih:" + "d" * 40
+    with requests_mock.Mocker() as mock:
+        mock.get("https://api.put.io/v2/account/info", json={"status": "OK"})
+        mock.post("https://api.put.io/v2/transfers/add", json={"status": "OK", "transfer": {"id": 7}})
+        mock.get(
+            "https://api.put.io/v2/transfers/list",
+            json={
+                "status": "OK",
+                "transfers": [
+                    {"id": 7, "name": "Public-domain book", "percent_done": 42.5, "status": "DOWNLOADING", "size": 1024}
+                ],
+            },
+        )
+        mock.post("https://api.put.io/v2/transfers/cancel", json={"status": "OK"})
+        assert client.verify_credentials()
+        client.add_magnet(magnet, "/unused-local-path", "unused-category")
+        assert mock.last_request is not None
+        assert parse_qs(mock.last_request.text) == {"url": [magnet], "save_parent_id": ["42"]}
+        assert client.get_status("books")[0].progress == 42.5
+        client.remove_torrent("7")
+        assert mock.last_request is not None
+        assert parse_qs(mock.last_request.text) == {"transfer_ids": ["7"]}
+        for request in mock.request_history:
+            assert request.headers["Authorization"] == "Bearer isolated-token"
+            assert "isolated-token" not in request.url
+            assert "/files/" not in request.url
+    client.close()

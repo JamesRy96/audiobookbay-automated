@@ -924,3 +924,20 @@ def test_background_response_does_not_delete_page_session(url: str) -> None:
     assert response.status_code == 200
     assert "Set-Cookie" not in response.headers
     assert page.post("/delete", json={"id": "absent"}, headers={"X-CSRFToken": token}).status_code == 404
+
+
+@pytest.mark.parametrize("clock_delta", [-2, 2])
+def test_signed_page_rejects_clock_rollback_and_expiry(clock_delta: int) -> None:
+    """A future-dated session or expired action token must remain invalid."""
+    from itsdangerous import TimestampSigner
+
+    app = create_app(SessionConfig)
+    app.config["WTF_CSRF_TIME_LIMIT"] = 1
+    browser = app.test_client()
+    with patch.object(TimestampSigner, "get_timestamp", return_value=1700000000):
+        token = page_token(browser)
+    assert browser.get_cookie(app.config["SESSION_COOKIE_NAME"]) is not None
+    with patch.object(TimestampSigner, "get_timestamp", return_value=1700000000 + clock_delta):
+        response = browser.post("/delete", json={"id": "absent"}, headers={"X-CSRFToken": token})
+    assert response.status_code == 400
+    assert response.json == {"message": "Page expired. Refresh and try again.", "code": "page_expired"}

@@ -40,31 +40,19 @@ class TransmissionClient(TorrentClientPlugin):
     @override
     def close(self) -> None:
         """Close the Transmission client session."""
-        # transmission-rpc Client manages its own session, but doesn't expose a clear close.
-        # Dropping the reference is sufficient.
-        self.client = None
+        try:
+            if self.client:
+                self.client._http_session.close()  # pyright: ignore[reportPrivateUsage]
+        finally:
+            self.client = None
 
     @override
     def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
         """Add a magnet link to Transmission."""
         if not self.client:
             raise ConnectionError("Transmission client not connected")
-        try:
-            # Transmission uses 'labels' (plural list)
-            self.client.add_torrent(magnet_link, download_dir=save_path, labels=[category])
-        except Exception as e:
-            # Fallback for older Transmission versions (< RPC 15) that don't support labels
-            # Only fallback if error explicitly relates to invalid arguments/labels.
-            # Catching all exceptions would hide critical errors (e.g., Disk Full, Network Error).
-            error_str = str(e).lower()
-            if "label" in error_str or "argument" in error_str or "method" in error_str:
-                logger.warning(
-                    f"Transmission label assignment failed (server may be old): {e}. Retrying without labels."
-                )
-                self.client.add_torrent(magnet_link, download_dir=save_path)
-            else:
-                # Re-raise unexpected errors (e.g. ConnectionError, DuplicateTorrent)
-                raise e
+        # Require label-capable Transmission instead of silently creating an untracked task.
+        self.client.add_torrent(magnet_link, download_dir=save_path, labels=[category], paused=False)
 
     @override
     def remove_torrent(self, torrent_id: str) -> None:

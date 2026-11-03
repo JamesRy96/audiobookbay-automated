@@ -266,3 +266,17 @@ def test_missing_catalog_page_does_not_penalize_mirror() -> None:
     ):
         assert fetch_page_results("https://catalog.example/page/30/?s=books") == []
     record.assert_not_called()
+
+
+@pytest.mark.parametrize("error", [requests.ConnectionError("DNS failed"), requests.Timeout("timed out")])
+def test_catalog_transport_failure_is_not_empty_results(error: Exception) -> None:
+    """A healthy mirror probe does not turn a subsequent page failure into catalog absence."""
+    session = MagicMock()
+    session.get.side_effect = error
+    with (
+        patch("audiobook_automated.scraper.core.network.find_best_mirror", return_value="https://catalog.example"),
+        patch("audiobook_automated.scraper.core.network.get_session", return_value=session),
+        patch("audiobook_automated.scraper.core.network.search_cache", {}),
+        pytest.raises(ConnectionError),
+    ):
+        search_audiobookbay("isolated-transport-failure")

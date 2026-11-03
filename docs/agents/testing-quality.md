@@ -25,6 +25,10 @@
   templates, styles and JavaScript in Chromium, Firefox and WebKit. For Download contracts, replace only catalog HTTP
   transport and the qBittorrent SDK. Run the real parser, core search/Details/magnet extraction, routes, manager and
   client adapter. Never replace those steps with unconditional successful return values.
+- Client unit contracts must also execute the installed SDK against an isolated HTTP boundary, using documented
+  request/response shapes. Browser SDK doubles alone cannot prove API arguments, authentication or serialization.
+- The isolated browser fixture uses advancing monotonic signing time to avoid development-VM clock rollback.
+  Keep application signatures and expiration enabled; separately test rejection of expired and future-dated tokens.
 - Captured catalog inputs live under `tests/e2e/catalog/captured/`, with source URLs and capture metadata. Preserve
   encoded `post re-ab` listings, duplicate/list trackers, punctuation, cast and description markup. Synthetic pages
   remain for deterministic layout/screenshots and deliberate errors. Unknown fixture URLs must fail, never select

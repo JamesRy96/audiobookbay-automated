@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Honor Deluge reverse-proxy URLs, daemon Label detection, request timeouts and session cleanup; request new transfers
+  unpaused and isolate plugin observations between request threads.
+- Honor the configured qBittorrent HTTP/HTTPS scheme and close Transmission HTTP sessions. Reject Transmission label
+  failures instead of retrying with an untracked download. Report Put.io API failures instead of an empty healthy list.
+- Surface catalog connection failures and timeouts as retryable search errors instead of caching empty results.
+
 ### Added
 
 - Captured catalog HTML and stateful browser contract tests through the real parser, magnet extraction and client

@@ -138,6 +138,8 @@ class PutioClient(TorrentClientPlugin):
             raise RuntimeError(f"Put.io list transfers failed: HTTP {resp.status_code} - {resp.text}")
 
         data = resp.json()
+        if data.get("status") != "OK":
+            raise RuntimeError(f"Put.io list transfers returned non-OK status: {data.get('error_message', data)}")
         transfers = data.get("transfers", [])
         results: list[TorrentStatus] = []
 

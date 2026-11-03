@@ -130,6 +130,7 @@ class TorrentManager:
                 token=token,
                 folder_id=folder_id,
                 api_key=api_key,
+                dl_url=app.config.get("DL_URL"),
             )
             logger.info("Plugin: Successfully loaded '%s'.", client_name)
             return instance

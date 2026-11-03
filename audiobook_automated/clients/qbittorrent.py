@@ -70,8 +70,9 @@ class QBittorrentClient(TorrentClientPlugin):
             if self.api_key:
                 # Direct API key authentication (qBittorrent v5.2+)
                 self.client = QbClient(
-                    host=self.host,
+                    host=f"{self.scheme}://{self.host}",
                     port=self.port,
+                    FORCE_SCHEME_FROM_HOST=True,
                     username=self.username or "",
                     api_key=self.api_key,
                     REQUESTS_ARGS={"timeout": self.timeout},
@@ -80,8 +81,9 @@ class QBittorrentClient(TorrentClientPlugin):
                 _ = self.client.app.version
             else:
                 self.client = QbClient(
-                    host=self.host,
+                    host=f"{self.scheme}://{self.host}",
                     port=self.port,
+                    FORCE_SCHEME_FROM_HOST=True,
                     username=self.username or "",
                     password=self.password or "",
                     REQUESTS_ARGS={"timeout": self.timeout},

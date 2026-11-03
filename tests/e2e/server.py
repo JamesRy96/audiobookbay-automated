@@ -5,6 +5,7 @@ import json
 import os
 import signal
 import sys
+import time
 from contextlib import ExitStack
 from pathlib import Path
 from threading import RLock
@@ -16,7 +17,9 @@ from urllib.parse import parse_qs, urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from flask import Response, jsonify, request
+from flask.sessions import SecureCookieSessionInterface
 from flask_wtf.csrf import CSRFError
+from itsdangerous import TimestampSigner
 
 from audiobook_automated import create_app
 from audiobook_automated.config import Config
@@ -170,7 +173,19 @@ class IsolatedQbitSDK:
 
 
 reset_state()
+# Keep test signing time advancing even when a development VM's wall clock steps backward.
+# This affects only the isolated fixture; production still uses its normal signed-cookie validation.
+_signing_wall_origin = time.time()
+_signing_monotonic_origin = time.monotonic()
+
+
+def signing_timestamp(_signer: TimestampSigner) -> int:
+    """Use a consistent advancing test clock without disabling signatures or expiration."""
+    return int(_signing_wall_origin + time.monotonic() - _signing_monotonic_origin)
+
+
 stack = ExitStack()
+stack.enter_context(patch.object(TimestampSigner, "get_timestamp", signing_timestamp))
 stack.enter_context(
     patch("audiobook_automated.scraper.network.find_best_mirror", return_value="https://catalog.example")
 )
@@ -189,6 +204,18 @@ def observe_csrf_failure(error: CSRFError) -> Any:
     """Retain the actual security failure reason without exposing cookies or tokens."""
     with lock:
         csrf_failures.append(error.description or "CSRF validation failed")
+    cookie = request.cookies.get(app.config["SESSION_COOKIE_NAME"])
+    session_interface = app.session_interface
+    if cookie and isinstance(session_interface, SecureCookieSessionInterface):
+        serializer = session_interface.get_signing_serializer(app)
+        try:
+            if serializer is not None:
+                serializer.loads(cookie, max_age=int(app.permanent_session_lifetime.total_seconds()))
+        except Exception as exc:
+            app.logger.warning("CSRF fixture signature failure: %s", type(exc).__name__)
+            if type(exc).__name__ == "SignatureExpired":
+                app.logger.warning("CSRF fixture timestamp: %s", str(exc))
+    app.logger.warning("CSRF fixture failure: %s; session cookie present=%s", error.description, bool(cookie))
     return original_csrf_handler(error)
 
 

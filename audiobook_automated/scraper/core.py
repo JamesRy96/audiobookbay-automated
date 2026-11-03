@@ -120,29 +120,15 @@ def search_audiobookbay(query: str, max_pages: int = 1, start_page: int = 1) -> 
     results: list[BookSummary] = []
     seen_links: set[str] = set()
 
-    # Create a queue to hold futures (async tasks)
     futures = []
-
-    # Use Executor from extensions (passed via current_app if needed, or import)
-    # However, since this function runs in a request context or background task,
-    # we need to be careful. The current implementation uses the global executor.
-
-    # Submit tasks for each page
-    # We use a loop to submit tasks, but we need to handle the fact that
-    # the site might have fewer pages than max_pages.
-    # To optimize, we could fetch page 1 first, check total pages, then fetch the rest.
-    # For now, we will submit all and handle empty results gracefully.
-
-    # Loop through requested pages
+    # UI requests one page; explicit multi-page callers retain bounded executor dispatch.
     for page in range(start_page, start_page + max_pages):
         url = get_search_url(base_url, query, page)
         future = executor.submit(fetch_page_results, url)
         futures.append(future)
 
     # Collect results as they complete
-    # Note: We don't guarantee order here, but search results are usually sorted by the site.
-    # If order matters strictly, we should map futures to page numbers.
-    encountered_http_error: network.requests.HTTPError | None = None
+    encountered_error: Exception | None = None
 
     for future in futures:
         try:
@@ -157,20 +143,21 @@ def search_audiobookbay(query: str, max_pages: int = 1, start_page: int = 1) -> 
                     results.append(item)
 
         except network.requests.HTTPError as e:
-            encountered_http_error = e
+            encountered_error = e
             logger.error(f"Search: HTTP Error (5xx/4xx) from mirror: {e}. Invalidating mirror.")
             with network.CACHE_LOCK:
                 if "active_mirror" in network.mirror_cache:
                     del network.mirror_cache["active_mirror"]
-        except Exception:
+        except Exception as e:
+            encountered_error = e
             logger.exception("Search: Error processing page result.")
 
-    # If all pages failed due to mirror HTTP 4xx/5xx errors, raise rather than swallowing into empty results
-    if not results and encountered_http_error is not None:
+    # A failed page is not an empty catalog page; propagate it so the UI can offer retry.
+    if not results and encountered_error is not None:
         raise ConnectionError(
-            f"AudiobookBay mirror is currently unreachable or blocking requests ({encountered_http_error}). "
+            f"AudiobookBay mirror is currently unreachable or blocking requests ({encountered_error}). "
             "Please check your proxy or try another mirror."
-        ) from encountered_http_error
+        ) from encountered_error
 
     logger.info("Search: Completed. Found %d unique results.", len(results))
 
@@ -209,7 +196,7 @@ def fetch_page_results(url: str) -> list[BookSummary]:
             # Do not expose raw URL in logs if it contains sensitive info (unlikely here)
             logger.warning("Search: Connection error fetching page: %s", url)
             network.record_request_outcome(url, False, error="Connection error or timeout")
-            return []
+            raise
         except network.requests.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:  # noqa: PLR2004
                 logger.info("Search: Catalog page not found; no results on this page.")
