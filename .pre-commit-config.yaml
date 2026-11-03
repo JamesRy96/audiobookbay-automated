@@ -29,7 +29,7 @@ repos:
   # ------------------------------------------------------------------
   # Run Format BEFORE Check so linters validate the final code structure.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.2
+    rev: v0.17.3
     hooks:
       - id: ruff-format
 
@@ -62,7 +62,7 @@ repos:
   # ------------------------------------------------------------------
   # Python Linter (Ruff)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.17.2
+    rev: v0.17.3
     hooks:
       - id: ruff-check
         args: ["--fix"]
@@ -105,7 +105,7 @@ repos:
   # 5. STATIC TYPE CHECKING (Slowest - Run last)
   # ------------------------------------------------------------------
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v2.4.0"
+    rev: "v2.4.1"
     hooks:
       - id: mypy
         args: ["--no-incremental", "--config=pyproject.toml"]
