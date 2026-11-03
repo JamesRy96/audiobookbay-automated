@@ -3,6 +3,7 @@
 
 import logging
 import os
+import re
 
 from .constants import (
     DEFAULT_SITE_LOGO,
@@ -59,6 +60,53 @@ def parse_asset_path(value: str | None, default: str | None) -> str | None:
     if "/" not in val and not val.startswith("data:"):
         return f"/static/images/{val}"
     return val
+
+
+def parse_client_connections(configured: str | None) -> dict[str, dict[str, str]]:
+    """Read independent connection settings for configured client plugins."""
+    names = dict.fromkeys((configured or "").split(","))
+    fields = (
+        "HOST",
+        "PORT",
+        "USERNAME",
+        "PASSWORD",
+        "SCHEME",
+        "API_KEY",
+        "URL",
+        "TIMEOUT",
+        "TOKEN",
+        "FOLDER_ID",
+        "SAVE_PATH_BASE",
+    )
+    connections: dict[str, dict[str, str]] = {}
+    for raw_name in names:
+        name = raw_name.strip().lower()
+        if not name:
+            continue
+        values = {}
+        for field in fields:
+            value = os.getenv(f"{name.upper()}_{field}")
+            if value is not None:
+                values[field] = value.strip(" \"'")
+        connections[name] = values
+    return connections
+
+
+def validate_client_connections(connections: dict[str, dict[str, str]]) -> None:
+    """Reject unusable ports, timeouts and URL schemes with actionable setting names."""
+    max_port = 65535
+    for name, values in connections.items():
+        for field in ("PORT", "TIMEOUT"):
+            raw = values.get(field)
+            if raw:
+                try:
+                    number = int(raw)
+                except ValueError:
+                    raise ValueError(f"{name.upper()}_{field} must be a positive whole number.") from None
+                if number <= 0 or (field == "PORT" and number > max_port):
+                    raise ValueError(f"{name.upper()}_{field} is outside the allowed range.")
+        if values.get("SCHEME", "http") not in ("http", "https"):
+            raise ValueError(f"{name.upper()}_SCHEME must be http or https.")
 
 
 class Config:
@@ -118,27 +166,9 @@ class Config:
 
     # Torrent Client Configuration
     _dl_client: str | None = os.getenv("DL_CLIENT")
-    DL_CLIENT: str | None = _dl_client.strip(" \"'") if _dl_client else None
-    _dl_host: str | None = os.getenv("DL_HOST")
-    DL_HOST: str | None = _dl_host.strip(" \"'") if _dl_host else None
-    _dl_port: str | None = os.getenv("DL_PORT")
-    DL_PORT: str | None = _dl_port.strip(" \"'") if _dl_port else None
-    _dl_username: str | None = os.getenv("DL_USERNAME")
-    DL_USERNAME: str | None = _dl_username.strip(" \"'") if _dl_username else None
-    _dl_password: str | None = os.getenv("DL_PASSWORD")
-    DL_PASSWORD: str | None = _dl_password.strip(" \"'") if _dl_password else None
-    _dl_api_key: str | None = os.getenv("DL_API_KEY")
-    DL_API_KEY: str | None = _dl_api_key.strip(" \"'") if _dl_api_key else None
+    DL_CLIENT: str | None = _dl_client.strip(" \"'").lower() if _dl_client else None
+    CLIENT_CONNECTIONS: dict[str, dict[str, str]] = parse_client_connections(DL_CLIENT)
     DL_CATEGORY: str = os.getenv("DL_CATEGORY", "abb-automated").strip(" \"'")
-    DL_SCHEME: str = os.getenv("DL_SCHEME", "http").strip(" \"'")
-    _dl_url: str | None = os.getenv("DL_URL")
-    DL_URL: str | None = _dl_url.strip(" \"'") if _dl_url else None
-    DL_CLIENT_OS: str = os.getenv("DL_CLIENT_OS", "posix").strip(" \"'").lower()
-
-    # Put.io Configuration
-    _putio_token: str | None = os.getenv("PUTIO_TOKEN")
-    PUTIO_TOKEN: str | None = _putio_token.strip(" \"'") if _putio_token else None
-    PUTIO_FOLDER_ID: str = os.getenv("PUTIO_FOLDER_ID", "0").strip(" \"'")
 
     # Logging
     # We allow LOG_LEVEL to be None if unset to support Gunicorn level inheritance in __init__.py.
@@ -208,19 +238,6 @@ class Config:
                 f"Configuration Warning: Invalid LOG_LEVEL '{cls.LOG_LEVEL_STR}' provided. Defaulting to INFO."
             )
 
-        # Validate SAVE_PATH_BASE
-        if not cls.SAVE_PATH_BASE:
-            if not cls.TESTING:
-                logger.critical("Configuration Error: SAVE_PATH_BASE is missing.")
-                # Raise RuntimeError instead of sys.exit(1) to allow WSGI servers to log the error properly
-                raise RuntimeError("Configuration Error: SAVE_PATH_BASE is missing.")
-        else:
-            logger.info(f"SAVE_PATH_BASE configured as: {cls.SAVE_PATH_BASE}")
-            logger.info(
-                "Reminder: This path must exist inside the TORRENT CLIENT container, "
-                "not necessarily this application's container."
-            )
-
         # Validate DL_CLIENT
         # Allow any string identifier to support drop-in client plugins without hardcoded enum restriction.
         # The Manager will fail later if the module doesn't exist.
@@ -228,7 +245,8 @@ class Config:
             logger.critical("Configuration Error: DL_CLIENT is missing.")
             raise ValueError("DL_CLIENT must be set.")
 
-        # Validate DL_SCHEME
-        if cls.DL_SCHEME not in ("http", "https"):
-            logger.critical(f"Configuration Error: Invalid DL_SCHEME '{cls.DL_SCHEME}'. Must be 'http' or 'https'.")
-            raise ValueError(f"Invalid DL_SCHEME '{cls.DL_SCHEME}'.")
+        names = [name.strip() for name in cls.DL_CLIENT.split(",")]
+        for name in names:
+            if not re.fullmatch(r"[a-z0-9_-]+", name):
+                raise ValueError("Use client names separated by commas in DL_CLIENT, without trailing punctuation.")
+        validate_client_connections(cls.CLIENT_CONNECTIONS)

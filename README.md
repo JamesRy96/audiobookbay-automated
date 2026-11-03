@@ -23,22 +23,22 @@ If you use Windows, turn on **File name extensions** in File Explorer and check 
 
 ### 2. Enter your connection settings
 
-Open `.env` in a text editor. Set these values for your Download Client:
+Open `.env` in a text editor. The example is ready for **qBittorrent**; replace its address and login details:
 
 | Setting | What to enter |
 | --- | --- |
-| `DL_CLIENT` | `qbittorrent`, `transmission`, `deluge`, or `putio` |
-| `DL_HOST` | The address of the server running your Download Client, such as `192.168.1.100` |
-| `DL_PORT` | Its web-interface port: usually `8080`, `9091`, or `8112`, respectively |
-| `DL_USERNAME` | The username you use to sign in to that web interface |
-| `DL_PASSWORD` | Its password; keep the surrounding single quotes |
-| `SAVE_PATH_BASE` | The audiobook folder **as your Download Client sees it** |
+| `DL_CLIENT` | `qbittorrent` for this example |
+| `QBITTORRENT_HOST` | The address of the server running your Download Client, such as `192.168.1.100` |
+| `QBITTORRENT_PORT` | Its web-interface port; normally `8080` (leave unset for the default) |
+| `QBITTORRENT_USERNAME` | The username you use to sign in to that web interface |
+| `QBITTORRENT_PASSWORD` | Its password; keep the surrounding single quotes |
 
-For example, if qBittorrent saves books under `/downloads/audiobooks` inside its own container, use that path for
-`SAVE_PATH_BASE`. Do not use the folder path from this app's container. **You do not need to mount the download folder
-into this app.**
+Downloads use the folder already configured in your Download Client. No download-folder setup or volume mount is
+needed in this app. To choose a different destination, see [optional download folders](docs/configuration.md#download-folders).
 
-For Put.io or a Windows Download Client, follow the short [client setup notes](docs/configuration.md#download-clients).
+For Transmission, Deluge, Put.io, several clients, or Windows paths, use the
+[client setup examples](docs/configuration.md#download-clients). Settings are uppercase and named for each client;
+for example, Transmission uses `TRANSMISSION_PASSWORD`.
 Deluge users should enable the **Label** plugin so downloads can be organized by category.
 
 ### 3. Start the app
@@ -57,7 +57,8 @@ Before the first release, use the [source-build instructions](docs/development.m
 
 ### 4. Check the connection
 
-Open **Downloads** in the menu. If the app reports that your Download Client is disconnected, check its address, port,
+Open **Status** in the menu to view your downloads.
+If the app reports that your Download Client is disconnected, check its address, port,
 username, and password in `.env`. Then apply the settings:
 
 ~~~shell
@@ -71,7 +72,10 @@ no sign-in screen of its own.
 
 1. Enter a title, author, or keyword and select **Search**. Searches need at least two characters.
 2. Open **Details** to read about a book, or choose **Download** to send it to your Download Client.
-3. Open **Downloads** to follow its progress. Your Download Client controls where files are stored and when they finish.
+   With several clients configured, choose a connected client in the download dialog. Offline clients cannot be selected.
+   With one client, Download sends directly without this dialog.
+3. Open **Status** in the menu to follow download progress.
+   Your Download Client controls where files are stored and when they finish.
 
 Near the bottom, more results load automatically. **Load more audiobooks** also lets you request the next page manually.
 While a request is running, one spinner and **Loading audiobooks…** message replace the button. If it fails, select
@@ -119,19 +123,19 @@ docker compose down
 | What you see | What to check |
 | --- | --- |
 | The image cannot be downloaded | Check your internet connection and the image name. A first release must be published before `latest` exists. |
-| The app will not start | Check `.env` for `DL_CLIENT` and `SAVE_PATH_BASE`. Run `docker compose logs --tail=50` to see the reason. |
+| The app will not start | Check `.env` for a valid `DL_CLIENT` and its connection settings. Run `docker compose logs --tail=50` to see the reason. |
 | The browser cannot open the app | Check that Docker is running, port `5078` is available, and you used the correct server address. |
 | Download Client disconnected | Check its web interface, address, port, and credentials. In this container, `localhost` refers to this app, not your other server or container. |
 | Search is unavailable | Wait a moment and retry. If it continues, check your internet/VPN connection. Enable [Diagnostics](docs/configuration.md#diagnostics-and-network) to see mirror availability. |
 | A book does not appear in Downloads | Check the Download Client itself and its `abb-automated` category/label. Some clients take time to retrieve torrent information. |
-| Files are saved in the wrong folder | Correct `SAVE_PATH_BASE` using the path visible inside your Download Client, then recreate the app container. |
+| Files are saved in the wrong folder | Check the client's default folder or any optional save-path override in `.env`. |
 
 Optional guides: [appearance, Download Clients and networking](docs/configuration.md),
 [Audiobookshelf scans](docs/configuration.md#audiobookshelf), and [development/testing](docs/development.md).
 
 ## Screenshots
 
-These show the default theme with fictional example books and isolated Download Client data.
+These show the default purple theme with real catalog results and Download Client status.
 
 ![Search results with filters and matching card layouts](docs/images/search.png)
 

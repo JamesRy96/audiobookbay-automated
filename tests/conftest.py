@@ -43,7 +43,7 @@ class TestConfig(Config):
     RATELIMIT_ENABLED = True
 
     # Prevent real connections in config
-    DL_HOST = "mock_localhost"
+    CLIENT_CONNECTIONS = {"qbittorrent": {"HOST": "mock_localhost"}}
 
 
 @pytest.fixture(autouse=True)

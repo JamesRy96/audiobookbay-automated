@@ -22,7 +22,7 @@ class CustomClient(TorrentClientPlugin):
     """Starting scaffold for a new Download Client API adapter."""
 
     # MANDATORY: Define the default WebUI/RPC port for this client.
-    # This allows the app to configure itself automatically if DL_PORT is missing.
+    # This allows the app to configure itself automatically if the client-specific PORT is missing.
     DEFAULT_PORT = 0000
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -60,7 +60,7 @@ class CustomClient(TorrentClientPlugin):
         pass
 
     @override
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Add a magnet link to the client.
 
         Args:

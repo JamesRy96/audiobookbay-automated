@@ -45,7 +45,7 @@ function getNotificationText() {
 
 // Helper to drain the microtask queue completely.
 async function flushPromises() {
-    return new Promise((resolve) => jest.requireActual("timers").setTimeout(resolve, 0));
+    await jest.advanceTimersByTimeAsync(0);
 }
 
 // Custom setTimeout mock

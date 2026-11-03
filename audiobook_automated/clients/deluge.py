@@ -91,7 +91,7 @@ class DelugeClient(TorrentClientPlugin):
             self.label_plugin_enabled = False
 
     @override
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Add a magnet link to Deluge."""
         if not self.client:
             raise ConnectionError("Deluge client not connected")

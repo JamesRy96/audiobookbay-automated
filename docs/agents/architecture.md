@@ -31,11 +31,14 @@
 - Load environment variables before importing the application configuration. Config reads them during module import;
   the app does not load a `.env` file itself. Use Docker `env_file` or `uv run --env-file .env`.
 - `create_app()` generates a 32-byte random signing key when optional `SECRET_KEY` is empty, before CSRF/session
-  initialization. Keep the key in memory for the single-worker lifetime; do not generate it per request or write it to disk.
-  An explicit key is an advanced restart-continuity option. Expired action tokens return actionable JSON without retries.
+  initialization. Keep the key in memory for the single-worker lifetime; do not generate it per request or write it to
+disk.
+  An explicit key is an advanced restart-continuity option. Expired action tokens return actionable JSON without
+retries.
 - Configuration is loaded via typed classes in `audiobook_automated/config.py` with runtime validation in `validate()`.
 - Multi-client routing: `TorrentManager` initializes individual client plugins specified by `DL_CLIENT` and
-  `DL_CLIENTS`, routing download requests to the designated client and aggregating status queries.
+  `DL_CLIENT` (one name or a comma-separated list) and independent client-prefixed connection settings, routing
+download requests to the designated client and aggregating status queries.
 
 ## Frontend Presentation
 

@@ -31,7 +31,8 @@ The reviewed locked libraries are `qbittorrent-api 2026.10.1`, `transmission-rpc
 `deluge-web-client 2.1.1`. Contract tests run the real installed libraries, replacing HTTP transport rather than
 accepting arbitrary SDK method arguments. Put.io uses the actual adapter with an isolated HTTP boundary.
 
-Additional findings: qBittorrent now honors `DL_SCHEME` without SDK scheme guessing; Transmission now closes its HTTP
+Additional findings: qBittorrent now honors `QBITTORRENT_SCHEME` without SDK scheme guessing; Transmission now closes
+its HTTP
 pool. Deluge plugin observations are thread-local. Deluge and Transmission do not retry an add without labels after
 an error; a label failure can occur after acceptance, so inspect the client before manually resubmitting.
 

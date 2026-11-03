@@ -67,10 +67,10 @@ env = [
     "SAVE_PATH_BASE=/tmp/test_downloads",
     "SECRET_KEY=test-secret-key",
     "DL_CLIENT=qbittorrent",
-    "DL_HOST=localhost",
-    "DL_PORT=8080",
-    "DL_USERNAME=admin",
-    "DL_PASSWORD=admin",
+    "QBITTORRENT_HOST=localhost",
+    "QBITTORRENT_PORT=8080",
+    "QBITTORRENT_USERNAME=admin",
+    "QBITTORRENT_PASSWORD=admin",
 ]
 filterwarnings = ["ignore::DeprecationWarning:bs4.*"]
 

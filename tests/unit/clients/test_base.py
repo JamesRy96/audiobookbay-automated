@@ -24,7 +24,7 @@ class MockClient(TorrentClientPlugin):
         pass
 
     @override
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         pass
 
     @override

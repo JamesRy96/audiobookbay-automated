@@ -32,7 +32,7 @@
         "SAVE_PATH_BASE": "/tmp/audiobooks_dev",
         "LISTEN_PORT": "5078",
         "DL_CLIENT": "qbittorrent",
-        "DL_HOST": "localhost"
+        "QBITTORRENT_HOST": "localhost"
     },
     "forwardPorts": [5078],
     // UPDATED: Install Node.js for JS testing, then install Python and JS dependencies

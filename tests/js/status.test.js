@@ -22,14 +22,6 @@ beforeAll(() => {
     eval(global.statusJsContent);
 });
 
-// Helper functions (exposed by status.js via window)
-// We access them dynamically in tests to ensure we get the evaluated versions
-const getUpdateTable = () => window.updateTable;
-
-async function flushPromises() {
-    return new Promise((resolve) => jest.requireActual("timers").setTimeout(resolve, 0));
-}
-
 describe("status.js - UI Logic", () => {
     let tbody;
 
@@ -147,55 +139,57 @@ describe("status.js - Polling Mechanism", () => {
     beforeEach(() => {
         document.body.innerHTML = '<table><tbody id="status-table-body"></tbody></table>';
         jest.useFakeTimers();
-        mockFetch.mockResolvedValue({
-            ok: true,
-            json: () => Promise.resolve([]),
-        });
+        mockFetch.mockReset();
+        mockFetch.mockResolvedValue({ ok: true, json: async () => [] });
         consoleErrorSpy.mockClear();
-        mockFetch.mockClear();
     });
 
     afterEach(() => {
-        // CRITICAL: Stop the poll loop to prevent it from bleeding into the next test
-        if (window.statusInterval) {
-            clearTimeout(window.statusInterval);
-            window.statusInterval = null;
-        }
+        jest.clearAllTimers();
+        window.statusInterval = null;
+        history.replaceState(null, "", "/");
         jest.useRealTimers();
     });
 
-    test("Polling should trigger fetch every 5 seconds", async () => {
-        // Trigger DOMContentLoaded to start the interval
+    test("Polling should fetch initially and exactly every 5 seconds", async () => {
         document.dispatchEvent(new Event("DOMContentLoaded"));
-
-        // Fast-forward 5 seconds to trigger first call
-        jest.advanceTimersByTime(5000);
-
         expect(mockFetch).toHaveBeenCalledWith("/status?json=1");
         expect(mockFetch).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(0);
+        for (let count = 2; count <= 4; count++) {
+            await jest.advanceTimersByTimeAsync(4999);
+            expect(mockFetch).toHaveBeenCalledTimes(count - 1);
+            await jest.advanceTimersByTimeAsync(1);
+            expect(mockFetch).toHaveBeenCalledTimes(count);
+        }
+    });
 
-        // Allow the async fetch to complete and schedule the next timeout
-        await flushPromises();
-
-        // Fast-forward another 5 seconds
-        jest.advanceTimersByTime(5000);
+    test("Polling waits for a slow response before starting another request", async () => {
+        let resolveBody;
+        const body = new Promise((resolve) => {
+            resolveBody = resolve;
+        });
+        mockFetch.mockResolvedValueOnce({ ok: true, json: () => body });
+        document.dispatchEvent(new Event("DOMContentLoaded"));
+        await jest.advanceTimersByTimeAsync(15000);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        resolveBody([]);
+        await jest.advanceTimersByTimeAsync(0);
+        await jest.advanceTimersByTimeAsync(4999);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(1);
         expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    test("Polling should handle fetch errors gracefully", async () => {
-        mockFetch.mockRejectedValue(new Error("Network Error"));
-
+    test("Polling reports network errors and retries after 5 seconds", async () => {
+        mockFetch.mockRejectedValueOnce(new Error("Network Error"));
         document.dispatchEvent(new Event("DOMContentLoaded"));
-        jest.advanceTimersByTime(5000);
-
-        // Should have called fetch
-        expect(mockFetch).toHaveBeenCalled();
-
-        // Wait for promise rejection handling
-        await Promise.resolve();
-
-        // Should have logged error (spy)
-        expect(consoleErrorSpy).toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(0);
+        expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to fetch status:", expect.any(Error));
+        await jest.advanceTimersByTimeAsync(4999);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     test("Polling should handle non-200 responses", async () => {
@@ -205,71 +199,63 @@ describe("status.js - Polling Mechanism", () => {
             </div>
             <table><tbody id="status-table-body"></tbody></table>
         `;
-        mockFetch.mockResolvedValue({
+        mockFetch.mockResolvedValueOnce({
             ok: false,
             status: 500,
             json: async () => ({ error: "Banned", client_status: "banned" }),
         });
-
         document.dispatchEvent(new Event("DOMContentLoaded"));
-        jest.advanceTimersByTime(5000);
-
-        expect(mockFetch).toHaveBeenCalled();
-
-        await Promise.resolve();
-        await flushPromises();
-
-        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Status poll failed"), 500);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(consoleErrorSpy).toHaveBeenCalledWith("Status poll failed:", 500);
         const pill = document.getElementById("status-client-pill");
         expect(pill.classList.contains("banned")).toBe(true);
         expect(pill.textContent).toContain("IP Banned");
+        await jest.advanceTimersByTimeAsync(5000);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(pill.textContent).toContain("Client Connected");
     });
 
-    test("Polling should NOT start if table body is missing", () => {
+    test("Polling should NOT start if table body is missing", async () => {
         document.body.innerHTML = "<div>No Table Here</div>";
-        // Trigger event
         document.dispatchEvent(new Event("DOMContentLoaded"));
-
-        jest.advanceTimersByTime(5000);
+        await jest.advanceTimersByTimeAsync(5000);
         expect(mockFetch).not.toHaveBeenCalled();
+        expect(jest.getTimerCount()).toBe(0);
     });
 
-    test("Toggling auto-refresh off should pause polling", async () => {
+    test("Toggling auto-refresh pauses polling and resumes after 5 seconds", async () => {
         document.body.innerHTML = `
             <input type="checkbox" id="auto-refresh-toggle" checked />
             <span id="poll-countdown-num">5</span>
             <table><tbody id="status-table-body"></tbody></table>
         `;
         document.dispatchEvent(new Event("DOMContentLoaded"));
-        await flushPromises();
-
+        await jest.advanceTimersByTimeAsync(0);
         const toggle = document.getElementById("auto-refresh-toggle");
-        const countdownNum = document.getElementById("poll-countdown-num");
-
         toggle.checked = false;
         toggle.dispatchEvent(new Event("change"));
-
-        expect(countdownNum.textContent).toBe("");
-
-        mockFetch.mockClear();
-        jest.advanceTimersByTime(10000);
-        expect(mockFetch).not.toHaveBeenCalled();
+        expect(document.getElementById("poll-countdown-num").textContent).toBe("");
+        await jest.advanceTimersByTimeAsync(10000);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event("change"));
+        await jest.advanceTimersByTimeAsync(4999);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
     });
-});
 
-test("polling preserves a selected Download Client and marks failures stale", async () => {
-    jest.useFakeTimers();
-    history.replaceState(null, "", "/status?client=qbittorrent");
-    document.body.innerHTML = '<p id="status-update-note"></p><table><tbody id="status-table-body"></tbody></table>';
-    mockFetch.mockResolvedValue({ ok: false, json: async () => ({}) });
-    document.dispatchEvent(new Event("DOMContentLoaded"));
-    await flushPromises();
-    expect(mockFetch).toHaveBeenCalledWith("/status?json=1&client=qbittorrent");
-    expect(document.getElementById("status-table-body").classList.contains("is-stale")).toBe(true);
-    expect(document.getElementById("status-update-note").textContent).toContain("previous results");
-    clearInterval(window.statusInterval);
-    history.replaceState(null, "", "/");
-    jest.useRealTimers();
+    test("polling preserves a selected Download Client and marks failures stale", async () => {
+        history.replaceState(null, "", "/status?client=qbittorrent");
+        document.body.innerHTML =
+            '<p id="status-update-note"></p><table><tbody id="status-table-body"></tbody></table>';
+        mockFetch.mockResolvedValue({ ok: false, json: async () => ({}) });
+        document.dispatchEvent(new Event("DOMContentLoaded"));
+        await jest.advanceTimersByTimeAsync(0);
+        expect(mockFetch).toHaveBeenCalledWith("/status?json=1&client=qbittorrent");
+        expect(document.getElementById("status-table-body").classList.contains("is-stale")).toBe(true);
+        expect(document.getElementById("status-update-note").textContent).toContain("previous results");
+    });
 });
 
 test("changing download progress preserves keyboard focus on the same client row", () => {

@@ -3,7 +3,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, get_ident
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from flask import Flask
@@ -24,7 +24,7 @@ class MockClient(TorrentClientPlugin):
         """Mock close."""
         pass
 
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Mock add_magnet."""
         pass
 
@@ -55,10 +55,18 @@ def test_manager_load_client_success(app: Flask, caplog: LogCaptureFixture) -> N
 
     with patch("importlib.import_module", return_value=mock_module):
         app.config["DL_CLIENT"] = "mock_client"
-        app.config["DL_HOST"] = "1.2.3.4"
-        app.config["DL_PORT"] = "9999"
-        app.config["DL_USERNAME"] = "testuser"
-        app.config["DL_PASSWORD"] = "testpass"
+        app.config.setdefault("CLIENT_CONNECTIONS", {}).setdefault(app.config["DL_CLIENT"].split(",")[0], {})[
+            "HOST"
+        ] = "1.2.3.4"
+        app.config.setdefault("CLIENT_CONNECTIONS", {}).setdefault(app.config["DL_CLIENT"].split(",")[0], {})[
+            "PORT"
+        ] = "9999"
+        app.config.setdefault("CLIENT_CONNECTIONS", {}).setdefault(app.config["DL_CLIENT"].split(",")[0], {})[
+            "USERNAME"
+        ] = "testuser"
+        app.config.setdefault("CLIENT_CONNECTIONS", {}).setdefault(app.config["DL_CLIENT"].split(",")[0], {})[
+            "PASSWORD"
+        ] = "testpass"
 
         manager.init_app(app)
 
@@ -80,9 +88,13 @@ def test_manager_load_client_default_port(app: Flask, caplog: LogCaptureFixture)
 
     with patch("importlib.import_module", return_value=mock_module):
         app.config["DL_CLIENT"] = "mock_client"
-        app.config["DL_HOST"] = None
-        # DL_PORT missing or None to trigger default logic
-        app.config["DL_PORT"] = None
+        app.config.setdefault("CLIENT_CONNECTIONS", {}).setdefault(app.config["DL_CLIENT"].split(",")[0], {})[
+            "HOST"
+        ] = None
+        # Client PORT missing or None to trigger default logic
+        app.config.setdefault("CLIENT_CONNECTIONS", {}).setdefault(app.config["DL_CLIENT"].split(",")[0], {})[
+            "PORT"
+        ] = None
 
         manager.init_app(app)
 
@@ -91,22 +103,11 @@ def test_manager_load_client_default_port(app: Flask, caplog: LogCaptureFixture)
         assert manager.client.port == 1234  # MockClient.DEFAULT_PORT
 
 
-def test_manager_load_client_invalid_port(app: Flask, caplog: LogCaptureFixture) -> None:
-    """Test invalid port loading."""
-    manager = TorrentManager()
-
-    mock_module = MagicMock()
-    mock_module.MockClient = MockClient
-
-    with patch("importlib.import_module", return_value=mock_module):
-        app.config["DL_CLIENT"] = "mock_client"
-        app.config["DL_HOST"] = "1.2.3.4"
-        app.config["DL_PORT"] = "invalid"
-
-        manager.init_app(app)
-
-        assert isinstance(manager.client, MockClient)
-        assert manager.client.port == 8080  # Fallback from exception block
+def test_manager_invalid_port_does_not_select_another_port(app: Flask) -> None:
+    """Reject invalid internal configuration rather than dispatching to an unexpected service."""
+    app.config.update(DL_CLIENT="qbittorrent", CLIENT_CONNECTIONS={"qbittorrent": {"PORT": "invalid"}})
+    with raises(ValueError):
+        TorrentManager().init_app(app)
 
 
 def test_manager_load_client_invalid_name(app: Flask, caplog: LogCaptureFixture) -> None:
@@ -120,8 +121,8 @@ def test_manager_load_client_invalid_name(app: Flask, caplog: LogCaptureFixture)
         manager.init_app(app)
 
         assert "Security: Invalid DL_CLIENT name" in caplog.text
-        assert "Falling back to 'transmission'" in caplog.text
-        mock_import.assert_called_with("audiobook_automated.clients.transmission")
+        assert "No client loaded" in caplog.text
+        mock_import.assert_not_called()
 
 
 def test_manager_load_client_import_error(app: Flask, caplog: LogCaptureFixture) -> None:
@@ -181,9 +182,10 @@ def test_manager_proxy_methods_with_client(app: Flask) -> None:
     # Verify add_magnet called. It returns None so we check assertion side effect only.
     client.add_magnet.assert_called_with("link", "path", "abb-automated")
 
-    client.get_status.return_value = ["status"]
-    # We use cast(Any, ...) to bypass Mypy's strict check on return type vs string list comparison
-    assert cast(Any, manager.get_status()) == ["status"]
+    status = TorrentStatus("test-id", "Test audiobook", 42, "Downloading", "1 MB")
+    client.get_status.return_value = [status]
+    assert manager.get_status() == [status]
+    assert status.client == "magicmock"
     client.get_status.assert_called_with("abb-automated")
 
     client.remove_torrent.return_value = True
@@ -220,7 +222,7 @@ def test_manager_client_type() -> None:
 
 
 def test_manager_multi_client_loading(app: Flask, caplog: LogCaptureFixture) -> None:
-    """Test loading multiple clients via DL_CLIENTS."""
+    """Test loading multiple clients via comma-separated DL_CLIENT."""
     manager = TorrentManager()
 
     mock_module = MagicMock()
@@ -228,7 +230,7 @@ def test_manager_multi_client_loading(app: Flask, caplog: LogCaptureFixture) -> 
 
     with patch("importlib.import_module", return_value=mock_module):
         app.config["DL_CLIENT"] = "client_a"
-        app.config["DL_CLIENTS"] = "client_a, client_b"
+        app.config["DL_CLIENT"] = "client_a,client_b"
 
         manager.init_app(app)
 
@@ -238,7 +240,7 @@ def test_manager_multi_client_loading(app: Flask, caplog: LogCaptureFixture) -> 
         assert manager.list_clients() == ["client_a", "client_b"]
         assert manager.get_client("client_a") is not None
         assert manager.get_client("client_b") is not None
-        assert manager.get_client("nonexistent") == manager.client
+        assert manager.get_client("nonexistent") is None
 
 
 def test_manager_multi_client_add_and_status(app: Flask) -> None:
@@ -330,7 +332,7 @@ def test_manager_primary_fallback(app: Flask) -> None:
 
     with patch("importlib.import_module", side_effect=mock_import):
         app.config["DL_CLIENT"] = "unsupported_client"
-        app.config["DL_CLIENTS"] = "client_a"
+        app.config["DL_CLIENT"] = "unsupported_client,client_a"
 
         manager.init_app(app)
         assert manager.client is not None
@@ -437,8 +439,35 @@ def test_manager_passes_deluge_url(app: Flask) -> None:
     """A documented reverse-proxy URL must reach the Deluge adapter."""
     from audiobook_automated.clients.deluge import DelugeClient
 
-    app.config.update(DL_CLIENT="deluge", DL_URL="https://downloads.example/deluge/", DL_PORT=None)
+    app.config.update(DL_CLIENT="deluge", CLIENT_CONNECTIONS={"deluge": {"URL": "https://downloads.example/deluge/"}})
     manager = TorrentManager()
     manager.init_app(app)
     assert isinstance(manager.client, DelugeClient)
     assert manager.client.dl_url == "https://downloads.example/deluge/"
+
+
+def test_manager_isolates_per_client_connections(app: Flask) -> None:
+    """Instantiate all real adapters with independent credentials and default ports."""
+    app.config.update(
+        DL_CLIENT="qbittorrent,deluge,transmission",
+        CLIENT_CONNECTIONS={
+            "qbittorrent": {"HOST": "qbit-host", "API_KEY": "qbit-key", "PASSWORD": ""},
+            "deluge": {"HOST": "deluge-host", "PASSWORD": "deluge-only", "URL": "https://deluge.example/"},
+            "transmission": {"HOST": "tx-host", "USERNAME": "tx-user", "PASSWORD": "tx-only", "TIMEOUT": "7"},
+        },
+    )
+    manager = TorrentManager()
+    manager.init_app(app)
+    qbit = manager.get_client("qbittorrent")
+    deluge = manager.get_client("deluge")
+    tx = manager.get_client("transmission")
+    assert qbit is not None and deluge is not None and tx is not None
+    assert (qbit.host, qbit.port, qbit.password) == ("qbit-host", 8080, "")
+    assert (deluge.host, deluge.port, deluge.password) == ("deluge-host", 8112, "deluge-only")
+    assert (tx.host, tx.port, tx.username, tx.password, tx.timeout) == ("tx-host", 9091, "tx-user", "tx-only", 7)
+    assert manager.get_client("missing") is None
+    with raises(ConnectionError):
+        manager.get_status("missing")
+    with raises(ConnectionError):
+        manager.add_magnet("magnet:?", "/downloads", client_name="missing")
+    assert manager.remove_torrent("absent", client_name="missing") is False

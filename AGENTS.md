@@ -62,7 +62,9 @@ pre-commit run --all-files
   map to verified native `/audio-books/type/<category>/` and `/audio-books/tag/<language>/` feeds. Author/narrator
   use catalog keyword search with dotted-initial normalization; do not fabricate contributor archives. Preserve
   explicit native `/audio-books/...` paths when supplied. Do not fetch Details per search result for enrichment.
-- **Multi-Client Aggregation:** Support concurrent multi-client setups via `DL_CLIENTS` (comma-separated), unifying
+- **Multi-Client Aggregation:** Support concurrent multi-client setups via `DL_CLIENT` (one name or comma-separated
+  names), with independent uppercase
+  client-prefixed connection settings and no shared credential aliases, unifying
   download status reporting across all active clients.
 
 ## 4. Operating Protocol & Reasoning Framework
@@ -76,7 +78,8 @@ pre-commit run --all-files
   - Apply Sequential Thinking and the Hermeneutic Circle against overall architecture.
   - Follow ReAct (Thought -> Action -> Observation) and Chain of Verification (CoVe).
   - Negative constraints: No placeholders, no unprompted apologies, no conversational summaries unless requested.
-- **Definition of Done:** Plan documented in `.agents/docs/plan.md`, code validated in `.agents/scratchpad/`, required checks
+- **Definition of Done:** Plan documented in `.agents/docs/plan.md`, code validated in `.agents/scratchpad/`, required
+  checks
   completed, and readiness evidence/limitations reported. Stay within the authorized scope. Ask for deployment approval
   only when deployment is the next requested step and has not already been authorized.
 

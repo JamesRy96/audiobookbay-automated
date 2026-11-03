@@ -453,3 +453,16 @@ def test_build_github_issue_url() -> None:
     ):
         fallback_url = build_github_issue_url("Fallback error", context="general")
         assert "No+logs+available" in fallback_url
+
+
+@pytest.mark.parametrize(
+    "root, expected",
+    [
+        ("D:/Audiobooks", "D:\\Audiobooks\\My Book"),
+        ("//server/share/books", "\\\\server\\share\\books\\My Book"),
+        ("/mnt/media/books", "/mnt/media/books/My Book"),
+    ],
+)
+def test_save_path_format_is_detected_from_root(root: str, expected: str) -> None:
+    """A remote client's path syntax does not depend on the app server's OS."""
+    assert construct_safe_save_path(root, "My Book") == expected

@@ -80,7 +80,7 @@ jobs:
         run: |
           docker run -d --name smoke-test -p 127.0.0.1:5078:5078 \
             -e SAVE_PATH_BASE=/downloads/audiobooks \
-            -e DL_CLIENT=qbittorrent -e DL_HOST=127.0.0.1 -e CLIENT_TIMEOUT=2 \
+            -e DL_CLIENT=qbittorrent -e QBITTORRENT_HOST=127.0.0.1 -e CLIENT_TIMEOUT=2 \
             -e LISTEN_HOST=0.0.0.0 audiobookbay-automated:ci
       - name: Wait for a healthy HTTP response
         run: |

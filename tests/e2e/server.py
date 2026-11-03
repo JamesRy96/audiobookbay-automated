@@ -1,5 +1,5 @@
 # File: tests/e2e/server.py
-"""Serve real application flows, replacing only catalog transport and the qBittorrent SDK."""
+"""Serve real application flows, replacing only catalog transport and Download Client SDKs."""
 
 import json
 import os
@@ -23,7 +23,7 @@ from itsdangerous import TimestampSigner
 
 from audiobook_automated import create_app
 from audiobook_automated.config import Config
-from audiobook_automated.extensions import csrf
+from audiobook_automated.extensions import csrf, torrent_manager
 from audiobook_automated.scraper import core, network
 
 
@@ -32,8 +32,7 @@ class BrowserConfig(Config):
 
     TESTING = False
     DL_CLIENT = "qbittorrent"
-    DL_HOST = "127.0.0.1"
-    DL_API_KEY = "isolated-browser-fixture"
+    CLIENT_CONNECTIONS = {"qbittorrent": {"HOST": "127.0.0.1", "API_KEY": "isolated-browser-fixture"}}
     DL_CATEGORY = "abb-automated"
     SAVE_PATH_BASE = "/downloads/audiobooks"
     FORCE_HTTPS = False
@@ -54,7 +53,7 @@ CAPTURED = json.loads((CATALOG / "captured/manifest.json").read_text())
 lock = RLock()
 jobs: dict[str, Any] = {}
 events: list[dict[str, Any]] = []
-controls = {"fail_add": False}
+controls = {"fail_add": False, "offline_transmission": False, "offline_qbittorrent": False}
 csrf_failures: list[str] = []
 
 
@@ -74,6 +73,8 @@ def reset_state() -> None:
         events.clear()
         csrf_failures.clear()
         controls["fail_add"] = False
+        controls["offline_transmission"] = False
+        controls["offline_qbittorrent"] = False
     with network.CACHE_LOCK:
         network.search_cache.clear()
     with core.CACHE_LOCK:
@@ -126,10 +127,12 @@ class IsolatedQbitSDK:
 
     def __init__(self, **kwargs: Any) -> None:
         """Create a request-local handle onto shared isolated client state."""
+        if controls["offline_qbittorrent"]:
+            raise ConnectionError("Isolated qBittorrent is offline")
         self.app = SimpleNamespace(version="v5.3.0")
         self._http_session: Any = None
 
-    def torrents_add(self, urls: str, save_path: str, category: str) -> str:
+    def torrents_add(self, urls: str, save_path: str | None, category: str) -> str:
         """Record the actual extracted magnet and destination, or reject dispatch."""
         with lock:
             if controls["fail_add"]:
@@ -163,13 +166,63 @@ class IsolatedQbitSDK:
     def torrents_info(self, category: str) -> list[Any]:
         """Return the client's real current test state through the adapter."""
         with lock:
-            return [job for job in jobs.values() if job.category == category]
+            return [
+                job
+                for job in jobs.values()
+                if job.category == category and getattr(job, "client", "qbittorrent") == "qbittorrent"
+            ]
 
     def torrents_delete(self, torrent_hashes: str, delete_files: bool) -> None:
         """Require a known task and record whether removal preserves its files."""
         with lock:
             del jobs[torrent_hashes]
             events.append({"action": "remove", "hash": torrent_hashes, "delete_files": delete_files})
+
+
+class IsolatedTransmissionSDK:
+    """Exercise the real Transmission adapter against isolated SDK effects."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Reject an offline server before any dispatch occurs."""
+        if controls["offline_transmission"]:
+            raise ConnectionError("Isolated Transmission is offline")
+        self._http_session = SimpleNamespace(close=lambda: None)
+
+    def add_torrent(self, torrent: str, download_dir: str | None, labels: list[str], paused: bool) -> None:
+        """Record the selected client's task and actual destination."""
+        assert paused is False
+        with lock:
+            IsolatedQbitSDK().torrents_add(torrent, download_dir, labels[0])
+            event = events[-1]
+            event["client"] = "transmission"
+            job = jobs[event["hash"]]
+            job.client = "transmission"
+            job.id = 7
+
+    def get_torrents(self, arguments: list[str]) -> list[Any]:
+        """Expose only Transmission jobs through its protocol-shaped records."""
+        with lock:
+            return [
+                SimpleNamespace(
+                    id=job.id,
+                    name=job.name,
+                    labels=[job.category],
+                    progress=job.progress * 100,
+                    status=SimpleNamespace(name="downloading"),
+                    total_size=0,
+                )
+                for job in jobs.values()
+                if getattr(job, "client", "qbittorrent") == "transmission"
+            ]
+
+    def remove_torrent(self, ids: list[int | str], delete_data: bool) -> None:
+        """Remove the chosen task while preserving its downloaded files."""
+        with lock:
+            selected = next(job for job in jobs.values() if getattr(job, "id", None) in ids)
+            del jobs[selected.hash]
+            events.append(
+                {"action": "remove", "hash": selected.hash, "client": "transmission", "delete_files": delete_data}
+            )
 
 
 reset_state()
@@ -195,6 +248,7 @@ stack.enter_context(
 stack.enter_context(patch("audiobook_automated.scraper.network.get_session", return_value=CatalogTransport()))
 stack.enter_context(patch("audiobook_automated.scraper.core.time.sleep"))
 stack.enter_context(patch("audiobook_automated.clients.qbittorrent.QbClient", side_effect=IsolatedQbitSDK))
+stack.enter_context(patch("audiobook_automated.clients.transmission.TxClient", side_effect=IsolatedTransmissionSDK))
 app = create_app(BrowserConfig)
 original_csrf_handler = app.error_handler_spec[None][400][CSRFError]
 
@@ -227,7 +281,24 @@ def fixture_client() -> Response:
         data = request.get_json() or {}
         if data.get("reset"):
             reset_state()
+            app.config["DL_CLIENT"] = "qbittorrent"
+            app.config["SAVE_PATH_BASE"] = BrowserConfig.SAVE_PATH_BASE
+            app.config["CLIENT_CONNECTIONS"] = {
+                name: values.copy() for name, values in BrowserConfig.CLIENT_CONNECTIONS.items()
+            }
+            torrent_manager._load_clients(app)  # pyright: ignore[reportPrivateUsage]
+        if data.get("multi_client"):
+            app.config["DL_CLIENT"] = "qbittorrent,transmission"
+            torrent_manager._load_clients(app)  # pyright: ignore[reportPrivateUsage]
+        if "destination" in data:
+            app.config["SAVE_PATH_BASE"] = data["destination"]
+        if "client_destination" in data:
+            app.config["CLIENT_CONNECTIONS"]["qbittorrent"]["SAVE_PATH_BASE"] = data["client_destination"]
         with lock:
+            if "offline_qbittorrent" in data:
+                controls["offline_qbittorrent"] = bool(data["offline_qbittorrent"])
+            if "offline_transmission" in data:
+                controls["offline_transmission"] = bool(data["offline_transmission"])
             if "fail_add" in data:
                 controls["fail_add"] = bool(data["fail_add"])
     with lock:

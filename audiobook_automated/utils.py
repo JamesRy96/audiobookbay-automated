@@ -11,8 +11,6 @@ import uuid
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from flask import current_app
-
 from audiobook_automated.constants import (
     DEEP_PATH_WARNING_THRESHOLD,
     FALLBACK_TITLE,
@@ -149,7 +147,7 @@ def ensure_collision_safety(safe_title: str, max_length: int = 240) -> str:
     return safe_title
 
 
-def construct_safe_save_path(base_path: str | None, title: str) -> str:
+def construct_safe_save_path(base_path: str, title: str) -> str:
     """Construct a safe filesystem path for the torrent download.
 
     Encapsulates logic for:
@@ -169,31 +167,30 @@ def construct_safe_save_path(base_path: str | None, title: str) -> str:
     max_len = MAX_FILENAME_LENGTH
 
     # Dynamic Path Safety Calculation
-    if base_path:
-        # Calculate base length in bytes to ensure accuracy on modern filesystems
-        base_len = len(base_path.encode("utf-8"))
-        # Use constant for calculation: 260 - 10 - 1 = 249
-        calculated_limit = WINDOWS_PATH_SAFE_LIMIT - base_len
+    # Calculate base length in bytes to ensure accuracy on modern filesystems
+    base_len = len(base_path.encode("utf-8"))
+    # Use constant for calculation: 260 - 10 - 1 = 249
+    calculated_limit = WINDOWS_PATH_SAFE_LIMIT - base_len
 
-        # Explicitly fail if the base path is too deep to support even minimal filenames.
-        # This prevents silent failures where the truncation logic would produce unusable names.
-        if calculated_limit < MIN_FILENAME_LENGTH:
-            raise ValueError(
-                f"SAVE_PATH_BASE is too deep ({base_len} bytes). "
-                f"Remaining limit {calculated_limit} is less than MIN_FILENAME_LENGTH ({MIN_FILENAME_LENGTH})."
-            )
+    # Explicitly fail if the base path is too deep to support even minimal filenames.
+    # This prevents silent failures where the truncation logic would produce unusable names.
+    if calculated_limit < MIN_FILENAME_LENGTH:
+        raise ValueError(
+            f"SAVE_PATH_BASE is too deep ({base_len} bytes). "
+            f"Remaining limit {calculated_limit} is less than MIN_FILENAME_LENGTH ({MIN_FILENAME_LENGTH})."
+        )
 
-        if calculated_limit < DEEP_PATH_WARNING_THRESHOLD:
-            logger.warning(
-                f"SAVE_PATH_BASE is extremely deep ({base_len} bytes). "
-                "Titles will be severely truncated to prevent file system errors."
-            )
+    if calculated_limit < DEEP_PATH_WARNING_THRESHOLD:
+        logger.warning(
+            f"SAVE_PATH_BASE is extremely deep ({base_len} bytes). "
+            "Titles will be severely truncated to prevent file system errors."
+        )
 
-        # Prioritize OS limits over "usable" length.
-        # Enforce floor of MIN_FILENAME_LENGTH, cap at calculated limit.
-        max_len = max(MIN_FILENAME_LENGTH, calculated_limit)
-        # Cap at MAX_FILENAME_LENGTH to ensure we never allow massive paths if base is short
-        max_len = min(MAX_FILENAME_LENGTH, max_len)
+    # Prioritize OS limits over "usable" length.
+    # Enforce floor of MIN_FILENAME_LENGTH, cap at calculated limit.
+    max_len = max(MIN_FILENAME_LENGTH, calculated_limit)
+    # Cap at MAX_FILENAME_LENGTH to ensure we never allow massive paths if base is short
+    max_len = min(MAX_FILENAME_LENGTH, max_len)
 
     previous_title = safe_title
     safe_title = ensure_collision_safety(safe_title, max_length=max_len)
@@ -203,14 +200,10 @@ def construct_safe_save_path(base_path: str | None, title: str) -> str:
             f"Title '{title}' required fallback/truncate handling. Using collision-safe directory name: {safe_title}"
         )
 
-    if base_path:
-        # Heuristic: If base path contains backslash, assume Windows path structure.
-        # This handles cases where the Torrent Client is on Windows but the App is on Linux/Docker.
-        if current_app.config.get("DL_CLIENT_OS") == "windows" or "\\" in base_path:
-            return str(PureWindowsPath(base_path).joinpath(safe_title))
-        return str(PurePosixPath(base_path).joinpath(safe_title))
-
-    return safe_title
+    # Detect the remote path syntax independently of the web server's operating system.
+    if PureWindowsPath(base_path).drive or "\\" in base_path:
+        return str(PureWindowsPath(base_path).joinpath(safe_title))
+    return str(PurePosixPath(base_path).joinpath(safe_title))
 
 
 def calculate_static_hash(static_folder: str | Path) -> str:

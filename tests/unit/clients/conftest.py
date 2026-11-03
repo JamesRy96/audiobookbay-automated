@@ -17,10 +17,9 @@ def app() -> Generator[Flask]:
     app.config["TESTING"] = True
     # Default configs that can be overridden by monkeypatch/direct assignment
     app.config["DL_CLIENT"] = "qbittorrent"
-    app.config["DL_HOST"] = "localhost"
-    app.config["DL_PORT"] = "8080"
-    app.config["DL_USERNAME"] = "admin"
-    app.config["DL_PASSWORD"] = "admin"
+    app.config["CLIENT_CONNECTIONS"] = {
+        "qbittorrent": {"HOST": "localhost", "PORT": "8080", "USERNAME": "admin", "PASSWORD": "admin"}
+    }
     app.config["DL_CATEGORY"] = "audiobooks"
     yield app
 

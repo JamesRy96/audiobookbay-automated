@@ -28,7 +28,8 @@
   honor OS path limits (such as 260 characters on Windows).
 - Windows Reserved Names: Sanitize illegal characters and reserved words (e.g., `CON`, `PRN`, `AUX`, `NUL`), including
   compound extensions (e.g., `CON.tar.gz`).
-- Cross-Platform OS Normalization: When `DL_CLIENT_OS=windows` or backslashes are present in `SAVE_PATH_BASE`, paths are
+- Cross-Platform OS Normalization: Windows drive paths, UNC shares and backslash paths are detected from the optional
+  save root; paths are
   safely formatted using Windows backslash conventions without mangling POSIX paths on Linux.
 - Collision Avoidance: Append short UUIDs (`uuid.uuid4().hex[:8]`) to sanitized or fallback directory names to guarantee
   uniqueness.

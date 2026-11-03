@@ -2,7 +2,6 @@
 """Download client plugin for Put.io cloud torrent client."""
 
 import logging
-import os
 from typing import Any, override
 
 import requests
@@ -36,9 +35,8 @@ class PutioClient(TorrentClientPlugin):
             **kwargs: Extra arbitrary arguments.
         """
         super().__init__(*args, **kwargs)
-        self.api_key: str | None = kwargs.get("api_key")
-        self.token = token or self.api_key or self.password or os.getenv("PUTIO_TOKEN")
-        self.folder_id = folder_id or os.getenv("PUTIO_FOLDER_ID", "0")
+        self.token = token
+        self.folder_id = folder_id or "0"
         self.session: Session | None = None
 
         if self.host in ("localhost", "0.0.0.0", "127.0.0.1", ""):  # noqa: S104
@@ -66,7 +64,7 @@ class PutioClient(TorrentClientPlugin):
             ConnectionError: If no OAuth token is provided.
         """
         if not self.token:
-            raise ConnectionError("Put.io OAuth token not configured (set PUTIO_TOKEN or DL_PASSWORD).")
+            raise ConnectionError("Put.io OAuth token not configured. Set PUTIO_TOKEN.")
 
         self.session = requests.Session()
         self.session.headers.update(
@@ -97,7 +95,7 @@ class PutioClient(TorrentClientPlugin):
             return False
 
     @override
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Add a magnet link to Put.io transfers.
 
         Args:

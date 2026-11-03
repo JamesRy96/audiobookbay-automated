@@ -47,7 +47,7 @@ class TransmissionClient(TorrentClientPlugin):
             self.client = None
 
     @override
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Add a magnet link to Transmission."""
         if not self.client:
             raise ConnectionError("Transmission client not connected")

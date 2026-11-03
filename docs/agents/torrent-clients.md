@@ -20,17 +20,23 @@ starting scaffold and deliberately cannot connect or send downloads until its AP
 
 ## Configuration contract
 
-The manager supplies `host`, `port`, `username`, `password`, `scheme` and `timeout`. If `DL_PORT` is unset, it uses the
-plugin's `DEFAULT_PORT`. Current extra keyword arguments are `api_key`, `token` and `folder_id`. Accept unused keyword
+The manager supplies `host`, `port`, `username`, `password`, `scheme` and `timeout` from the client's entry in
+`Config.CLIENT_CONNECTIONS`. Environment names use the uppercase plugin name, such as `RTORRENT_HOST` and
+`RTORRENT_PASSWORD`. If the client's port is unset, it uses the plugin's `DEFAULT_PORT`. Current extra keyword
+arguments are `api_key`, `token` and `folder_id`. Accept unused keyword
 arguments so the common constructor works for every client, and call `super().__init__()`.
 
 If a client needs a new setting, add a typed parser in `Config`, pass its value through the common construction path,
 and document it in the configuration guide and settings example. An arbitrary new `.env` name is not automatically
 forwarded to plugins. Keep client-specific API behavior in the plugin, not in `TorrentManager` or Flask routes.
-The common construction path also forwards the optional Deluge `dl_url` override.
+The common construction path also forwards `DELUGE_URL` as the optional Deluge `dl_url` argument.
+The parser accepts the standard suffixes `HOST`, `PORT`, `USERNAME`, `PASSWORD`, `SCHEME`, `TIMEOUT`, `API_KEY`,
+`TOKEN`, `FOLDER_ID`, `SAVE_PATH_BASE` and `URL` for configured plugins; new suffixes require an explicit
+parser/manager change.
 
-`DL_CLIENTS` can enable several clients. They currently share the host, credentials and common connection settings;
-an unset port permits each plugin's default. Different hosts/credentials require separate app instances.
+`DL_CLIENT` accepts one plugin name or comma-separated names; the first is the default. Each plugin has independent
+connection settings. There are no shared credential aliases or implicit password-to-token conversions. The chooser
+checks each client separately; an explicitly selected unknown/offline client must never fall back to another client.
 
 ## Implement the interface
 
@@ -38,7 +44,7 @@ an unset port permits each plugin's default. Different hosts/credentials require
 | --- | --- |
 | `connect() -> None` | Establish or reuse this thread's authenticated connection. Apply the configured scheme and timeout. Raise on failure. |
 | `close() -> None` | Release this thread's handles and set them to `None`. Be safe when called repeatedly or after a partial connection failure. |
-| `add_magnet(magnet_link, save_path, category) -> None` | Send the URI, destination and category/label to the client. Raise if rejected; returning `False` does not report a failed dispatch. |
+| `add_magnet(magnet_link, save_path, category) -> None` | Send the URI, optional destination and category/label to the client. Omit the destination from the remote request when `save_path` is `None`. Raise if rejected; returning `False` does not report a failed dispatch. |
 | `remove_torrent(torrent_id) -> None` | Remove the download task without deleting its files. Raise if it cannot be removed. |
 | `get_status(category) -> list[TorrentStatus]` | Return normalized records for the requested category/label. Filter locally if the API cannot filter on the server. |
 
@@ -62,7 +68,9 @@ Use explicit timeouts and close resources. Do not add unrestricted background po
 Catalog traffic must continue through the scraper network layer with its jitter and semaphore. Tests must mock SDK
 and network boundaries; never use a real account, live download, or user directory in automated tests.
 
-`SAVE_PATH_BASE` belongs to the Download Client. The plugin sends that destination; the web container must not create,
+`SAVE_PATH_BASE` is optional; client-prefixed roots override it. Without either, preserve the client's own default
+folder. An explicit root belongs to the Download Client. The plugin sends that destination; the web container must not
+create,
 mount, or change ownership of the client's download folder. Removal must preserve the files.
 
 ## Normalize status records
@@ -92,7 +100,7 @@ Do not confuse an uploader/category label with the human author of the book.
 Existing adapters convert progress as follows: qBittorrent fractions are multiplied by 100; Transmission, Deluge and
 Put.io already provide percentages. qBittorrent can return string or JSON responses to an add request. Deluge's Label
 plugin is optional, so absence of the plugin must be handled explicitly. Put.io accepts an OAuth token from
-`PUTIO_TOKEN`, `DL_API_KEY` or `DL_PASSWORD` and an optional target folder ID.
+`PUTIO_TOKEN` and an optional target folder ID.
 
 ## Test and ship the plugin
 

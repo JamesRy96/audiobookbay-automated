@@ -331,6 +331,19 @@
                     <h3 class="modal-title" id="modal-title">Confirm Action</h3>
                 </div>
                 <div class="modal-body" id="modal-body">Are you sure you want to proceed?</div>
+                {% if download_clients|length > 1 %}
+                <fieldset id="modal-client-picker" class="modal-client-picker" hidden>
+                    <legend>Download Client</legend>
+                    {% set client_labels = {'qbittorrent': 'qBittorrent', 'deluge': 'Deluge', 'transmission':
+                    'Transmission', 'putio': 'Put.io'} %} {% for client in download_clients %}
+                    <label class="download-client-choice" data-state="checking">
+                        <input type="radio" name="download-client" value="{{ client }}" disabled />
+                        <span class="client-choice-name">{{ client_labels.get(client, client) }}</span>
+                        <span class="client-choice-status" role="status">Checking…</span>
+                    </label>
+                    {% endfor %}
+                </fieldset>
+                {% endif %}
                 <div class="modal-footer">
                     <button class="btn-secondary" id="modal-cancel">Cancel</button>
                     <button class="btn-primary" id="modal-confirm">Confirm</button>

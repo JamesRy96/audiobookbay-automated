@@ -63,30 +63,17 @@ def mock_flask_factory() -> Generator[tuple[Any, Any]]:
             importlib.import_module("audiobook_automated.app")
 
 
-def test_startup_missing_save_path(monkeypatch: Any, mock_flask_factory: Any) -> None:
-    """Ensure startup fails with critical error if SAVE_PATH_BASE is missing."""
+def test_startup_uses_client_default_folder(monkeypatch: Any, mock_flask_factory: Any) -> None:
+    """An app without a save-path override starts normally."""
     _, mock_logger = mock_flask_factory
-
-    # Updated: Expect RuntimeError instead of SystemExit (Gunicorn safety improvement)
     monkeypatch.delenv("SAVE_PATH_BASE", raising=False)
     monkeypatch.delenv("TESTING", raising=False)
-
-    # Patch torrent_manager inside this test scope because reloading modules
-    # resets module-level patches.
-    with patch("audiobook_automated.extensions.torrent_manager") as mock_tm:
-        mock_tm.verify_credentials.return_value = True
-
-        with pytest.raises(RuntimeError) as excinfo:
-            importlib.reload(audiobook_automated.config)
-            importlib.reload(audiobook_automated)
-            if "audiobook_automated.app" in sys.modules:
-                importlib.reload(sys.modules["audiobook_automated.app"])
-            else:
-                importlib.import_module("audiobook_automated.app")
-
-    assert "Configuration Error: SAVE_PATH_BASE is missing" in str(excinfo.value)
-    args, _ = mock_logger.critical.call_args
-    assert "Configuration Error: SAVE_PATH_BASE is missing" in args[0]
+    with patch("audiobook_automated.extensions.torrent_manager") as manager:
+        manager.verify_credentials.return_value = True
+        importlib.reload(audiobook_automated.config)
+        importlib.reload(audiobook_automated)
+        audiobook_automated.create_app()
+    mock_logger.critical.assert_not_called()
 
 
 def test_startup_invalid_log_level(monkeypatch: Any, mock_flask_factory: Any) -> None:

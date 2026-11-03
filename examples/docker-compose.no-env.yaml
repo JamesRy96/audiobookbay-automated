@@ -7,8 +7,8 @@ services:
       - "5078:5078"
     environment:
       DL_CLIENT: qbittorrent
-      DL_HOST: "192.168.1.100"
-      DL_PORT: "8080"
-      DL_USERNAME: admin
-      DL_PASSWORD: "replace-with-your-client-password"
-      SAVE_PATH_BASE: /downloads/audiobooks
+      QBITTORRENT_HOST: "192.168.1.100"
+      QBITTORRENT_USERNAME: admin
+      QBITTORRENT_PASSWORD: "replace-with-your-client-password"
+      # Optional: omit to use the Download Client's default folder.
+      # SAVE_PATH_BASE: /downloads/audiobooks

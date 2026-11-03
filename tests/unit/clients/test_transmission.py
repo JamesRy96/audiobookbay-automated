@@ -244,7 +244,8 @@ def test_transmission_closes_http_session() -> None:
     assert client.client is None
 
 
-def test_transmission_real_sdk_rpc_contract() -> None:
+@pytest.mark.parametrize("destination", [None, "/downloads/book"])
+def test_transmission_real_sdk_rpc_contract(destination: str | None) -> None:
     """Validate SDK session negotiation, dispatch, labels and file-preserving removal."""
     from typing import Any
 
@@ -287,7 +288,7 @@ def test_transmission_real_sdk_rpc_contract() -> None:
         mock.post("http://localhost:9091/transmission/rpc", json=rpc)
         client = TransmissionClient("localhost", 9091, None, None, timeout=7)
         client.connect()
-        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, "/downloads/book", "books")
+        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, destination, "books")
         status = client.get_status("books")
         client.remove_torrent("7")
         client.close()
@@ -295,7 +296,10 @@ def test_transmission_real_sdk_rpc_contract() -> None:
     assert status[0].state == "Downloading"
     add = next(call for call in calls if call["method"] == "torrent-add")
     assert add["arguments"]["filename"] == "magnet:?xt=urn:btih:" + info_hash
-    assert add["arguments"]["download-dir"] == "/downloads/book"
+    if destination:
+        assert add["arguments"]["download-dir"] == destination
+    else:
+        assert "download-dir" not in add["arguments"]
     assert add["arguments"]["labels"] == ["books"]
     assert add["arguments"]["paused"] is False
     assert calls[-1]["arguments"] == {"ids": [7], "delete-local-data": False}

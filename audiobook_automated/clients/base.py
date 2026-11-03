@@ -181,7 +181,7 @@ class TorrentClientPlugin(ABC):
         pass  # pragma: no cover
 
     @abstractmethod
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Add a magnet link to the client."""
         pass  # pragma: no cover
 

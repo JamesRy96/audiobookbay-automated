@@ -106,6 +106,7 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     def inject_global_vars() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         """Inject global configuration variables into all templates."""
         return {
+            "download_clients": torrent_manager.list_clients(),
             "site_title": app.config["SITE_TITLE"],
             "site_logo": app.config.get("SITE_LOGO"),
             "splash_enabled": app.config["SPLASH_ENABLED"],

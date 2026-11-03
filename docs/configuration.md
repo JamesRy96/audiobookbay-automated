@@ -1,7 +1,8 @@
 <!-- File: docs/configuration.md -->
 # Optional settings and client setup
 
-Start with the [Docker installation steps](../README.md#install-with-docker). Change only the settings you need in `.env`.
+Start with the [Docker installation steps](../README.md#install-with-docker). Change only the settings you need in
+`.env`.
 After changing settings, run `docker compose up -d --force-recreate` in your app folder.
 
 ## Passwords and special characters
@@ -9,78 +10,155 @@ After changing settings, run `docker compose up -d --force-recreate` in your app
 Keep passwords in single quotes in `.env` so `$` and `#` are treated as part of the password. For example:
 
 ~~~env
-DL_PASSWORD='my$pass#word'
+QBITTORRENT_PASSWORD='my$pass#word'
 ~~~
 
-If the password contains a single quote, escape that quote with a backslash, as in `DL_PASSWORD='Let\'s go!'`.
+If the password contains a single quote, escape that quote with a backslash, as in `QBITTORRENT_PASSWORD='Let\'s go!'`.
 These are examples only; enter the password already used by your Download Client.
 
 ## Download Clients
 
+Choose one client with `DL_CLIENT=qbittorrent`, `transmission`, `deluge`, or `putio`.
+Use the matching uppercase settings below. Only configure clients you actually use.
+Ports have defaults, so you only need a port setting if you changed the client's normal port.
+
 ### qBittorrent
 
-Enable its web interface, then use its address, port, username and password. The usual port is `8080`.
-`DL_API_KEY` is also supported by compatible qBittorrent versions.
+Enable qBittorrent's web interface and use the same login details you enter there:
+
+~~~env
+DL_CLIENT=qbittorrent
+QBITTORRENT_HOST=192.168.1.100
+QBITTORRENT_USERNAME=admin
+QBITTORRENT_PASSWORD='your-web-interface-password'
+~~~
+
+The default port is `8080`; set `QBITTORRENT_PORT` if different. For HTTPS, set `QBITTORRENT_SCHEME=https`.
+Compatible qBittorrent versions can use `QBITTORRENT_API_KEY` instead of username/password.
 
 ### Transmission
 
-Use Transmission 4.x with remote/web access enabled and `DL_CLIENT=transmission`. The usual port is `9091`.
-Its access rules must allow connections from the app's container or server. Labels keep app downloads visible in
-Downloads; a rejected label is an error rather than a second, unlabelled dispatch.
+Use Transmission 4.x with remote/web access enabled. Allow connections from the app's container or server:
+
+~~~env
+DL_CLIENT=transmission
+TRANSMISSION_HOST=192.168.1.100
+TRANSMISSION_USERNAME=your-username
+TRANSMISSION_PASSWORD='your-password'
+~~~
+
+The default port is `9091`; set `TRANSMISSION_PORT` if different. For HTTPS, set `TRANSMISSION_SCHEME=https`.
+Labels keep app downloads visible in Downloads; a rejected label is reported as an error.
 
 ### Deluge
 
-Enable Deluge Web, use `DL_CLIENT=deluge`, and set `DL_PORT=8112` unless you changed it.
-`DL_PASSWORD` is your Deluge Web password. Enable the **Label** plugin for category-based organization.
-Without it, Deluge may show downloads outside this app's category. Use a Deluge 2.x daemon connected to the Web UI.
-For a reverse-proxy path, set `DL_URL=https://downloads.example/deluge/`; the SDK adds `/json` automatically.
+Enable Deluge Web and connect it to a Deluge 2.x daemon:
+
+~~~env
+DL_CLIENT=deluge
+DELUGE_HOST=192.168.1.100
+DELUGE_PASSWORD='your-deluge-web-password'
+~~~
+
+The default port is `8112`; set `DELUGE_PORT` if different. Deluge Web uses a password, not a username.
+Enable the daemon's **Label** plugin for category-based organization. Without it, Deluge may show downloads outside
+this app's category. For HTTPS, set `DELUGE_SCHEME=https`. For a reverse-proxy path, set
+`DELUGE_URL=https://downloads.example/deluge/`; the SDK adds `/json` automatically.
 The app requests new transfers unpaused, but queue limits, missing peers and daemon settings can still delay progress.
 
 ### Put.io
 
-Use these settings for Put.io's cloud service. Replace the token with your Put.io OAuth token and remove any
-`DL_HOST` value left over from another Download Client.
+Put.io uses an OAuth token instead of a server address and password:
 
 ~~~env
 DL_CLIENT=putio
-DL_HOST=
-PUTIO_TOKEN='your-token'
+PUTIO_TOKEN='your-oauth-token'
 PUTIO_FOLDER_ID=0
 ~~~
 
-An empty `DL_HOST` selects the normal Put.io API automatically. `PUTIO_FOLDER_ID=0` saves to your cloud root folder;
-enter another folder ID to change the target. Put.io does not use `SAVE_PATH_BASE` or the download category.
-
-### Windows save paths
-
-If the Download Client runs on Windows, use:
-
-~~~env
-SAVE_PATH_BASE=D:/Audiobooks
-DL_CLIENT_OS=windows
-~~~
-
-Use a folder that the Download Client can write to. The app sends a destination path; it does not move files or change
-that folder's ownership.
+`PUTIO_FOLDER_ID=0` saves to your cloud root folder; enter another folder ID to change the target.
+Put.io does not use `SAVE_PATH_BASE` or the download category. Do not add Put.io to `DL_CLIENT` without a token.
 
 ### Several Download Clients
 
-`DL_CLIENT` chooses the primary client. `DL_CLIENTS` can list additional supported clients, separated by commas.
-The current setup shares host, credentials and connection settings across those clients. Leave `DL_PORT` unset to use
-each client's default port. For different hosts or credentials, use separate app instances.
+List the client names in **one** setting, separated by commas. The first is the default selection.
+Each client keeps its own address and login details. For example:
+
+~~~env
+DL_CLIENT=qbittorrent,deluge,transmission
+QBITTORRENT_HOST=192.168.1.100
+QBITTORRENT_USERNAME=your-qbittorrent-username
+QBITTORRENT_PASSWORD='your-qbittorrent-password'
+DELUGE_HOST=192.168.1.100
+DELUGE_PASSWORD='your-deluge-web-password'
+TRANSMISSION_HOST=192.168.1.100
+TRANSMISSION_USERNAME=your-transmission-username
+TRANSMISSION_PASSWORD='your-transmission-password'
+~~~
+
+The default ports are `8080`, `8112`, and `9091`, respectively. Addresses can differ.
+Choose a connected client when you select Download. The dialog checks each client's connection and disables offline
+clients. With one configured client, Download sends directly without showing a client chooser.
+Downloads combines tasks from all configured clients, and Remove targets the client that owns the task.
+A dispatch failure is reported; the app does not silently send the book to a different client.
+
+`DL_CATEGORY` applies to all local clients. Each client uses its own configured download folder unless you add an
+optional path override.
+
+### Download folders
+
+**No path setting is required.** By default, the app lets each Download Client choose its configured folder and torrent
+layout, including any category/label rules in that client. Put.io uses its selected cloud folder.
+
+To have the app organize downloads into a separate folder for each book, optionally set a root:
+
+~~~env
+SAVE_PATH_BASE=/downloads/audiobooks
+~~~
+
+To use different roots for individual clients, set the matching client-specific value:
+
+~~~env
+QBITTORRENT_SAVE_PATH_BASE=/downloads/audiobooks
+DELUGE_SAVE_PATH_BASE=/media/books
+TRANSMISSION_SAVE_PATH_BASE=/downloads/transmission-books
+~~~
+
+A client-specific root takes priority over the shared `SAVE_PATH_BASE`. With neither set, the app sends no destination
+override. With a root set, the app appends a safe book-title folder. Use paths **as seen by the Download Clients**,
+not this app's container, and make sure each client can write there. Do not mount download folders into this app.
+
+### Windows save paths
+
+Windows drive paths and network shares are detected automatically, even when this app runs in Linux/Docker.
+For an optional Windows destination override, use:
+
+~~~env
+SAVE_PATH_BASE=D:/Audiobooks
+~~~
+
+The app sends a destination path; it does not move files or change that folder's ownership.
+
+### Optional connection settings
 
 | Setting | Default / purpose |
 | --- | --- |
-| `DL_SCHEME` | `http`; use `https` if the Download Client serves HTTPS |
+| `<CLIENT>_HOST` | Server address; defaults to `localhost` inside the app's network |
+| `<CLIENT>_PORT` | Client's normal port; positive whole number up to `65535` |
+| `<CLIENT>_SCHEME` | `http`; use `https` if that client serves HTTPS |
+| `<CLIENT>_TIMEOUT` | Override the common timeout for that client, in positive whole seconds |
+| `CLIENT_TIMEOUT` | `30` seconds; common default for Download Client requests |
 | `DL_CATEGORY` | `abb-automated`; label/category used for this app's downloads |
-| `CLIENT_TIMEOUT` | `30` seconds for Download Client requests |
-| `DL_URL` | Optional full Deluge Web URL |
-| `DL_CLIENT_OS` | `posix`; use `windows` for Windows path conventions |
+
+Replace `<CLIENT>` with `QBITTORRENT`, `DELUGE`, or `TRANSMISSION`; do not enter the angle brackets.
+Names are case-sensitive. Use only the settings shown for your chosen client; shared connection aliases are not
+supported.
 
 ## Appearance
 
 The menu's Appearance setting changes the theme for the current browser. `DEFAULT_THEME` sets the starting theme for
-new browsers: `purple`, `crow`, `catppuccin`, `nord`, `tokyo`, `oled`, `forest`, `ocean`, `sunset`, `dracula`, `cyberpunk`,
+new browsers: `purple`, `crow`, `catppuccin`, `nord`, `tokyo`, `oled`, `forest`, `ocean`, `sunset`, `dracula`,
+`cyberpunk`,
 `light`, `royal`, or `slate`.
 
 | Setting | Purpose |
@@ -148,7 +226,8 @@ Configure the Download Client's network separately; sending it a magnet link doe
 
 If the app shares Gluetun's network with `network_mode: service:gluetun`, publish the app's port on the Gluetun service.
 Omit the app's `ports` key entirely; an empty `ports:` value is invalid Compose. When the Download Client shares that
-same network, use `DL_HOST=127.0.0.1` and its actual Web UI port. A separate client needs an address reachable from
+same network, use `QBITTORRENT_HOST=127.0.0.1` (or the matching client-specific host setting) and its actual Web UI
+port. A separate client needs an address reachable from
 the app's network. Unraid users should enter the documented `DL_CLIENT=qbittorrent` setting; `DOWNLOAD_CLIENT` is
 not an app setting.
 

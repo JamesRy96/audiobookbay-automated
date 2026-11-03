@@ -25,11 +25,11 @@ def test_config_validate_success(monkeypatch: MonkeyPatch) -> None:
     """Ensure validation passes with valid configuration."""
     monkeypatch.setenv("SECRET_KEY", "prod-secret-key")
     monkeypatch.setenv("SAVE_PATH_BASE", "/data")
-    monkeypatch.setenv("DL_SCHEME", "https")
+    monkeypatch.setenv("QBITTORRENT_SCHEME", "https")
     # Patch class attributes as well since they are loaded at import
     monkeypatch.setattr(Config, "SECRET_KEY", "prod-secret-key")
     monkeypatch.setattr(Config, "SAVE_PATH_BASE", "/data")
-    monkeypatch.setattr(Config, "DL_SCHEME", "https")
+    monkeypatch.setattr(Config, "CLIENT_CONNECTIONS", {"qbittorrent": {"SCHEME": "https"}})
     monkeypatch.setattr(Config, "DL_CLIENT", "qbittorrent")  # Required now
     monkeypatch.setattr(Config, "TESTING", False)
     monkeypatch.setattr(Config, "FLASK_DEBUG", False)
@@ -38,17 +38,11 @@ def test_config_validate_success(monkeypatch: MonkeyPatch) -> None:
     Config.validate(logging.getLogger("test"))
 
 
-def test_config_validate_missing_save_path(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
-    """Ensure validation fails hard if SAVE_PATH_BASE is missing."""
-    monkeypatch.setenv("SAVE_PATH_BASE", "")
+def test_config_allows_client_default_destination(monkeypatch: MonkeyPatch) -> None:
+    """Normal setup uses the Download Client's own folder without a path override."""
     monkeypatch.setattr(Config, "SAVE_PATH_BASE", None)
-    # Force TESTING to False to trigger the validation error
     monkeypatch.setattr(Config, "TESTING", False)
-
-    with pytest.raises(RuntimeError):
-        Config.validate(logging.getLogger("test"))
-
-    assert "Configuration Error: SAVE_PATH_BASE is missing" in caplog.text
+    Config.validate(logging.getLogger("test"))
 
 
 def test_validate_dl_client_missing(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
@@ -76,15 +70,12 @@ def test_config_validate_invalid_log_level(monkeypatch: MonkeyPatch, caplog: Log
     assert "Configuration Warning: Invalid LOG_LEVEL 'INVALID_LEVEL' provided" in caplog.text
 
 
-def test_config_validate_invalid_dl_scheme(monkeypatch: MonkeyPatch, caplog: LogCaptureFixture) -> None:
-    """Ensure validation fails for invalid DL_SCHEME."""
-    monkeypatch.setattr(Config, "DL_SCHEME", "ftp")
-    monkeypatch.setattr(Config, "DL_CLIENT", "qbittorrent")  # Satisfy prerequisite
-
-    with pytest.raises(ValueError, match="Invalid DL_SCHEME"):
+def test_config_validate_invalid_client_scheme(monkeypatch: MonkeyPatch) -> None:
+    """Validate the client-specific scheme with a useful setting name."""
+    monkeypatch.setattr(Config, "CLIENT_CONNECTIONS", {"qbittorrent": {"SCHEME": "ftp"}})
+    monkeypatch.setattr(Config, "DL_CLIENT", "qbittorrent")
+    with pytest.raises(ValueError, match="QBITTORRENT_SCHEME"):
         Config.validate(logging.getLogger("test"))
-
-    assert "Invalid DL_SCHEME" in caplog.text
 
 
 def test_force_https_default() -> None:
@@ -198,7 +189,7 @@ def test_config_parsing_quoted() -> None:
         "ABS_URL": '"http://abs.local"',
         "NAV_LINK_NAME": '"My Link"',
         "DL_CLIENT": '"deluge"',
-        "DL_PORT": '"8080"',
+        "DELUGE_PORT": '"8080"',
         "LOG_LEVEL": '"DEBUG"',
         "ABB_MIRRORS": '"mirror1, mirror2"',
         "MAGNET_TRACKERS": '"tracker1, tracker2"',
@@ -220,7 +211,7 @@ def test_config_parsing_quoted() -> None:
         assert ReloadedConfig.ABS_URL == "http://abs.local"
         assert ReloadedConfig.NAV_LINK_NAME == "My Link"
         assert ReloadedConfig.DL_CLIENT == "deluge"
-        assert ReloadedConfig.DL_PORT == "8080"
+        assert ReloadedConfig.CLIENT_CONNECTIONS["deluge"]["PORT"] == "8080"
         assert ReloadedConfig.LOG_LEVEL_STR == "DEBUG"
         assert ReloadedConfig.ABB_MIRRORS == ["mirror1", "mirror2"]
         assert ReloadedConfig.MAGNET_TRACKERS == ["tracker1", "tracker2"]
@@ -241,7 +232,7 @@ def test_config_parsing_defaults() -> None:
         assert ReloadedConfig.SECRET_KEY == ""
         assert ReloadedConfig.ABS_URL is None
         assert ReloadedConfig.NAV_LINK_NAME is None
-        assert ReloadedConfig.DL_PORT is None
+        assert ReloadedConfig.CLIENT_CONNECTIONS == {"test": {}}
         assert ReloadedConfig.SITE_TITLE == DEFAULT_SITE_TITLE
         assert ReloadedConfig.SPLASH_MESSAGE == DEFAULT_SPLASH_MESSAGE
         assert ReloadedConfig.SITE_LOGO == DEFAULT_SITE_LOGO
@@ -274,8 +265,8 @@ def test_config_credentials_from_environment() -> None:
     with patch.dict(
         os.environ,
         {
-            "DL_USERNAME": "configured_user",
-            "DL_PASSWORD": "configured_pass",
+            "TEST_USERNAME": "configured_user",
+            "TEST_PASSWORD": "configured_pass",
             "SAVE_PATH_BASE": "/tmp",
             "DL_CLIENT": "test",
         },
@@ -284,5 +275,61 @@ def test_config_credentials_from_environment() -> None:
         importlib.reload(config)
         from audiobook_automated.config import Config as ReloadedConfig
 
-        assert ReloadedConfig.DL_USERNAME == "configured_user"
-        assert ReloadedConfig.DL_PASSWORD == "configured_pass"
+        assert ReloadedConfig.CLIENT_CONNECTIONS["test"]["USERNAME"] == "configured_user"
+        assert ReloadedConfig.CLIENT_CONNECTIONS["test"]["PASSWORD"] == "configured_pass"
+
+
+def test_config_loads_independent_client_connections() -> None:
+    """Load the actual Compose environment names without leaking another client's credentials."""
+    with patch.dict(
+        os.environ,
+        {
+            "DL_CLIENT": "qbittorrent,deluge,transmission",
+            "QBITTORRENT_HOST": "qbit",
+            "QBITTORRENT_API_KEY": "test-key",
+            "DELUGE_HOST": "deluge",
+            "DELUGE_PASSWORD": "deluge-only",
+            "DELUGE_PORT": "8112",
+            "TRANSMISSION_USERNAME": "tx-user",
+            "TRANSMISSION_PASSWORD": "tx-only",
+        },
+        clear=True,
+    ):
+        importlib.reload(config)
+        loaded = config.Config
+        assert loaded.DL_CLIENT == "qbittorrent,deluge,transmission"
+        assert loaded.CLIENT_CONNECTIONS == {
+            "qbittorrent": {"HOST": "qbit", "API_KEY": "test-key"},
+            "deluge": {"HOST": "deluge", "PASSWORD": "deluge-only", "PORT": "8112"},
+            "transmission": {"USERNAME": "tx-user", "PASSWORD": "tx-only"},
+        }
+
+
+@pytest.mark.parametrize(
+    "values", [{"PORT": "bad"}, {"PORT": "0"}, {"PORT": "65536"}, {"TIMEOUT": "0"}, {"SCHEME": "ftp"}]
+)
+def test_client_connection_validation(values: dict[str, str], monkeypatch: MonkeyPatch) -> None:
+    """Reject unusable overrides with the setting name and without credential values."""
+    monkeypatch.setattr(Config, "CLIENT_CONNECTIONS", {"deluge": values})
+    monkeypatch.setattr(Config, "DL_CLIENT", "deluge")
+    monkeypatch.setattr(Config, "SAVE_PATH_BASE", "/downloads")
+    with pytest.raises(ValueError, match="DELUGE_"):
+        Config.validate(logging.getLogger("test"))
+
+
+def test_client_names_and_empty_connection_list(monkeypatch: MonkeyPatch) -> None:
+    """Explain comma-separated primary values rather than selecting another client."""
+    assert config.parse_client_connections(None) == {}
+    monkeypatch.setattr(Config, "DL_CLIENT", "qbittorrent,deluge,transmission.")
+    monkeypatch.setattr(Config, "SAVE_PATH_BASE", "/downloads")
+    with pytest.raises(ValueError, match="DL_CLIENT"):
+        Config.validate(logging.getLogger("test"))
+
+
+def test_putio_only_setup_needs_no_local_folder(monkeypatch: MonkeyPatch) -> None:
+    """Cloud-only setup does not require an unused local destination."""
+    monkeypatch.setattr(Config, "DL_CLIENT", "putio")
+    monkeypatch.setattr(Config, "SAVE_PATH_BASE", None)
+    monkeypatch.setattr(Config, "TESTING", False)
+    monkeypatch.setattr(Config, "CLIENT_CONNECTIONS", {"putio": {"TOKEN": "isolated-token"}})
+    Config.validate(logging.getLogger("test"))

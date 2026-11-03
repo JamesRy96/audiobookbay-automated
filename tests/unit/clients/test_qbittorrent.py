@@ -255,26 +255,14 @@ def test_qbittorrent_api_key_auth(app: Flask) -> None:
         assert client.client is None
 
 
-def test_qbittorrent_password_prefixed_api_key(app: Flask) -> None:
-    """Test using password starting with 'qbt_' as api_key."""
-    with (
-        patch("audiobook_automated.clients.qbittorrent.QbClient", autospec=True) as MockQbClient,
-        app.app_context(),
-    ):
-        mock_instance = MockQbClient.return_value
-        mock_instance.app.version = "v5.3.0"
-
-        client = QBittorrentClient("localhost", 8080, "meek2100", "qbt_abc123key")
+def test_qbittorrent_password_is_not_guessed_as_an_api_key() -> None:
+    """Only the explicit API key setting enables API key authentication."""
+    with patch("audiobook_automated.clients.qbittorrent.QbClient") as sdk:
+        client = QBittorrentClient("localhost", 8080, "user", "qbt_password")
         client.connect()
-        assert client.api_key == "qbt_abc123key"
-        MockQbClient.assert_called_with(
-            host="http://localhost",
-            port=8080,
-            FORCE_SCHEME_FROM_HOST=True,
-            username="meek2100",
-            api_key="qbt_abc123key",
-            REQUESTS_ARGS={"timeout": 30},
-        )
+        assert client.api_key is None
+        sdk.return_value.auth_log_in.assert_called_once()
+        assert sdk.call_args.kwargs["password"] == "qbt_password"
 
 
 def test_qbittorrent_auth_failure_cooldown(app: Flask) -> None:
@@ -366,7 +354,8 @@ def test_qbittorrent_stopped_and_pending_metadata(raw_state: str, raw_size: int,
     assert status.size == expected_size
 
 
-def test_qbittorrent_real_sdk_https_contract() -> None:
+@pytest.mark.parametrize("destination", [None, "/downloads/book"])
+def test_qbittorrent_real_sdk_https_contract(destination: str | None) -> None:
     """Honor HTTPS and exercise real SDK add/list/delete API parameters."""
     from urllib.parse import parse_qs
 
@@ -395,14 +384,16 @@ def test_qbittorrent_real_sdk_https_contract() -> None:
             "client.example", 8443, None, None, scheme="https", timeout=7, api_key="test-api-key"
         )
         client.connect()
-        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, "/downloads/book", "books")
+        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, destination, "books")
         add = mock.last_request
         assert add is not None
-        assert parse_qs(add.text) == {
+        expected = {
             "urls": ["magnet:?xt=urn:btih:" + info_hash],
-            "savepath": ["/downloads/book"],
             "category": ["books"],
         }
+        if destination:
+            expected["savepath"] = [destination]
+        assert parse_qs(add.text) == expected
         status = client.get_status("books")
         assert mock.last_request is not None
         assert parse_qs(mock.last_request.text)["category"] == ["books"]

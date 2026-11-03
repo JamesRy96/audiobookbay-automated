@@ -297,7 +297,8 @@ def test_deluge_label_detection_is_thread_local() -> None:
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_deluge_real_sdk_rpc_contract(enabled: bool) -> None:
+@pytest.mark.parametrize("destination", [None, "/downloads/book"])
+def test_deluge_real_sdk_rpc_contract(enabled: bool, destination: str | None) -> None:
     """Exercise real SDK serialization, labeling, status and removal at the HTTP boundary."""
     from typing import Any
 
@@ -342,14 +343,17 @@ def test_deluge_real_sdk_rpc_contract(enabled: bool) -> None:
             timeout=7,
         )
         client.connect()
-        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, "/downloads/book", "books")
+        client.add_magnet("magnet:?xt=urn:btih:" + info_hash, destination, "books")
         status = client.get_status("books")
         client.remove_torrent(info_hash)
         client.close()
     assert status[0].progress == 42.5
     add = next(call for call in calls if call["method"] == "core.add_torrent_magnet")
     assert add["params"][0] == "magnet:?xt=urn:btih:" + info_hash
-    assert add["params"][1]["download_location"] == "/downloads/book"
+    if destination:
+        assert add["params"][1]["download_location"] == destination
+    else:
+        assert "download_location" not in add["params"][1]
     assert add["params"][1]["add_paused"] is False
     assert sum(call["method"] == "core.add_torrent_magnet" for call in calls) == 1
     assert any(call["method"] == "label.set_torrent" for call in calls) is enabled
@@ -358,3 +362,12 @@ def test_deluge_real_sdk_rpc_contract(enabled: bool) -> None:
     assert calls[-1]["method"] == "core.remove_torrent"
     assert calls[-1]["params"] == [info_hash, False]
     transport.close.assert_called_once()
+
+
+def test_deluge_default_destination_is_omitted(mock_deluge_client: MagicMock) -> None:
+    """The daemon receives no download-location override when the user leaves it unset."""
+    client = create_client()
+    client.connect()
+    client.add_magnet("magnet:?xt=test", None, "books")
+    options = mock_deluge_client.add_torrent_magnet.call_args.kwargs["torrent_options"]
+    assert "download_location" not in options.to_dict()

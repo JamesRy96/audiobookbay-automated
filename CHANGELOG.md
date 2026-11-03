@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Make polling tests deterministic with one mocked clock; verify exact refresh cadence, slow requests and retry recovery.
+
+- Disable transitions for reduced motion so WebKit does not leave navigation controls hidden.
+
 - Honor Deluge reverse-proxy URLs, daemon Label detection, request timeouts and session cleanup; request new transfers
   unpaused and isolate plugin observations between request threads.
 - Honor the configured qBittorrent HTTP/HTTPS scheme and close Transmission HTTP sessions. Reject Transmission label
@@ -30,10 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - End-user Docker setup, configuration/troubleshooting guides, isolated browser fixtures and release instructions.
 
 - **Multi-Client Routing:** Added support for aggregating and dispatching to multiple download clients simultaneously
-  using `DL_CLIENTS` (comma-separated list).
-- **API Key Authentication:** Added `DL_API_KEY` support for modern qBittorrent and Put.io setups.
-- **Cross-Platform Path Normalization:** Added `DL_CLIENT_OS=windows` configuration to safely format paths for Windows
-  torrent client hosts without mangling POSIX paths on Linux.
+  using `DL_CLIENT` (comma-separated list).
+- **API Key Authentication:** Use `QBITTORRENT_API_KEY` for qBittorrent API keys and `PUTIO_TOKEN` for Put.io OAuth
+  tokens.
+- **Cross-Platform Path Normalization:** Detect Windows drives and network shares from optional save-path overrides,
+  independently of the app server's OS. No operating-system setting is required.
 - **Dual Protocol Fallback & Latency Scoring:** Search scrapers now probe HTTPS first and gracefully fall back to HTTP
   (port 80), ranking mirrors via exponential moving average (EMA) response latency.
 - **Live Diagnostics Suite:** Added comprehensive health dashboard and scraper inspector at `/diagnostics` (toggleable
@@ -53,6 +58,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   polling, metric rendering, and log filtering.
 
 ### Changed
+
+- Default to each Download Client's configured folder; optional client-specific save roots override a shared root.
+- Use one `DL_CLIENT` selector for single or multiple clients, with independent uppercase client-prefixed connection
+  settings. Remove shared credential aliases and implicit password-to-token conversions before the first release.
+- Show each Download Client's connection status in the chooser, disable offline choices, and skip the chooser for
+  single-client setups. Reject unknown client selections rather than dispatching to a different client.
+- Document copyable setup examples for each client and multi-client installations; save-path overrides are optional
+  for every client.
 
 - Generate session/CSRF signing keys automatically; normal installation no longer requires a manual secret.
 - Explain page expiry with a refresh instruction after restarts, while retaining optional signing-key configuration.

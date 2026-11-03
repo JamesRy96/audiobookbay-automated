@@ -127,7 +127,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 "Audiobook";
             const client = sendBtn.dataset.client;
             if (link) {
-                sendTorrent(link, title, sendBtn, client);
+                requestDownload(link, title, sendBtn, client);
             }
         }
 
@@ -147,7 +147,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const title = detailsBtn.dataset.title;
             const client = detailsBtn.dataset.client;
             if (link && title) {
-                sendTorrent(link, title, detailsBtn, client);
+                requestDownload(link, title, detailsBtn, client);
             }
         }
 
@@ -461,7 +461,7 @@ function showNotification(message, type = "info") {
  * @param {string} type - 'primary' or 'danger' for button styling.
  */
 let releaseConfirmation = null;
-function showModal(title, message, onConfirm, confirmText = "Confirm", type = "primary") {
+function showModal(title, message, onConfirm, confirmText = "Confirm", type = "primary", chooseClient = false) {
     const modal = document.getElementById("confirmation-modal");
     if (!modal) {
         console.error("Modal element not found!");
@@ -477,11 +477,14 @@ function showModal(title, message, onConfirm, confirmText = "Confirm", type = "p
     const confirmBtn = document.getElementById("modal-confirm");
     const cancelBtn = document.getElementById("modal-cancel");
 
+    const clientPicker = document.getElementById("modal-client-picker");
+    if (clientPicker) clientPicker.hidden = !chooseClient;
     if (titleEl) titleEl.textContent = title;
     if (bodyEl) bodyEl.textContent = message;
 
     if (confirmBtn) {
         confirmBtn.textContent = confirmText;
+        confirmBtn.disabled = false;
         // Reset classes
         confirmBtn.className = "";
         if (type === "danger") {
@@ -527,6 +530,7 @@ function showModal(title, message, onConfirm, confirmText = "Confirm", type = "p
 }
 
 function closeModal() {
+    clientCheckGeneration++;
     releaseConfirmation?.();
     releaseConfirmation = null;
     const modal = document.getElementById("confirmation-modal");
@@ -655,6 +659,71 @@ function deleteTorrent(torrentId, buttonElement) {
  * @param {HTMLElement} [buttonElement] - The button clicked (for state management).
  * @param {string} [client] - Optional target torrent client identifier.
  */
+let clientCheckGeneration = 0;
+
+function requestDownload(link, title, button, client) {
+    const picker = document.getElementById("modal-client-picker");
+    const choices = picker ? [...picker.querySelectorAll('input[name="download-client"]')] : [];
+    if (client || choices.length < 2) {
+        sendTorrent(link, title, button, client);
+        return;
+    }
+    if (button?.disabled) return;
+    const saved = window.UI?.storage("sessionStorage", "getItem", "downloadClient");
+    const preferred = choices.find((choice) => choice.value === saved) || choices[0];
+    for (const choice of choices) {
+        choice.checked = choice === preferred;
+        choice.disabled = true;
+        choice.closest("label").dataset.state = "checking";
+        choice.closest("label").querySelector(".client-choice-status").textContent = "Checking…";
+    }
+    showModal(
+        "Choose Download Client",
+        `Send “${title}” to a connected client.`,
+        () => {
+            const selected = choices.find((choice) => choice.checked && !choice.disabled);
+            if (!selected) {
+                showNotification("Choose a connected Download Client and try again.", "error");
+                return;
+            }
+            window.UI?.storage("sessionStorage", "setItem", "downloadClient", selected.value);
+            sendTorrent(link, title, button, selected.value);
+        },
+        "Download",
+        "primary",
+        true
+    );
+    const generation = ++clientCheckGeneration;
+    const confirm = document.getElementById("modal-confirm");
+    const updateConfirm = () => {
+        confirm.disabled = !choices.some((choice) => choice.checked && !choice.disabled);
+    };
+    updateConfirm();
+    picker.onchange = updateConfirm;
+    for (const choice of choices) {
+        const finish = (connected) => {
+            if (generation !== clientCheckGeneration) return;
+            const label = choice.closest("label");
+            choice.disabled = !connected;
+            label.dataset.state = connected ? "connected" : "offline";
+            label.querySelector(".client-choice-status").textContent = connected ? "Connected" : "Offline";
+            const selected = choices.find((item) => item.checked);
+            if (!selected || (selected.disabled && selected.closest("label").dataset.state === "offline")) {
+                const available = choices.find((item) => !item.disabled);
+                if (available) available.checked = true;
+            }
+            updateConfirm();
+        };
+        fetch("/api/clients?client=" + encodeURIComponent(choice.value))
+            .then((response) => {
+                if (!response.ok) throw new Error("Client check failed");
+                return response.json();
+            })
+            .then((data) => finish(data.clients?.find((item) => item.name === choice.value)?.connected === true))
+            .catch(() => finish(false));
+    }
+}
+
 function sendTorrent(link, title, buttonElement, client) {
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
     const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
@@ -710,9 +779,6 @@ function sendTorrent(link, title, buttonElement, client) {
                 buttonElement.disabled = false;
                 buttonElement.innerHTML = originalBtnHTML;
             }
-        })
-        .finally(() => {
-            // Ensure any necessary cleanup happens here
         });
 }
 
@@ -765,12 +831,15 @@ function initClientBannerCheck() {
                 banner.style.display = "block";
                 // Optionally disable download buttons to prevent user frustration
                 document.querySelectorAll(".send-torrent-btn, .details-download-btn").forEach((btn) => {
-                    btn.classList.add("disabled");
+                    const hasPicker = document.getElementById("modal-client-picker");
+                    btn.disabled = !hasPicker;
+                    if (!hasPicker) btn.classList.add("disabled");
                     btn.title = "Download client is offline or credentials require attention";
                 });
             } else {
                 banner.style.display = "none";
                 document.querySelectorAll(".send-torrent-btn, .details-download-btn").forEach((btn) => {
+                    btn.disabled = false;
                     btn.classList.remove("disabled");
                     btn.title = "";
                 });

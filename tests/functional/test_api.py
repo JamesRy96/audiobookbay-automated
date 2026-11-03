@@ -588,8 +588,8 @@ def test_send_no_save_path_base(client: FlaskClient) -> None:
         with patch("audiobook_automated.routes.torrent_manager") as mock_tm:
             response = client.post("/send", json={"link": "http://link", "title": "Book"})
             assert response.status_code == 200
-            # Verify add_magnet was called with just the title (no base path)
-            mock_tm.add_magnet.assert_called_with("magnet:?xt=urn:btih:123", "Book")
+            # Omit the destination so the client chooses its configured folder.
+            mock_tm.add_magnet.assert_called_with("magnet:?xt=urn:btih:123", None)
 
 
 def test_send_hash_not_found(client: FlaskClient) -> None:
@@ -941,3 +941,43 @@ def test_signed_page_rejects_clock_rollback_and_expiry(clock_delta: int) -> None
         response = browser.post("/delete", json={"id": "absent"}, headers={"X-CSRFToken": token})
     assert response.status_code == 400
     assert response.json == {"message": "Page expired. Refresh and try again.", "code": "page_expired"}
+
+
+def test_api_clients_checks_only_requested_client(client: FlaskClient) -> None:
+    """Independent checks do not wait for unrelated offline clients."""
+    with patch("audiobook_automated.routes.torrent_manager") as manager:
+        manager.list_clients.return_value = ["qbittorrent", "deluge"]
+        manager.client_type = "QbittorrentClient"
+        manager.verify_credentials.return_value = False
+        response = client.get("/api/clients?client=DELUGE")
+        assert response.status_code == 200
+        assert response.json == {"clients": [{"name": "deluge", "connected": False}], "primary": "qbittorrent"}
+        manager.verify_credentials.assert_called_once_with("deluge")
+        manager.verify_credentials.reset_mock()
+        response = client.get("/api/clients?client=unknown")
+        assert response.status_code == 400
+        manager.verify_credentials.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "shared, per_client, expected",
+    [
+        (None, None, None),
+        ("/shared", None, "/shared/Test Book"),
+        ("/shared", "/transmission-books", "/transmission-books/Test Book"),
+    ],
+)
+def test_download_destination_is_optional_and_client_specific(
+    client: FlaskClient, app: Flask, shared: str | None, per_client: str | None, expected: str | None
+) -> None:
+    """Client default wins unless an explicit shared or per-client root is configured."""
+    app.config["SAVE_PATH_BASE"] = shared
+    app.config["CLIENT_CONNECTIONS"] = {"transmission": {"SAVE_PATH_BASE": per_client}}
+    with (
+        patch("audiobook_automated.routes.get_book_details", return_value={"title": "Test Book"}),
+        patch("audiobook_automated.routes.extract_magnet_link", return_value=("magnet:?xt=test", None)),
+        patch("audiobook_automated.routes.torrent_manager.add_magnet") as add,
+    ):
+        response = client.post("/send", json={"link": "/abss/test/", "title": "Test Book", "client": "transmission"})
+    assert response.status_code == 200
+    add.assert_called_once_with("magnet:?xt=test", expected, client_name="transmission")

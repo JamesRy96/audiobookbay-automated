@@ -36,9 +36,6 @@ class QBittorrentClient(TorrentClientPlugin):
         """Initialize the qBittorrent client plugin."""
         super().__init__(*args, **kwargs)
         self.api_key: str | None = kwargs.get("api_key")
-        # If password looks like an API key (e.g. qbt_ prefix), allow using it as api_key
-        if not self.api_key and self.password and self.password.startswith("qbt_"):
-            self.api_key = self.password
         self.client: QbClient | None = None
         self.consecutive_auth_failures: int = 0
         self.auth_cooldown_until: float = 0.0
@@ -153,7 +150,7 @@ class QBittorrentClient(TorrentClientPlugin):
             self.client = None
 
     @override
-    def add_magnet(self, magnet_link: str, save_path: str, category: str) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, category: str) -> None:
         """Add a magnet link to qBittorrent.
 
         Args:

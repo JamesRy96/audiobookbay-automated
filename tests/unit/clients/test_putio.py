@@ -17,20 +17,19 @@ def test_putio_init_defaults() -> None:
     assert client.base_url == "https://api.put.io/v2"
 
 
-def test_putio_init_custom_host(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_putio_init_custom_host() -> None:
     """Test Put.io client initialization with custom host, port, and env variables."""
-    monkeypatch.setenv("PUTIO_TOKEN", "env-token")
-    monkeypatch.setenv("PUTIO_FOLDER_ID", "42")
-
-    client = PutioClient("custom.putio.internal", 8443, None, None, scheme="https")
-    assert client.token == "env-token"
+    client = PutioClient(
+        "custom.putio.internal", 8443, None, None, scheme="https", token="configured-token", folder_id="42"
+    )
+    assert client.token == "configured-token"
     assert client.folder_id == "42"
     assert client.base_url == "https://custom.putio.internal:8443/v2"
 
 
 def test_putio_connect_success() -> None:
     """Test successful Put.io session connection."""
-    client = PutioClient("localhost", 443, None, "pw-token")
+    client = PutioClient("localhost", 443, None, None, token="pw-token")
     client.connect()
     assert client.session is not None
     assert client.session.headers.get("Authorization") == "Bearer pw-token"
@@ -48,7 +47,7 @@ def test_putio_connect_missing_token() -> None:
 
 def test_putio_verify_credentials() -> None:
     """Test Put.io verify_credentials method across success, failure, and exceptions."""
-    client = PutioClient("localhost", 443, None, "valid-token")
+    client = PutioClient("localhost", 443, None, None, token="valid-token")
 
     with requests_mock.Mocker() as m:
         # Success case
@@ -75,7 +74,7 @@ def test_putio_verify_credentials() -> None:
 
 def test_putio_add_magnet() -> None:
     """Test Put.io add_magnet across success and error conditions."""
-    client = PutioClient("localhost", 443, None, "valid-token", folder_id="100")
+    client = PutioClient("localhost", 443, None, None, token="valid-token", folder_id="100")
 
     with requests_mock.Mocker() as m:
         # Success case
@@ -107,7 +106,7 @@ def test_putio_add_magnet() -> None:
 
 def test_putio_get_status() -> None:
     """Test Put.io get_status with transfers, metadata fetching, and errors."""
-    client = PutioClient("localhost", 443, None, "valid-token")
+    client = PutioClient("localhost", 443, None, None, token="valid-token")
 
     with requests_mock.Mocker() as m:
         m.get(
@@ -159,7 +158,7 @@ def test_putio_get_status() -> None:
 
 def test_putio_remove_torrent() -> None:
     """Test Put.io remove_torrent (cancel transfer) across success and errors."""
-    client = PutioClient("localhost", 443, None, "valid-token")
+    client = PutioClient("localhost", 443, None, None, token="valid-token")
 
     with requests_mock.Mocker() as m:
         # Success
@@ -192,8 +191,7 @@ def test_putio_manager_integration(app: Flask) -> None:
     """Test loading and interacting with PutioClient via TorrentManager."""
     manager = TorrentManager()
     app.config["DL_CLIENT"] = "putio"
-    app.config["PUTIO_TOKEN"] = "manager-token"
-    app.config["PUTIO_FOLDER_ID"] = "99"
+    app.config["CLIENT_CONNECTIONS"] = {"putio": {"TOKEN": "manager-token", "FOLDER_ID": "99"}}
 
     manager.init_app(app)
     assert isinstance(manager.client, PutioClient)
@@ -204,7 +202,7 @@ def test_putio_manager_integration(app: Flask) -> None:
 
 def test_putio_status_rejects_api_error() -> None:
     """An HTTP 200 API failure must not look like an empty healthy client."""
-    client = PutioClient("localhost", 443, None, "test-token")
+    client = PutioClient("localhost", 443, None, None, token="test-token")
     with requests_mock.Mocker() as mock:
         mock.get("https://api.put.io/v2/transfers/list", json={"status": "ERROR", "error_message": "Access denied"})
         with pytest.raises(RuntimeError, match="Access denied"):

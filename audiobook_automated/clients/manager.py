@@ -5,7 +5,6 @@ import importlib
 import inspect
 import logging
 import re
-from typing import Any
 
 from flask import Flask
 
@@ -68,8 +67,8 @@ class TorrentManager:
         # Validate client_name to prevent arbitrary code execution
         # Only allow alphanumeric characters, underscores, and hyphens
         if not re.match(r"^[a-zA-Z0-9_\-]+$", client_name):
-            logger.error("Security: Invalid DL_CLIENT name '%s'. Falling back to 'transmission'.", client_name)
-            client_name = "transmission"
+            logger.error("Security: Invalid DL_CLIENT name '%s'. No client loaded.", client_name)
+            return None
 
         module_name = f"audiobook_automated.clients.{client_name}"
         class_name = f"{client_name.capitalize()}Client"
@@ -95,42 +94,19 @@ class TorrentManager:
 
             # Instantiate the client plugin
             # Extract configuration from app.config to pass explicitly
-            host = app.config.get("DL_HOST") or "localhost"
-            port: Any = app.config.get("DL_PORT")
-            if port is None:
-                port = getattr(client_class, "DEFAULT_PORT", 8080)
-
-            try:
-                # Handle potential string or int input
-                if isinstance(port, str):
-                    port_int = int(float(port))
-                else:
-                    port_int = int(port)
-            except (ValueError, TypeError):
-                port_int = 8080
-
-            username = app.config.get("DL_USERNAME")
-            password = app.config.get("DL_PASSWORD")
-            api_key = app.config.get("DL_API_KEY")
-            scheme = app.config.get("DL_SCHEME", "http")
-            timeout = app.config.get("CLIENT_TIMEOUT", 30)
-
+            settings = app.config.get("CLIENT_CONNECTIONS", {}).get(client_name, {})
             client_cls: type[TorrentClientPlugin] = client_class
-
-            token = app.config.get("PUTIO_TOKEN")
-            folder_id = app.config.get("PUTIO_FOLDER_ID", "0")
-
             instance = client_cls(
-                host=host,
-                port=port_int,
-                username=username,
-                password=password,
-                scheme=scheme,
-                timeout=timeout,
-                token=token,
-                folder_id=folder_id,
-                api_key=api_key,
-                dl_url=app.config.get("DL_URL"),
+                host=settings.get("HOST") or "localhost",
+                port=int(settings.get("PORT") or getattr(client_class, "DEFAULT_PORT", 8080)),
+                username=settings.get("USERNAME"),
+                password=settings.get("PASSWORD"),
+                scheme=settings.get("SCHEME") or "http",
+                timeout=int(settings.get("TIMEOUT") or app.config.get("CLIENT_TIMEOUT", 30)),
+                api_key=settings.get("API_KEY"),
+                token=settings.get("TOKEN"),
+                folder_id=settings.get("FOLDER_ID", "0"),
+                dl_url=settings.get("URL"),
             )
             logger.info("Plugin: Successfully loaded '%s'.", client_name)
             return instance
@@ -142,20 +118,15 @@ class TorrentManager:
     def _load_clients(self, app: Flask) -> None:
         """Dynamically load the configured torrent download clients.
 
-        Supports single client via DL_CLIENT or multiple clients via DL_CLIENTS (comma-separated).
+        The first name in DL_CLIENT is the default; additional comma-separated names are selectable.
 
         Args:
             app: The Flask application instance containing configuration.
         """
         self.clients.clear()
-        primary_client = app.config.get("DL_CLIENT", "transmission")
-        additional_clients_str = app.config.get("DL_CLIENTS", "")
-
-        client_names: list[str] = []
-        if additional_clients_str:
-            client_names = [c.strip() for c in additional_clients_str.split(",") if c.strip()]
-        if primary_client and primary_client not in client_names:
-            client_names.insert(0, primary_client)
+        configured = app.config.get("DL_CLIENT") or ""
+        client_names = list(dict.fromkeys(name.strip().lower() for name in configured.split(",") if name.strip()))
+        primary_client = client_names[0] if client_names else ""
 
         for name in client_names:
             instance = self._instantiate_client(app, name)
@@ -172,8 +143,8 @@ class TorrentManager:
 
     def get_client(self, client_name: str | None = None) -> TorrentClientPlugin | None:
         """Get a specific download client by name, or the default primary client."""
-        if client_name and client_name.lower() in self.clients:
-            return self.clients[client_name.lower()]
+        if client_name:
+            return self.clients.get(client_name.lower())
         return self._client
 
     def list_clients(self) -> list[str]:
@@ -193,7 +164,7 @@ class TorrentManager:
         if client.client is None and client.session is None:
             client.connect()
 
-    def add_magnet(self, magnet_link: str, save_path: str, client_name: str | None = None) -> None:
+    def add_magnet(self, magnet_link: str, save_path: str | None, client_name: str | None = None) -> None:
         """Add a magnet link to the client.
 
         Args:
@@ -233,6 +204,9 @@ class TorrentManager:
                 s.client = client_name.lower()
             return statuses
 
+        if client_name:
+            raise ConnectionError("The selected Download Client is not configured.")
+
         # Multi-client status aggregation
         if len(self.clients) > 1:
             aggregated: list[TorrentStatus] = []
@@ -241,8 +215,7 @@ class TorrentManager:
                     self._ensure_connected(client_instance)
                     statuses = client_instance.get_status(category)
                     for s in statuses:
-                        if hasattr(s, "client"):
-                            s.client = name
+                        s.client = name
                     aggregated.extend(statuses)
                 except Exception as e:
                     logger.warning(f"Manager: Failed to get status for client '{name}': {e}")
@@ -258,8 +231,7 @@ class TorrentManager:
             default_name = self.client_type.lower().replace("client", "").replace("plugin", "")
 
         for s in statuses:
-            if hasattr(s, "client"):
-                s.client = default_name
+            s.client = default_name
         return statuses
 
     def remove_torrent(self, torrent_id: str, delete_data: bool = False, client_name: str | None = None) -> bool:
@@ -282,6 +254,9 @@ class TorrentManager:
             except Exception as e:
                 logger.error(f"Manager: Failed to remove torrent {torrent_id}: {e}")
                 return False
+
+        if client_name:
+            return False
 
         # If no client specified and multiple exist, attempt removal across clients
         for name, client_instance in self.clients.items():

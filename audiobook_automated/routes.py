@@ -129,13 +129,18 @@ def health() -> Response | tuple[Response, int]:
 
 
 @main_bp.route("/api/clients")
-def api_clients() -> Response:
+def api_clients() -> Response | tuple[Response, int]:
     """Return available configured clients and their connectivity status.
 
     Returns:
         Response: JSON with client list and primary client name.
     """
     client_names = torrent_manager.list_clients()
+    selected = request.args.get("client", "").lower()
+    if selected:
+        if selected not in client_names:
+            return jsonify(message="The selected Download Client is not configured."), 400
+        client_names = [selected]
     clients_data = []
     for name in client_names:
         is_connected = torrent_manager.verify_credentials(name)
@@ -409,8 +414,10 @@ def send() -> Response | tuple[Response, int]:
             raise TorrentClientError(f"Download failed: {error}", status_code=status_code)
 
         # Construct and validate final destination path
-        save_path_base = current_app.config.get("SAVE_PATH_BASE")
-        save_path = construct_safe_save_path(save_path_base, title)
+        selected_client = client_name or current_app.config["DL_CLIENT"].split(",")[0].strip()
+        settings = current_app.config.get("CLIENT_CONNECTIONS", {}).get(selected_client.lower(), {})
+        save_path_base = settings.get("SAVE_PATH_BASE") or current_app.config.get("SAVE_PATH_BASE")
+        save_path = construct_safe_save_path(save_path_base, title) if save_path_base else None
         if client_name:
             torrent_manager.add_magnet(magnet_link, save_path, client_name=client_name)
         else:

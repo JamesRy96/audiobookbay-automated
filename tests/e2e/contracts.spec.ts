@@ -163,3 +163,115 @@ test("different books dispatch independently without dismissing a notification",
     expect(count).toBe(2);
     await expect(page.locator("#confirmation-modal")).toBeHidden();
 });
+
+test("client chooser checks independently, blocks offline choices and cancellation sends nothing", async ({
+    page,
+    request,
+}) => {
+    await request.post("/e2e/client", { data: { multi_client: true, offline_transmission: true } });
+    await page.goto("/?query=voyage");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await page.route("**/api/clients?client=*", async (route) => {
+        await gate;
+        await route.continue();
+    });
+    await page.locator(".send-torrent-btn").first().click();
+    const modal = page.locator("#confirmation-modal");
+    await expect(modal).toHaveAttribute("aria-hidden", "false");
+    await expect(page.locator("#modal-confirm")).toBeDisabled();
+    await expect(modal.locator(".client-choice-status").first()).toHaveText("Checking…");
+    release();
+    const offline = modal.locator('input[value="transmission"]');
+    await expect(offline).toBeDisabled();
+    await expect(offline.locator("..")).toContainText("Offline");
+    await expect(modal.locator('input[value="qbittorrent"]')).toBeEnabled();
+    await expect(page.locator("#modal-confirm")).toBeEnabled();
+    await page.locator("#modal-cancel").click();
+    expect((await (await request.get("/e2e/client")).json()).events).toEqual([]);
+});
+
+test("client chooser routes dispatch and file-preserving removal to Transmission", async ({ page, request }) => {
+    await request.post("/e2e/client", { data: { multi_client: true } });
+    await page.goto("/details?link=/abss/book-0/");
+    await page.locator(".details-download-btn").click();
+    const choice = page.locator('input[name="download-client"][value="transmission"]');
+    await expect(choice).toBeEnabled();
+    await choice.check();
+    await page.locator("#modal-confirm").click();
+    await expect(page.locator(".toast")).toContainText("Sent to your Download Client");
+    const state = await (await request.get("/e2e/client")).json();
+    expect(state.events).toHaveLength(1);
+    expect(state.events[0]).toMatchObject({ client: "transmission", hash: "1".repeat(40), category: "abb-automated" });
+    await page.goto("/status");
+    await page.locator("#auto-refresh-toggle").uncheck();
+    const remove = page.locator('.remove-torrent-btn[data-client="transmission"][data-torrent-id="7"]');
+    await remove.click();
+    await expect(page.locator("#modal-client-picker")).toBeHidden();
+    await page.locator("#modal-confirm").click();
+    await expect(remove).toHaveCount(0);
+    const finalState = await (await request.get("/e2e/client")).json();
+    expect(finalState.events.at(-1)).toEqual({
+        action: "remove",
+        hash: "1".repeat(40),
+        client: "transmission",
+        delete_files: false,
+    });
+    expect(finalState.torrents.map((job: any) => job.hash)).toEqual(["fixture-1"]);
+});
+
+test("a client going offline after selection reports failure without redirecting dispatch", async ({
+    page,
+    request,
+}) => {
+    await request.post("/e2e/client", { data: { multi_client: true } });
+    await page.goto("/?query=voyage");
+    await page.locator(".send-torrent-btn").first().click();
+    const choice = page.locator('input[name="download-client"][value="transmission"]');
+    await expect(choice).toBeEnabled();
+    await choice.check();
+    await request.post("/e2e/client", { data: { offline_transmission: true } });
+    const failed = page.waitForResponse((response) => response.url().endsWith("/send"));
+    await page.locator("#modal-confirm").click();
+    expect((await failed).status()).toBe(500);
+    await expect(page.locator(".toast")).toContainText("Could not start download");
+    expect((await (await request.get("/e2e/client")).json()).events).toEqual([]);
+});
+
+for (const clientRoot of [null, "/client-books"]) {
+    test(`single-client Download uses optional destination ${clientRoot}`, async ({ page, request }) => {
+        await request.post("/e2e/client", {
+            data: { destination: null, ...(clientRoot ? { client_destination: clientRoot } : {}) },
+        });
+        await page.goto("/details?link=/abss/book-0/");
+        await page.locator(".details-download-btn").click();
+        await expect(page.locator("#confirmation-modal")).toHaveAttribute("aria-hidden", "true");
+        await expect(page.locator(".toast")).toContainText("Sent to your Download Client");
+        const state = await (await request.get("/e2e/client")).json();
+        expect(state.events).toHaveLength(1);
+        expect(state.events[0].save_path).toBe(clientRoot ? clientRoot + "/The Clockmaker's Voyage - Mira Sol" : null);
+    });
+}
+
+test("single offline client disables Download without a chooser", async ({ page, request }) => {
+    await request.post("/e2e/client", { data: { offline_qbittorrent: true } });
+    await page.goto("/?query=voyage");
+    await expect(page.locator("#client-offline-banner")).toBeVisible();
+    await expect(page.locator(".send-torrent-btn").first()).toBeDisabled();
+    await expect(page.locator("#modal-client-picker")).toHaveCount(0);
+    expect((await (await request.get("/e2e/client")).json()).events).toEqual([]);
+});
+
+test("all offline clients are shown but none can receive a download", async ({ page, request }) => {
+    await request.post("/e2e/client", {
+        data: { multi_client: true, offline_qbittorrent: true, offline_transmission: true },
+    });
+    await page.goto("/?query=voyage");
+    await page.locator(".send-torrent-btn").first().click();
+    await expect(page.locator(".client-choice-status")).toHaveText(["Offline", "Offline"]);
+    await expect(page.locator("#modal-confirm")).toBeDisabled();
+    await page.locator("#modal-cancel").click();
+    expect((await (await request.get("/e2e/client")).json()).events).toEqual([]);
+});
