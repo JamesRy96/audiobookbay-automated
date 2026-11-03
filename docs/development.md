@@ -39,6 +39,34 @@ release image contains no test fixture server, sample browser data, development 
 The container runs Gunicorn with one worker and eight threads by default. Do not add workers; rate limits and scraper
 coordination are process-local.
 
+## Build a test image from any branch
+
+For a published test image, use GitHub **Actions → Build test image → Run workflow**:
+
+1. Leave **Use workflow from** set to `main`.
+2. In **Branch, tag or commit to build**, enter your source branch name, tag or full commit SHA.
+3. Select **Run workflow** and wait for the build to finish.
+4. Open that run's **Summary**. Copy its `docker pull` command or image reference.
+5. Put that image reference in your test installation's `compose.yaml` under `image:`, then run:
+
+~~~shell
+docker compose pull
+docker compose up -d
+~~~
+
+This builds the selected source without a release version, changelog entry, Git tag or GitHub Release. Test images
+contain the normal app built from that source's Dockerfile; they do not add sample data or configure your Download
+Client. Use your test installation's own `.env` settings.
+
+Each build publishes a branch-specific `test-...` tag and a `test-sha-<full-commit-sha>` tag. The branch tag includes a
+short suffix so similarly named branches remain distinct; rebuilding that ref updates its branch tag. The commit
+tag identifies the exact source revision. Neither tag updates `latest` or a release version. All image references
+appear in the run summary so you do not need to calculate the tag names.
+
+The manual workflow must first exist on the repository's default branch. Running its definition from `main` lets it
+build branches that predate this workflow. Invalid or unavailable refs fail at checkout. You need repository write
+access to start a build and permission to pull the GHCR package if it is private.
+
 ## Checks
 
 ~~~shell
@@ -84,7 +112,9 @@ screenshots show fictional example books using the default theme, not personal c
 - **Browser tests** is a reusable workflow called by CI, so it does not produce a second independent run for every push.
 - **Create Release** is a manual workflow. It validates the version and default branch, runs CI on that commit, calls
   the image publishing workflow, then creates the GitHub tag and release for the checked commit.
-- The image workflow publishes `ghcr.io/<repository>:<version>` and `:latest`. It is called directly rather than relying
+- **Build test image** publishes separate test tags from a chosen source ref, without creating a release.
+- The release image workflow publishes `ghcr.io/<repository>:<version>` and `:latest`. It is called directly rather
+  than relying
   on a token-created tag to trigger another workflow.
 
 Before publishing:

@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Manual branch/tag/commit test-image builds with separate GHCR tags and copyable image references.
+
 - Shared search filters, session-scoped recent searches, explicit pagination retry/end states, and recognizable
   contributor credits with a loaded-results filter.
 - Theme-aware cover placeholders, keyboard-safe dialogs and synchronized floating controls.

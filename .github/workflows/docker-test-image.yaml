@@ -1,0 +1,70 @@
+# File: .github/workflows/docker-test-image.yaml
+name: Build test image
+run-name: Build test image from ${{ inputs.ref }}
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to build"
+        required: true
+        default: main
+        type: string
+permissions:
+  contents: read
+  packages: write
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Prepare test image references
+        id: image
+        env:
+          SOURCE_REF: ${{ inputs.ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          REF_SLUG="$(printf '%s' "$SOURCE_REF" | LC_ALL=C tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^[.-]+//; s/[.-]+$//' | cut -c1-70)"
+          REF_HASH="$(printf '%s' "$SOURCE_REF" | sha256sum | cut -c1-8)"
+          [ -n "$REF_SLUG" ] || REF_SLUG=ref
+          {
+            echo "source_sha=$SOURCE_SHA"
+            echo "branch_image=$IMAGE:test-$REF_SLUG-$REF_HASH"
+            echo "commit_image=$IMAGE:test-sha-$SOURCE_SHA"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.branch_image }}
+            ${{ steps.image.outputs.commit_image }}
+          labels: |
+            org.opencontainers.image.version=test-${{ steps.image.outputs.source_sha }}
+            org.opencontainers.image.revision=${{ steps.image.outputs.source_sha }}
+          cache-from: type=gha,scope=test-image
+          cache-to: type=gha,mode=max,scope=test-image
+      - name: Show test image references
+        env:
+          BRANCH_IMAGE: ${{ steps.image.outputs.branch_image }}
+          COMMIT_IMAGE: ${{ steps.image.outputs.commit_image }}
+          SOURCE_SHA: ${{ steps.image.outputs.source_sha }}
+        run: |
+          {
+            printf '## Test image\n\n'
+            printf 'Source commit: %s\n\n' "$SOURCE_SHA"
+            printf '~~~shell\ndocker pull %s\n~~~\n\n' "$BRANCH_IMAGE"
+            printf 'Commit image:\n~~~text\n%s\n~~~\n\n' "$COMMIT_IMAGE"
+            printf 'Use either image reference in Compose. Release tags are unchanged.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
