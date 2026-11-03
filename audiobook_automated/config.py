@@ -14,6 +14,7 @@ from .constants import (
 )
 from .environment import get_env
 from .utils import parse_bool
+from .web_security import parse_public_url, parse_trusted_proxies
 
 
 def parse_env_int(key: str, default: int) -> int:
@@ -148,16 +149,14 @@ class Config:
     _nav_link_url: str | None = get_env("NAV_LINK_URL")
     NAV_LINK_URL: str | None = _nav_link_url.strip(" \"'") if _nav_link_url else None
 
-    # HTTPS Configuration
-    # Defaults to False to ensure local deployments work out-of-the-box.
-    FORCE_HTTPS: bool = parse_bool(get_env("FORCE_HTTPS"), False)
+    # Optional public origin; local HTTP needs no web security settings.
+    PUBLIC_URL: str | None = parse_public_url(get_env("PUBLIC_URL"))
+    TRUSTED_PROXIES = parse_trusted_proxies(get_env("TRUSTED_PROXIES"))
 
     # Session & CSRF Configuration
     SESSION_COOKIE_NAME: str = "audiobook_session"
     SESSION_COOKIE_SAMESITE: str = "Lax"
-    # Force Secure=False to allow cookies over HTTP/IP as requested
-    SESSION_COOKIE_SECURE: bool = False
-    WTF_CSRF_SSL_STRICT: bool = FORCE_HTTPS
+    WTF_CSRF_SSL_STRICT: bool = True
 
     # Listen Host/Port
     # nosec B104: Default to all interfaces for Docker container usage

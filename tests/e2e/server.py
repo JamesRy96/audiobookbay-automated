@@ -35,7 +35,6 @@ class BrowserConfig(Config):
     CLIENT_CONNECTIONS = {"qbittorrent": {"HOST": "127.0.0.1", "API_KEY": "isolated-browser-fixture"}}
     DL_CATEGORY = "abb-automated"
     SAVE_PATH_BASE = "/downloads/audiobooks"
-    FORCE_HTTPS = False
     RATELIMIT_ENABLED = False
     ENABLE_DIAGNOSTICS = True
     SPLASH_ENABLED = False

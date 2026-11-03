@@ -48,3 +48,17 @@ download requests to the designated client and aggregating status queries.
   not verified bibliographic data. Keep the raw title for actions and never fetch every Details page to fill filters.
 - Details extracts all structured contributor and audio metadata before sanitizing the source HTML. Remove only
   matching leading metadata lines; preserve unique description text and unmatched credits.
+
+## Public origin and proxy trust
+
+`PUBLIC_URL` optionally declares the browser-facing origin, independent of the proxy-to-app transport. The WSGI
+middleware applies that canonical host/scheme before Flask handles the request. Do not infer proxy trust from header
+presence or private IP ranges. Forwarded values require an explicitly allowlisted socket peer via `TRUSTED_PROXIES`;
+Gunicorn's implicit forwarded-scheme trust is disabled so the app owns this boundary. IPv4-mapped IPv6 peers are
+matched against their IPv4 proxy networks.
+
+Secure session cookies are selected per request by the session interface; never mutate shared cookie configuration
+from a request hook. HTTPS uses same-origin referrer checks alongside normal CSRF tokens. Normal HTTP remains usable
+without configuration, and internal HTTP health checks must work with an HTTPS public origin. TLS redirects and HSTS
+are explicit proxy-side decisions. Test untrusted headers, canonical host/URL generation, cookies, valid/rejected CSRF
+origins and mixed HTTP/HTTPS request isolation whenever changing this boundary.

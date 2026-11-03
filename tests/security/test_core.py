@@ -62,3 +62,145 @@ def test_sanitize_strips_to_empty() -> None:
     # Ensure we test against the Single Source of Truth
     assert sanitize_title("...") == FALLBACK_TITLE
     assert sanitize_title("???") == FALLBACK_TITLE
+
+
+def make_transport_app(public_url: str | None = None, trusted_proxies: str = "") -> Any:
+    """Build real request security with isolated Download Client boundaries from conftest."""
+    from flask import jsonify, request, session, url_for
+    from flask_wtf.csrf import generate_csrf
+
+    from audiobook_automated import create_app
+    from audiobook_automated.config import Config
+    from audiobook_automated.web_security import parse_trusted_proxies
+
+    class TransportConfig(Config):
+        TESTING = True
+        FLASK_DEBUG = False
+        DL_CLIENT = "qbittorrent"
+        SECRET_KEY = "isolated-transport-test"
+        PUBLIC_URL = public_url
+        TRUSTED_PROXIES = parse_trusted_proxies(trusted_proxies)
+        WTF_CSRF_ENABLED = True
+        RATELIMIT_ENABLED = False
+
+    app = create_app(TransportConfig)
+
+    @app.route("/_transport", methods=["GET", "POST"])
+    def transport_review() -> Any:
+        session["visited"] = True
+        return jsonify(
+            scheme=request.scheme,
+            host=request.host,
+            client=request.remote_addr,
+            prefix=request.script_root,
+            link=url_for("transport_review", _external=True),
+            csrf=generate_csrf(),
+        )
+
+    return app
+
+
+@pytest.mark.parametrize("scheme,secure", [("http", False), ("https", True)])
+def test_direct_transport_controls_cookie_without_shared_state(scheme: str, secure: bool) -> None:
+    """Alternating direct transports chooses cookie flags per request without changing app settings."""
+    app = make_transport_app()
+    with app.test_client() as client:
+        response = client.get("/_transport", base_url=scheme + "://books.example")
+        assert response.status_code == 200
+        assert ("; Secure" in response.headers["Set-Cookie"]) is secure
+        assert app.config["SESSION_COOKIE_SECURE"] is False
+        other = client.get("/_transport", base_url=("http" if secure else "https") + "://books.example")
+        assert ("; Secure" in other.headers["Set-Cookie"]) is not secure
+
+
+def test_forwarded_headers_from_untrusted_senders_are_ignored() -> None:
+    """An arbitrary sender cannot forge its identity, origin or routing prefix."""
+    app = make_transport_app(trusted_proxies="10.0.0.5")
+    response = app.test_client().get(
+        "/_transport",
+        base_url="http://books.example",
+        environ_base={"REMOTE_ADDR": "198.51.100.23"},
+        headers={
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "forged.example",
+            "X-Forwarded-For": "203.0.113.7",
+            "X-Forwarded-Prefix": "/forged",
+            "X-Forwarded-Port": "443",
+            "Forwarded": "proto=https;host=forged.example",
+        },
+    )
+    assert response.json["scheme"] == "http"
+    assert response.json["host"] == "books.example"
+    assert response.json["client"] == "198.51.100.23"
+    assert response.json["prefix"] == ""
+    assert "; Secure" not in response.headers["Set-Cookie"]
+
+
+@pytest.mark.parametrize("peer", ["10.0.0.5", "::ffff:10.0.0.5"])
+def test_only_allowlisted_proxy_can_supply_forwarded_values(peer: str) -> None:
+    """Trust one explicit proxy hop, including IPv4 peers on an IPv6 listener."""
+    app = make_transport_app(trusted_proxies="10.0.0.0/24")
+    response = app.test_client().get(
+        "/_transport",
+        environ_base={"REMOTE_ADDR": peer},
+        headers={
+            "X-Forwarded-Proto": "https",
+            "X-Forwarded-Host": "books.example",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-For": "198.51.100.9, 203.0.113.7",
+            "X-Forwarded-Prefix": "/books",
+        },
+    )
+    assert response.json["scheme"] == "https"
+    assert response.json["client"] == "203.0.113.7"
+    assert response.json["prefix"] == "/books"
+    assert "; Secure" in response.headers["Set-Cookie"]
+
+
+@pytest.mark.parametrize("peer", ["", "not-an-ip", "2001:db8::1"])
+def test_invalid_or_unlisted_peer_never_becomes_trusted(peer: str) -> None:
+    """Malformed addresses and other networks cannot opt into proxy handling."""
+    app = make_transport_app(trusted_proxies="10.0.0.5")
+    response = app.test_client().get(
+        "/_transport", environ_base={"REMOTE_ADDR": peer}, headers={"X-Forwarded-Proto": "https"}
+    )
+    assert response.json["scheme"] == "http"
+
+
+@pytest.mark.parametrize("trusted", ["", "10.0.0.5"])
+def test_public_origin_handles_tls_termination_without_redirect_loops(trusted: str) -> None:
+    """One declared origin supplies secure cookies and URLs despite an HTTP backend connection."""
+    app = make_transport_app("https://books.example:8443", trusted)
+    response = app.test_client().get(
+        "/_transport",
+        base_url="http://internal:5078",
+        environ_base={"REMOTE_ADDR": "10.0.0.5"},
+        headers={"X-Forwarded-Proto": "http", "X-Forwarded-Host": "forged.example"},
+    )
+    assert response.status_code == 200
+    assert response.json["scheme"] == "https"
+    assert response.json["host"] == "books.example:8443"
+    assert response.json["link"] == "https://books.example:8443/_transport"
+    assert "; Secure" in response.headers["Set-Cookie"]
+    assert "Strict-Transport-Security" not in response.headers
+    assert app.test_client().get("/health", base_url="http://127.0.0.1:5078").status_code == 200
+
+
+def test_public_https_csrf_requires_the_declared_browser_origin() -> None:
+    """Valid HTTPS browser actions work; cross-site and missing referrers are rejected."""
+    app = make_transport_app("https://books.example")
+    with app.test_client() as client:
+        token = client.get(
+            "/_transport", base_url="https://books.example", environ_overrides={"wsgi.url_scheme": "http"}
+        ).json["csrf"]
+        for referrer, expected in [("https://books.example/", 200), ("https://attacker.example/", 400), (None, 400)]:
+            headers = {"X-CSRFToken": token}
+            if referrer:
+                headers["Referer"] = referrer
+            response = client.post(
+                "/_transport",
+                base_url="https://books.example",
+                environ_overrides={"wsgi.url_scheme": "http"},
+                headers=headers,
+            )
+            assert response.status_code == expected

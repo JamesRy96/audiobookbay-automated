@@ -70,6 +70,7 @@ def test_entrypoint_keeps_one_worker_and_does_not_change_download_folder(
     assert "log level debug" in result.stdout
     arguments = recorded.read_text().splitlines()
     assert arguments[arguments.index("--bind") + 1] == f"{host}:{port}"
+    assert arguments[arguments.index("--forwarded-allow-ips") + 1] == ""
     assert arguments.count("--workers") == 1
     assert arguments[arguments.index("--workers") + 1] == "1"
     assert arguments[arguments.index("--threads") + 1] == "8"

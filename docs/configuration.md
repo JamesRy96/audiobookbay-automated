@@ -218,7 +218,6 @@ a response code alone does not prove that a mirror serves the catalog.
 | `SCRAPER_THREADS` | `3`; bounded concurrent catalog requests |
 | `SCRAPER_TIMEOUT` | `30` seconds |
 | `TZ` | Container timezone; for example `America/Los_Angeles` |
-| `FORCE_HTTPS` | `false`; enable only with a correctly configured HTTPS deployment |
 
 The app does not provide a VPN. Configure your own VPN/proxy if required. Local browser and Download Client traffic
 must bypass a remote proxy. For example:
@@ -244,6 +243,49 @@ to expire. Changing mirror names may still reach the same server/IP.
 
 The container health check uses Python and `/health`; curl is not required. It checks the app's HTTP availability,
 not catalog reachability, Download Client connectivity or completed transfers.
+
+## Reverse proxy and HTTPS
+
+For ordinary local access, leave `PUBLIC_URL` unset and open `http://SERVER-IP:5078`. No security flags are required.
+Direct HTTPS connections automatically receive Secure session cookies.
+
+If you use a reverse proxy, set the full public address you open in your browser:
+
+~~~env
+PUBLIC_URL=https://myaudiobooks.com
+~~~
+
+This declares the app's browser-facing address. It supplies the public host and protocol for links, session cookies
+and HTTPS origin checks even when the proxy connects to the app over HTTP. Use this address for browser access once
+configured; the internal HTTP `/health` check continues to work. Include a custom public port if needed.
+The address must start with `http://` or `https://`; do not include a login, subpath, query or fragment.
+
+For **Nginx Proxy Manager**:
+
+1. Add a Proxy Host for your domain, forwarding with scheme **http** to the app's server and port **5078**.
+2. In **SSL**, select/request the certificate and enable **Force SSL** if you want HTTPS-only browser access.
+3. Set `PUBLIC_URL` to that HTTPS address in the app's settings and recreate the app container.
+
+No Custom Nginx Configuration snippet is needed for this normal setup. The proxy handles certificates and redirects;
+the app does not redirect its internal HTTP connection back through the proxy. HSTS is also a deliberate proxy-side
+choice; it is not automatically enabled by the app. Restrict direct access to the backend to your private network.
+
+### Advanced: forwarded client details
+
+`PUBLIC_URL` does not establish that a request came from a trusted proxy. Forwarded headers are ignored by default.
+For normal NPM use, leave `TRUSTED_PROXIES` unset. Rate limiting and logs will identify the connecting proxy.
+
+If you need forwarded client addresses or routing details, list only the proxy addresses/networks that actually
+connect to the app:
+
+~~~env
+TRUSTED_PROXIES=172.20.0.5
+~~~
+
+Replace this example with your proxy's actual backend-facing address. Comma-separated IP addresses or CIDR networks
+are accepted; do not trust every address or all private networks. One forwarding hop is trusted from allowlisted
+peers. Your proxy must correctly set or sanitize forwarded headers. More complex proxy chains require separate review.
+The configured `PUBLIC_URL` always takes priority over forwarded host/protocol values.
 
 ## Custom trackers
 

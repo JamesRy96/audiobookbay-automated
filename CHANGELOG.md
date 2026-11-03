@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Ignore untrusted forwarded headers; optional `TRUSTED_PROXIES` enables one allowlisted proxy hop. Select Secure
+  cookies per request and preserve internal HTTP health checks behind an HTTPS public URL.
+
 - Make polling tests deterministic with one mocked clock; verify exact refresh cadence, slow requests and retry recovery.
 
 - Disable transitions for reduced motion so WebKit does not leave navigation controls hidden.
@@ -22,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Surface catalog connection failures and timeouts as retryable search errors instead of caching empty results.
 
 ### Added
+
+- Optional `PUBLIC_URL` for a single browser-facing origin, with simple Nginx Proxy Manager setup and automatic secure
+  cookie/origin behavior. Local HTTP needs no extra settings.
 
 - Captured catalog HTML and stateful browser contract tests through the real parser, magnet extraction and client
   adapter; assert task identity, dispatch/removal effects and error recovery. Browser tests can also run manually.
@@ -58,6 +64,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   polling, metric rendering, and log filtering.
 
 ### Changed
+
+- Replace `FORCE_HTTPS` with public-origin configuration. HTTPS redirects and HSTS remain explicit reverse-proxy choices.
 
 - Accept any capitalization for app and Download Client environment setting names, including container startup and
   health checks. Preserve value capitalization and reject conflicting duplicates without logging their values.

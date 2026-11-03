@@ -78,42 +78,6 @@ def test_config_validate_invalid_client_scheme(monkeypatch: MonkeyPatch) -> None
         Config.validate(logging.getLogger("test"))
 
 
-def test_force_https_default() -> None:
-    """Test that FORCE_HTTPS defaults to False."""
-    # Ensure env var is not set (mocking empty env for this check)
-    with pytest.MonkeyPatch.context() as m:
-        m.delenv("FORCE_HTTPS", raising=False)
-        # We can't easily re-import Config to reset class attributes,
-        # but we can check the default value if it hasn't been overridden yet.
-        # OR we can verify via parse_bool logic which Config uses.
-        assert Config.FORCE_HTTPS is False
-
-
-def test_force_https_env_var(monkeypatch: MonkeyPatch) -> None:
-    """Test that FORCE_HTTPS respects env var."""
-    # Since Config attributes are loaded at import time, testing env var influence
-    # directly on the class requires reload, which is messy.
-    # Instead, we test the `parse_bool` logic specifically for this key is sound
-    # by verifying `parse_bool` handles "true" correctly, which we know it does.
-    #
-    # However, to be thorough, we can create a subclass that re-evaluates.
-    import os
-
-    from audiobook_automated.utils import parse_bool
-
-    class DynamicConfig(Config):
-        pass
-
-    # Manually re-evaluate because class definition happens once
-    DynamicConfig.FORCE_HTTPS = parse_bool(os.environ.get("FORCE_HTTPS"), False)
-
-    monkeypatch.setenv("FORCE_HTTPS", "true")
-    # We must re-run the assignment AFTER setting env var, simulating a new process/reload
-    DynamicConfig.FORCE_HTTPS = parse_bool(os.environ.get("FORCE_HTTPS"), False)
-
-    assert DynamicConfig.FORCE_HTTPS is True
-
-
 def test_library_reload_enabled(monkeypatch: MonkeyPatch) -> None:
     """Test that LIBRARY_RELOAD_ENABLED property works correctly."""
     # Case 1: All required vars present
@@ -397,3 +361,63 @@ def test_duplicate_setting_spellings_are_unambiguous() -> None:
         assert "Remove the duplicate" in str(error.value)
         assert "SecretOne" not in str(error.value)
         assert "SecretTwo" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, None),
+        ("", None),
+        ("  ", None),
+        ("https://Books.Example/", "https://books.example"),
+        ("http://books.local:80", "http://books.local"),
+        ("https://books.example:443", "https://books.example"),
+        ("https://books.example:8443", "https://books.example:8443"),
+        ("http://[::1]:5078/", "http://[::1]:5078"),
+    ],
+)
+def test_public_url_normalization(value: str | None, expected: str | None) -> None:
+    """Accept a single public origin with sensible default port normalization."""
+    from audiobook_automated.web_security import parse_public_url
+
+    assert parse_public_url(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "books.example",
+        "ftp://books.example",
+        "https://",
+        "https://user:secret@books.example",
+        "https://books.example/books",
+        "https://books.example/?query=1",
+        "https://books.example/#fragment",
+        "https://books.example:bad",
+        "https://books.example:0",
+        "https://books.example:65536",
+        "http://[bad",
+        "https://book s.example",
+        "https://books.example\nforged",
+        "https://books%65.example",
+        "https://books|example",
+        "https://books\\example",
+    ],
+)
+def test_public_url_rejects_invalid_or_ambiguous_origins(value: str) -> None:
+    """Invalid site addresses fail clearly without exposing credentials in the error."""
+    from audiobook_automated.web_security import parse_public_url
+
+    with pytest.raises(ValueError, match="PUBLIC_URL") as error:
+        parse_public_url(value)
+    assert "secret" not in str(error.value)
+
+
+def test_proxy_allowlist_validation() -> None:
+    """No proxies are trusted by default; explicit IPs and networks are accepted."""
+    from audiobook_automated.web_security import parse_trusted_proxies
+
+    assert parse_trusted_proxies(None) == ()
+    assert [str(item) for item in parse_trusted_proxies("10.0.0.5, 2001:db8::/64")] == ["10.0.0.5/32", "2001:db8::/64"]
+    with pytest.raises(ValueError, match="TRUSTED_PROXIES"):
+        parse_trusted_proxies("*")

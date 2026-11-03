@@ -67,7 +67,9 @@ docker compose up -d --force-recreate
 ~~~
 
 Keep the app on your private network. For access over the internet, use an authenticated reverse proxy; the app has
-no sign-in screen of its own.
+no sign-in screen of its own. Set `PUBLIC_URL` to the full address you open in your browser, such as
+`https://myaudiobooks.com`. Local HTTP needs no extra settings. See the
+[reverse-proxy setup](docs/configuration.md#reverse-proxy-and-https) for the short Nginx Proxy Manager example.
 
 ## Find and download a book
 

@@ -63,6 +63,7 @@ exec gosu appuser gunicorn --preload \
     --access-logfile - \
     --error-logfile - \
     --bind "${LISTEN_HOST}:${LISTEN_PORT}" \
+    --forwarded-allow-ips "" \
     --workers 1 \
     --threads "$THREADS" \
     --timeout "$TIMEOUT" \

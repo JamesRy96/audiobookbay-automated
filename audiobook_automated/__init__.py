@@ -8,7 +8,6 @@ from typing import Any
 
 from flask import Flask, Response, jsonify, request
 from flask_wtf.csrf import CSRFError
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import Config
 from .diagnostics import diagnostics_bp
@@ -17,11 +16,13 @@ from .logging_buffer import log_ring_buffer
 from .routes import main_bp
 from .scraper import network
 from .utils import get_application_version
+from .web_security import PublicOriginMiddleware, TransportSessionInterface
 
 
 def create_app(config_class: type[Config] = Config) -> Flask:
     """Create and configure a Flask application instance."""
     app = Flask(__name__)
+    app.session_interface = TransportSessionInterface()
     app.config.from_object(config_class)
     if not app.config.get("SECRET_KEY"):
         app.config["SECRET_KEY"] = secrets.token_hex(32)
@@ -71,10 +72,11 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         app,
         content_security_policy=csp,
         content_security_policy_nonce_in=["script-src"],
-        # HTTPS enforcement is handled upstream by the reverse proxy; honour the config flag
-        force_https=app.config["FORCE_HTTPS"],
-        # Secure cookies require HTTPS; honour the config so HTTP dev setups are not broken
-        session_cookie_secure=app.config["SESSION_COOKIE_SECURE"],
+        # TLS redirects and HSTS belong to the reverse proxy's explicit SSL settings.
+        force_https=False,
+        strict_transport_security=False,
+        # The session interface selects this per request without a global mutation.
+        session_cookie_secure=False,
     )
 
     # Initialize TorrentManager with app configuration
@@ -135,9 +137,9 @@ def create_app(config_class: type[Config] = Config) -> Flask:
             response.headers["Cache-Control"] = "public, max-age=31536000"
         return response
 
-    # ProxyFix for Docker/Ingress
-    if not app.debug:
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)  # type: ignore[method-assign]
+    app.wsgi_app = PublicOriginMiddleware(  # type: ignore[method-assign]
+        app.wsgi_app, app.config["PUBLIC_URL"], app.config["TRUSTED_PROXIES"]
+    )
 
     return app
 
