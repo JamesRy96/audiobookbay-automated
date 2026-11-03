@@ -53,7 +53,7 @@ TITLES = [
 BOOKS: list[dict[str, Any]] = [
     {
         "title": title,
-        "link": f"https://catalog.example/book-{index}",
+        "link": f"/abss/book-{index}/",
         "cover": f"/e2e/cover/{index}.svg" if index != 2 else None,
         "category": ["Fantasy", "Adventure"] if index % 2 == 0 else ["Mystery"],
         "language": "English",

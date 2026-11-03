@@ -426,10 +426,8 @@ def parse_search_results(soup: BeautifulSoup, base_url: str) -> list[BookSummary
         if not link:
             continue
 
-        # Use urljoin if link is relative? Usually search links are relative in some contexts
-        # But core.py fetch_page_results doesn't need it normalized to absolute yet?
-        # Actually BookSummary has 'link'. The app usually handles it.
-        # But cover definitely needs normalization.
+        # Preserve catalog paths; Details and Download resolve them through the active mirror allowlist.
+        # Covers need absolute URLs because browsers request them directly.
 
         cover = None
         cover_tag = post.select_one(".postContent img")

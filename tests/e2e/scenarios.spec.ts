@@ -115,3 +115,30 @@ test("a slow next page has a single loading row and no duplicate loading button"
     await expect(page.locator("#load-more-loading")).toBeHidden();
     await expect(page.locator("#load-more-btn")).toBeHidden();
 });
+
+for (const mode of ["grid", "list"]) {
+    test(`Download accepts relative links from initial and appended ${mode} results`, async ({ page }) => {
+        await page.goto("/?query=voyage");
+        await page.locator(`#view-${mode}-btn`).click();
+        const first = page.locator(".send-torrent-btn").first();
+        const initialLink = await first.getAttribute("data-link");
+        expect(initialLink).toMatch(/^\/abss\//);
+        const initialResponse = page.waitForResponse(
+            (response) => response.url().endsWith("/send") && response.request().method() === "POST"
+        );
+        await first.click();
+        const initial = await initialResponse;
+        expect(initial.status()).toBe(200);
+        expect(initial.request().postDataJSON().link).toBe(initialLink);
+        await expect(page.locator(".toast").last()).toContainText("Sent to your Download Client");
+        await page.locator("#load-more-indicator").scrollIntoViewIfNeeded();
+        await expect(page.locator(".result-row")).toHaveCount(7);
+        const appended = page.locator(".send-torrent-btn").last();
+        expect(await appended.getAttribute("data-link")).toMatch(/^\/abss\//);
+        const appendedResponse = page.waitForResponse(
+            (response) => response.url().endsWith("/send") && response.request().method() === "POST"
+        );
+        await appended.click();
+        expect((await appendedResponse).status()).toBe(200);
+    });
+}

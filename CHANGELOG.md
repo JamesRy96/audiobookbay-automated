@@ -74,6 +74,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Accept catalog-relative book links when downloading from search results, including newly loaded grid/list cards.
+
 - Connect Download Clients in each request thread and close their handles at request teardown; reject dispatch when
   no client is configured.
 - Show qBittorrent stopped transfers as Paused and unavailable metadata sizes as Unknown.

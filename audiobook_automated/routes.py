@@ -337,10 +337,14 @@ def _validate_send_payload(data: dict[str, Any]) -> tuple[str, str, str | None]:
         logger.warning(f"Invalid send request: Link is not a string (Type: {type(details_url)}).")
         raise InvalidRequestError("Invalid request: Link must be a string")
 
-    # Ensure link starts with http:// or https://
-    if details_url and not (details_url.startswith("http://") or details_url.startswith("https://")):
-        logger.warning(f"Invalid send request: Link has invalid protocol ({details_url}).")
-        raise InvalidRequestError("Invalid request: Link must start with http:// or https://")
+    # Search cards carry catalog-relative paths; Details resolves them through the mirror allowlist.
+    # Reject network-path URLs and backslashes rather than treating external hosts as catalog paths.
+    relative_path = bool(
+        details_url and details_url.startswith("/") and not details_url.startswith("//") and "\\" not in details_url
+    )
+    if details_url and not (relative_path or details_url.startswith(("http://", "https://"))):
+        logger.warning("Invalid send request: Unsupported catalog link.")
+        raise InvalidRequestError("Invalid book link. Search again and retry the download.")
 
     # Ensure title is a string before calling string methods.
     if title is not None and not isinstance(title, str):

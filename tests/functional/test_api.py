@@ -650,12 +650,15 @@ def test_send_get_book_details_exception(client: FlaskClient) -> None:
                 mock_tm.add_magnet.assert_called_once()
 
 
-def test_send_invalid_protocol(client: FlaskClient) -> None:
-    """Test send endpoint with a link that does not start with http:// or https://."""
-    response = client.post("/send", json={"link": "ftp://example.com/book", "title": "Some Book"})
+@pytest.mark.parametrize(
+    "link", ["ftp://example.com/book", "javascript:alert(1)", "//example.com/book", "/\\example.com/book", "book-title"]
+)
+def test_send_invalid_protocol(client: FlaskClient, link: str) -> None:
+    """Reject unsupported schemes and external network-path links before dispatch."""
+    response = client.post("/send", json={"link": link, "title": "Some Book"})
     assert response.status_code == 400
     assert response.json is not None
-    assert "Link must start with http:// or https://" in response.json["message"]
+    assert "Invalid book link" in response.json["message"]
 
 
 def test_delete_wrong_category(client: FlaskClient) -> None:
@@ -889,3 +892,22 @@ def test_restart_signing_and_page_recovery(fixed_key: bool) -> None:
     fresh_token = page_token(after)
     assert after.post("/delete", json={"id": "absent"}, headers={"X-CSRFToken": fresh_token}).status_code == 404
     assert after.post("/delete", json={"id": "absent"}, headers={"X-CSRFToken": "forged"}).status_code == 400
+
+
+@pytest.mark.parametrize(
+    "link", ["/abss/will-wpight-cradle-series-full-books-1-12-will-wight/", "/abss/the-fsleeper-awakes-hg-wells/"]
+)
+def test_send_catalog_relative_search_link(client: FlaskClient, link: str) -> None:
+    """Catalog-relative links emitted by initial and appended search cards must reach dispatch."""
+    with (
+        patch("audiobook_automated.routes.get_book_details", return_value={"title": "Catalog title"}) as details,
+        patch(
+            "audiobook_automated.routes.extract_magnet_link", return_value=("magnet:?xt=urn:btih:" + "a" * 40, None)
+        ) as magnet,
+        patch("audiobook_automated.routes.torrent_manager") as manager,
+    ):
+        response = client.post("/send", json={"link": link, "title": "Search title"})
+        assert response.status_code == 200
+        details.assert_called_once_with(link)
+        magnet.assert_called_once_with(link)
+        manager.add_magnet.assert_called_once()

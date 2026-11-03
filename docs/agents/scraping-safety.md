@@ -35,6 +35,11 @@
 
 ## Search and Description Data
 
+- Catalog book links may be root-relative (`/abss/...`) or absolute HTTP(S) URLs. Search cards and appended rows
+  preserve that value. Download validation must accept catalog-relative paths, reject network-path URLs (`//host/...`)
+  and unsupported schemes, and retain the Details resolver's mirror allowlist before network access. Browser fixtures
+  must include relative links and test actual Download clicks on initial and appended cards.
+
 - Expose `category:`, `language:`, `author:` and `narrator:` in UI links. Native category/language URLs still use the
   catalog's `/type/` and `/tag/` segments. Author/narrator prefixes use supported keyword search, not invented
   archive paths; omit dotted initials to handle spelling variants. Retain explicit native paths. Do not add aliases.
