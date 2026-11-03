@@ -19,7 +19,8 @@ These are examples only; enter the password already used by your Download Client
 ## Download Clients
 
 Choose one client with `DL_CLIENT=qbittorrent`, `transmission`, `deluge`, or `putio`.
-Use the matching uppercase settings below. Only configure clients you actually use.
+Use the matching settings below. App setting names accept uppercase, lowercase, or mixed case. Only configure clients
+you actually use.
 Ports have defaults, so you only need a port setting if you changed the client's normal port.
 
 ### qBittorrent
@@ -151,8 +152,14 @@ The app sends a destination path; it does not move files or change that folder's
 | `DL_CATEGORY` | `abb-automated`; label/category used for this app's downloads |
 
 Replace `<CLIENT>` with `QBITTORRENT`, `DELUGE`, or `TRANSMISSION`; do not enter the angle brackets.
-Names are case-sensitive. Use only the settings shown for your chosen client; shared connection aliases are not
-supported.
+Capitalization of app setting names does not matter: `DELUGE_PASSWORD` and `deluge_PASSWORD` mean the same setting.
+Passwords, API keys, paths and other values keep their original capitalization. Set each setting once; conflicting
+duplicates stop startup with a message naming the setting to fix. Use only the settings shown for your chosen client;
+shared connection aliases are not supported.
+
+Docker startup settings such as `LISTEN_PORT`, `PUID`, `PGID` and `TZ` follow the same capitalization rule. Other
+containers and Docker Compose variable references follow their own rules; keep `${BASE_PATH}` and similar references
+consistent with the variables defined in your Compose `.env` file.
 
 ## Appearance
 

@@ -333,3 +333,67 @@ def test_putio_only_setup_needs_no_local_folder(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setattr(Config, "TESTING", False)
     monkeypatch.setattr(Config, "CLIENT_CONNECTIONS", {"putio": {"TOKEN": "isolated-token"}})
     Config.validate(logging.getLogger("test"))
+
+
+@pytest.mark.parametrize("spelling", ["upper", "lower", "mixed"])
+def test_configuration_names_ignore_case(spelling: str) -> None:
+    """Case variations work for client settings and ordinary application options."""
+    values = {
+        "DL_CLIENT": "qbittorrent,deluge,transmission,customcloud",
+        "QBITTORRENT_USERNAME": "QbitUser",
+        "QBITTORRENT_PASSWORD": "QbitSecretCase",
+        "DELUGE_PASSWORD": "DelugeSecretCase",
+        "TRANSMISSION_USERNAME": "TransmissionUser",
+        "TRANSMISSION_PASSWORD": "TransmissionSecretCase",
+        "CUSTOMCLOUD_TOKEN": "CustomTokenCase",
+        "CUSTOMCLOUD_SAVE_PATH_BASE": "/CaseSensitive/Books",
+        "SITE_TITLE": "Mixed Case Title",
+        "SPLASH_ENABLED": "false",
+        "CLIENT_TIMEOUT": "17",
+    }
+
+    def rename(key: str) -> str:
+        if spelling == "upper":
+            return key
+        if spelling == "lower":
+            return key.lower()
+        supplied_names = {
+            "QBITTORRENT_USERNAME": "qbittorrent_UserNAmE",
+            "QBITTORRENT_PASSWORD": "qbittorrent_PASSWORD",
+            "DELUGE_PASSWORD": "deluge_PASSWORD",
+            "TRANSMISSION_USERNAME": "transmission_USERNAME",
+            "TRANSMISSION_PASSWORD": "transmission_PassWoRD",
+        }
+        return supplied_names.get(
+            key, "".join(char.lower() if index % 2 else char.upper() for index, char in enumerate(key))
+        )
+
+    with patch.dict(os.environ, {rename(key): value for key, value in values.items()}, clear=True):
+        importlib.reload(config)
+        loaded = config.Config
+        loaded.validate(logging.getLogger("test"))
+        assert loaded.CLIENT_CONNECTIONS["qbittorrent"]["USERNAME"] == "QbitUser"
+        assert loaded.CLIENT_CONNECTIONS["qbittorrent"]["PASSWORD"] == "QbitSecretCase"
+        assert loaded.CLIENT_CONNECTIONS["deluge"]["PASSWORD"] == "DelugeSecretCase"
+        assert loaded.CLIENT_CONNECTIONS["transmission"]["PASSWORD"] == "TransmissionSecretCase"
+        assert loaded.CLIENT_CONNECTIONS["customcloud"]["TOKEN"] == "CustomTokenCase"
+        assert loaded.CLIENT_CONNECTIONS["customcloud"]["SAVE_PATH_BASE"] == "/CaseSensitive/Books"
+        assert loaded.SITE_TITLE == "Mixed Case Title"
+        assert loaded.SPLASH_ENABLED is False
+        assert loaded.CLIENT_TIMEOUT == 17
+
+
+def test_duplicate_setting_spellings_are_unambiguous() -> None:
+    """Identical duplicates are safe; differing secrets fail without leaking either value."""
+    from audiobook_automated.environment import get_env
+
+    with patch.dict(os.environ, {"Client_Password": "SecretOne", "CLIENT_PASSWORD": "SecretOne"}, clear=True):
+        assert get_env("client_password") == "SecretOne"
+        assert get_env("missing") is None
+        assert get_env("missing", "fallback") == "fallback"
+    with patch.dict(os.environ, {"Client_Password": "SecretOne", "CLIENT_PASSWORD": "SecretTwo"}, clear=True):
+        with pytest.raises(ValueError, match="CLIENT_PASSWORD") as error:
+            get_env("CLIENT_PASSWORD")
+        assert "Remove the duplicate" in str(error.value)
+        assert "SecretOne" not in str(error.value)
+        assert "SecretTwo" not in str(error.value)

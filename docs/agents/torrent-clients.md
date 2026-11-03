@@ -21,8 +21,10 @@ starting scaffold and deliberately cannot connect or send downloads until its AP
 ## Configuration contract
 
 The manager supplies `host`, `port`, `username`, `password`, `scheme` and `timeout` from the client's entry in
-`Config.CLIENT_CONNECTIONS`. Environment names use the uppercase plugin name, such as `RTORRENT_HOST` and
-`RTORRENT_PASSWORD`. If the client's port is unset, it uses the plugin's `DEFAULT_PORT`. Current extra keyword
+`Config.CLIENT_CONNECTIONS`. Document environment names with the uppercase plugin name, such as `RTORRENT_HOST` and
+`RTORRENT_PASSWORD`. Name lookup is case-insensitive through `environment.get_env`; values retain their case, and
+conflicting duplicate spellings fail without revealing values. If the client's port is unset, it uses the plugin's
+`DEFAULT_PORT`. Current extra keyword
 arguments are `api_key`, `token` and `folder_id`. Accept unused keyword
 arguments so the common constructor works for every client, and call `super().__init__()`.
 

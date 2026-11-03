@@ -2,7 +2,6 @@
 """Configuration module."""
 
 import logging
-import os
 import re
 
 from .constants import (
@@ -13,6 +12,7 @@ from .constants import (
     DEFAULT_SPLASH_VIDEO_WEBM,
     DEFAULT_THEME,
 )
+from .environment import get_env
 from .utils import parse_bool
 
 
@@ -29,7 +29,7 @@ def parse_env_int(key: str, default: int) -> int:
     Returns:
         int: The parsed integer.
     """
-    raw = os.getenv(key)
+    raw = get_env(key)
     if raw is None:
         return default
     try:
@@ -85,7 +85,7 @@ def parse_client_connections(configured: str | None) -> dict[str, dict[str, str]
             continue
         values = {}
         for field in fields:
-            value = os.getenv(f"{name.upper()}_{field}")
+            value = get_env(f"{name.upper()}_{field}")
             if value is not None:
                 values[field] = value.strip(" \"'")
         connections[name] = values
@@ -117,40 +117,40 @@ class Config:
 
     # Core Flask Config
     # Optional override; create_app generates an in-memory signing key when empty.
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "").strip(" \"'")
-    FLASK_DEBUG: bool = parse_bool(os.getenv("FLASK_DEBUG"), False)
-    TESTING: bool = parse_bool(os.getenv("TESTING"), False)
-    ENABLE_DIAGNOSTICS: bool = parse_bool(os.getenv("ENABLE_DIAGNOSTICS"), False)
+    SECRET_KEY: str = get_env("SECRET_KEY", "").strip(" \"'")
+    FLASK_DEBUG: bool = parse_bool(get_env("FLASK_DEBUG"), False)
+    TESTING: bool = parse_bool(get_env("TESTING"), False)
+    ENABLE_DIAGNOSTICS: bool = parse_bool(get_env("ENABLE_DIAGNOSTICS"), False)
 
     # Static Asset Caching (1 Year)
     SEND_FILE_MAX_AGE_DEFAULT: int = 31536000
 
     # Static Version Override (Optional)
     # Allows developers to force a version string via .env, overriding the Docker build hash.
-    _static_version: str | None = os.getenv("STATIC_VERSION")
+    _static_version: str | None = get_env("STATIC_VERSION")
     STATIC_VERSION: str | None = _static_version.strip(" \"'") if _static_version else None
 
     # File System
-    _save_path_base: str | None = os.getenv("SAVE_PATH_BASE")
+    _save_path_base: str | None = get_env("SAVE_PATH_BASE")
     SAVE_PATH_BASE: str | None = _save_path_base.strip(" \"'") if _save_path_base else None
 
     # Integrations
-    _abs_url: str | None = os.getenv("ABS_URL")
+    _abs_url: str | None = get_env("ABS_URL")
     ABS_URL: str | None = _abs_url.strip(" \"'") if _abs_url else None
-    _abs_key: str | None = os.getenv("ABS_KEY")
+    _abs_key: str | None = get_env("ABS_KEY")
     ABS_KEY: str | None = _abs_key.strip(" \"'") if _abs_key else None
-    _abs_lib: str | None = os.getenv("ABS_LIB")
+    _abs_lib: str | None = get_env("ABS_LIB")
     ABS_LIB: str | None = _abs_lib.strip(" \"'") if _abs_lib else None
 
     # UI Customization
-    _nav_link_name: str | None = os.getenv("NAV_LINK_NAME")
+    _nav_link_name: str | None = get_env("NAV_LINK_NAME")
     NAV_LINK_NAME: str | None = _nav_link_name.strip(" \"'") if _nav_link_name else None
-    _nav_link_url: str | None = os.getenv("NAV_LINK_URL")
+    _nav_link_url: str | None = get_env("NAV_LINK_URL")
     NAV_LINK_URL: str | None = _nav_link_url.strip(" \"'") if _nav_link_url else None
 
     # HTTPS Configuration
     # Defaults to False to ensure local deployments work out-of-the-box.
-    FORCE_HTTPS: bool = parse_bool(os.getenv("FORCE_HTTPS"), False)
+    FORCE_HTTPS: bool = parse_bool(get_env("FORCE_HTTPS"), False)
 
     # Session & CSRF Configuration
     SESSION_COOKIE_NAME: str = "audiobook_session"
@@ -161,18 +161,18 @@ class Config:
 
     # Listen Host/Port
     # nosec B104: Default to all interfaces for Docker container usage
-    LISTEN_HOST: str = os.getenv("LISTEN_HOST", "0.0.0.0").strip(" \"'")  # noqa: S104
+    LISTEN_HOST: str = get_env("LISTEN_HOST", "0.0.0.0").strip(" \"'")  # noqa: S104
     LISTEN_PORT: int = parse_env_int("LISTEN_PORT", 5078)
 
     # Torrent Client Configuration
-    _dl_client: str | None = os.getenv("DL_CLIENT")
+    _dl_client: str | None = get_env("DL_CLIENT")
     DL_CLIENT: str | None = _dl_client.strip(" \"'").lower() if _dl_client else None
     CLIENT_CONNECTIONS: dict[str, dict[str, str]] = parse_client_connections(DL_CLIENT)
-    DL_CATEGORY: str = os.getenv("DL_CATEGORY", "abb-automated").strip(" \"'")
+    DL_CATEGORY: str = get_env("DL_CATEGORY", "abb-automated").strip(" \"'")
 
     # Logging
     # We allow LOG_LEVEL to be None if unset to support Gunicorn level inheritance in __init__.py.
-    _log_level_raw: str | None = os.getenv("LOG_LEVEL")
+    _log_level_raw: str | None = get_env("LOG_LEVEL")
     _log_level_env: str | None = _log_level_raw.strip(" \"'") if _log_level_raw else None
     LOG_LEVEL_STR: str = _log_level_env.upper() if _log_level_env else "INFO"
     # Logic: If Env is set, resolve it (defaulting to INFO if invalid string). If not set, leave as None.
@@ -180,22 +180,22 @@ class Config:
 
     # Scraper Configuration
     # Support single host or comma-separated list in ABB_HOSTNAME
-    _hostname_raw: str = os.getenv("ABB_HOSTNAME", "audiobookbay.lu").strip(" \"'")
+    _hostname_raw: str = get_env("ABB_HOSTNAME", "audiobookbay.lu").strip(" \"'")
     _parsed_hostnames: list[str] = [h.strip() for h in _hostname_raw.split(",") if h.strip()]
     ABB_HOSTNAME: str = _parsed_hostnames[0] if _parsed_hostnames else "audiobookbay.lu"
     _extra_hosts: list[str] = _parsed_hostnames[1:] if len(_parsed_hostnames) > 1 else []
 
     # Parse comma-separated mirrors into a list
     # Strip the whole string first in case the list is quoted: "a.com,b.com"
-    _mirrors_str: str = os.getenv("ABB_MIRRORS", "").strip(" \"'")
+    _mirrors_str: str = get_env("ABB_MIRRORS", "").strip(" \"'")
     ABB_MIRRORS: list[str] = _extra_hosts + [m.strip() for m in _mirrors_str.split(",") if m.strip()]
 
     # Remote mirrors sync URL (optional override)
-    _mirrors_remote_url: str | None = os.getenv("ABB_MIRRORS_REMOTE_URL")
+    _mirrors_remote_url: str | None = get_env("ABB_MIRRORS_REMOTE_URL")
     ABB_MIRRORS_REMOTE_URL: str | None = _mirrors_remote_url.strip(" \"'") if _mirrors_remote_url else None
 
     # Parse comma-separated trackers into a list
-    _trackers_str: str = os.getenv("MAGNET_TRACKERS", "").strip(" \"'")
+    _trackers_str: str = get_env("MAGNET_TRACKERS", "").strip(" \"'")
     MAGNET_TRACKERS: list[str] = [t.strip() for t in _trackers_str.split(",") if t.strip()]
 
     # Scraper Concurrency
@@ -210,17 +210,17 @@ class Config:
     CLIENT_TIMEOUT: int = parse_env_int("CLIENT_TIMEOUT", 30)
 
     # Site Identity
-    SITE_TITLE: str = os.getenv("SITE_TITLE", DEFAULT_SITE_TITLE).strip(" \"'")
-    SITE_LOGO: str | None = parse_asset_path(os.getenv("SITE_LOGO"), DEFAULT_SITE_LOGO)
-    DEFAULT_THEME: str = os.getenv("DEFAULT_THEME", DEFAULT_THEME).strip(" \"'").lower()
+    SITE_TITLE: str = get_env("SITE_TITLE", DEFAULT_SITE_TITLE).strip(" \"'")
+    SITE_LOGO: str | None = parse_asset_path(get_env("SITE_LOGO"), DEFAULT_SITE_LOGO)
+    DEFAULT_THEME: str = get_env("DEFAULT_THEME", DEFAULT_THEME).strip(" \"'").lower()
 
     # Splash Screen Configuration
-    SPLASH_ENABLED: bool = parse_bool(os.getenv("SPLASH_ENABLED"), True)
-    SPLASH_VIDEO: str | None = parse_asset_path(os.getenv("SPLASH_VIDEO"), DEFAULT_SPLASH_VIDEO)
-    SPLASH_VIDEO_WEBM: str | None = parse_asset_path(os.getenv("SPLASH_VIDEO_WEBM"), DEFAULT_SPLASH_VIDEO_WEBM)
+    SPLASH_ENABLED: bool = parse_bool(get_env("SPLASH_ENABLED"), True)
+    SPLASH_VIDEO: str | None = parse_asset_path(get_env("SPLASH_VIDEO"), DEFAULT_SPLASH_VIDEO)
+    SPLASH_VIDEO_WEBM: str | None = parse_asset_path(get_env("SPLASH_VIDEO_WEBM"), DEFAULT_SPLASH_VIDEO_WEBM)
     # Fallback to SITE_TITLE if SPLASH_TITLE is not explicitly set
-    SPLASH_TITLE: str = os.getenv("SPLASH_TITLE", SITE_TITLE).strip(" \"'")
-    SPLASH_MESSAGE: str = os.getenv("SPLASH_MESSAGE", DEFAULT_SPLASH_MESSAGE).strip(" \"'")
+    SPLASH_TITLE: str = get_env("SPLASH_TITLE", SITE_TITLE).strip(" \"'")
+    SPLASH_MESSAGE: str = get_env("SPLASH_MESSAGE", DEFAULT_SPLASH_MESSAGE).strip(" \"'")
     SPLASH_DURATION: int = parse_env_int("SPLASH_DURATION", 3500)
 
     @property

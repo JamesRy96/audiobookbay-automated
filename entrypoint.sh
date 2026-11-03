@@ -2,6 +2,20 @@
 # File: entrypoint.sh
 set -e
 
+# Resolve startup setting names once. Read literal assignments; never evaluate shell code from values.
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
+settings_file="$(mktemp)"
+trap 'rm -f "$settings_file"' EXIT
+python3 "$SCRIPT_DIR/audiobook_automated/environment.py" > "$settings_file"
+while IFS= read -r setting; do
+    case "$setting" in
+        *=*) export "${setting?}" ;;
+        *) unset "$setting" ;;
+    esac
+done < "$settings_file"
+rm -f "$settings_file"
+trap - EXIT
+
 # Intelligent Bind Logic for Gunicorn
 if [ -z "${LISTEN_HOST:-}" ]; then
     if python3 -c "import socket; s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM); s.bind(('::', 0)); s.close()" 2>/dev/null; then

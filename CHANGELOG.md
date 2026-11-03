@@ -59,6 +59,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Accept any capitalization for app and Download Client environment setting names, including container startup and
+  health checks. Preserve value capitalization and reject conflicting duplicates without logging their values.
+
 - Default to each Download Client's configured folder; optional client-specific save roots override a shared root.
 - Use one `DL_CLIENT` selector for single or multiple clients, with independent uppercase client-prefixed connection
   settings. Remove shared credential aliases and implicit password-to-token conversions before the first release.

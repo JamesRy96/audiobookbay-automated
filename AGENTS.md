@@ -64,7 +64,7 @@ pre-commit run --all-files
   explicit native `/audio-books/...` paths when supplied. Do not fetch Details per search result for enrichment.
 - **Multi-Client Aggregation:** Support concurrent multi-client setups via `DL_CLIENT` (one name or comma-separated
   names), with independent uppercase
-  client-prefixed connection settings and no shared credential aliases, unifying
+  client-prefixed connection settings, case-insensitive setting names and no shared credential aliases, unifying
   download status reporting across all active clients.
 
 ## 4. Operating Protocol & Reasoning Framework

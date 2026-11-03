@@ -37,8 +37,9 @@ Downloads use the folder already configured in your Download Client. No download
 needed in this app. To choose a different destination, see [optional download folders](docs/configuration.md#download-folders).
 
 For Transmission, Deluge, Put.io, several clients, or Windows paths, use the
-[client setup examples](docs/configuration.md#download-clients). Settings are uppercase and named for each client;
-for example, Transmission uses `TRANSMISSION_PASSWORD`.
+[client setup examples](docs/configuration.md#download-clients). Settings are named for each client; for example,
+Transmission uses `TRANSMISSION_PASSWORD`. Capitalization does not matter for app setting names; the examples
+use uppercase consistently.
 Deluge users should enable the **Label** plugin so downloads can be organized by category.
 
 ### 3. Start the app
