@@ -2,9 +2,12 @@
 """Configuration module."""
 
 import logging
+import math
 import re
 
 from .constants import (
+    DEFAULT_SCRAPER_JITTER_MAX,
+    DEFAULT_SCRAPER_JITTER_MIN,
     DEFAULT_SITE_LOGO,
     DEFAULT_SITE_TITLE,
     DEFAULT_SPLASH_MESSAGE,
@@ -36,6 +39,26 @@ def parse_env_int(key: str, default: int) -> int:
         return default
     try:
         return int(float(raw.strip().strip("'\"")))
+    except (ValueError, TypeError, OverflowError):
+        return default
+
+
+def parse_env_float(key: str, default: float) -> float:
+    """Parse a float environment variable safely.
+
+    Args:
+        key: The environment variable key.
+        default: The default value if missing or invalid.
+
+    Returns:
+        float: The parsed float.
+    """
+    raw = get_env(key)
+    if raw is None:
+        return default
+    try:
+        val = float(raw.strip().strip("'\""))
+        return default if math.isnan(val) else val
     except (ValueError, TypeError, OverflowError):
         return default
 
@@ -225,6 +248,10 @@ class Config:
     # Scraper Concurrency
     # Defines the number of worker threads per worker for the scraping executor.
     SCRAPER_THREADS: int = parse_env_int("SCRAPER_THREADS", 3)
+
+    # Scraper Request Jitter
+    SCRAPER_JITTER_MIN: float = parse_env_float("SCRAPER_JITTER_MIN", DEFAULT_SCRAPER_JITTER_MIN)
+    SCRAPER_JITTER_MAX: float = parse_env_float("SCRAPER_JITTER_MAX", DEFAULT_SCRAPER_JITTER_MAX)
 
     # Catalog request timeout; keep failures bounded so the user can retry.
     # Separated from Gunicorn timeout to ensure internal requests fail faster than the worker kill timer.

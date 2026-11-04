@@ -224,6 +224,8 @@ a response code alone does not prove that a mirror serves the catalog.
 | `THREADS` | `8`; keep the container's single Gunicorn worker |
 | `SCRAPER_THREADS` | `3`; bounded concurrent catalog requests |
 | `SCRAPER_TIMEOUT` | `10` seconds per catalog request attempt |
+| `SCRAPER_JITTER_MIN` | `0.3` seconds minimum request jitter spacing |
+| `SCRAPER_JITTER_MAX` | `0.8` seconds maximum request jitter spacing |
 | `TZ` | Container timezone; for example `America/Los_Angeles` |
 
 The app does not provide a VPN. Configure your own VPN/proxy if required. Local browser and Download Client traffic

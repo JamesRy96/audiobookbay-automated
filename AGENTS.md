@@ -37,8 +37,8 @@ pre-commit run --all-files
 
 ## 3. Core Invariants (Non-Negotiable)
 
-- **Safety Over Speed:** Mandatory random jitter sleeps (0.5–1.5s) on external requests must never be removed or
-  reduced.
+- **Safety Over Speed:** Mandatory random jitter sleeps (default 0.3–0.8s, configurable via
+  `SCRAPER_JITTER_MIN`/`SCRAPER_JITTER_MAX`) on external requests must never be bypassed.
 - **Concurrency Caps:** Scraper concurrency is bounded by `GLOBAL_REQUEST_SEMAPHORE` (matching `SCRAPER_THREADS`). Never
   bypass or increase.
 - **Worker Limits:** Gunicorn must run with `WORKERS=1`. Never scale worker processes without an external rate-limit

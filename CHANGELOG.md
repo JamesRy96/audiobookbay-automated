@@ -29,8 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Robust Scraper & Mirror Engine:**
   - Automated mirror failover probing HTTPS first and HTTP fallback with Exponential Moving Average (EMA) latency
     ranking.
-  - Shared concurrency rate-limiting (`GLOBAL_REQUEST_SEMAPHORE`) and mandatory jitter delays (0.5–1.5s) on all
-    external catalog requests.
+  - Shared concurrency rate-limiting (`GLOBAL_REQUEST_SEMAPHORE`) and configurable jitter delays (0.3–0.8s
+    default, tuned via `SCRAPER_JITTER_MIN` / `SCRAPER_JITTER_MAX`) on all external catalog requests.
   - Support for dynamic mirror synchronisation via remote catalog lists and customizable tracker overrides
     (`examples/trackers.json`).
 - **Network Security & Reverse Proxy Architecture:**

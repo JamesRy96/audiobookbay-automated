@@ -856,3 +856,19 @@ def test_failure_backoff_reaches_cap_without_growing_forever() -> None:
         for _ in range(10):
             stat.record_failure("Offline")
         assert stat.cooldown_until == 1300.0
+
+
+def test_request_external_configurable_jitter(app: Flask) -> None:
+    """Configured jitter min and max are respected and inverted bounds are swapped."""
+    session = MagicMock()
+    session.get.return_value = MagicMock(status_code=200, headers={})
+    app.config["SCRAPER_JITTER_MIN"] = 0.5
+    app.config["SCRAPER_JITTER_MAX"] = 0.2
+
+    with (
+        patch("audiobook_automated.scraper.network.random.uniform", return_value=0.3) as uniform,
+        patch("audiobook_automated.scraper.network.time.sleep") as sleep,
+    ):
+        network.request_external(session, "https://catalog.example/", timeout=2)
+        uniform.assert_called_with(0.2, 0.5)
+        sleep.assert_called_once_with(0.3)

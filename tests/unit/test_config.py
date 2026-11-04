@@ -142,6 +142,39 @@ def test_parse_env_int_quoted() -> None:
         assert config.parse_env_int("MISSING", 5) == 5
 
 
+def test_parse_env_float_success(monkeypatch: MonkeyPatch) -> None:
+    """Test parsing a valid float string."""
+    monkeypatch.setenv("TEST_FLOAT", "0.75")
+    assert config.parse_env_float("TEST_FLOAT", 0.5) == 0.75
+
+
+def test_parse_env_float_missing(monkeypatch: MonkeyPatch) -> None:
+    """Test fallback to default when env var is missing."""
+    monkeypatch.delenv("TEST_FLOAT", raising=False)
+    assert config.parse_env_float("TEST_FLOAT", 0.5) == 0.5
+
+
+def test_parse_env_float_invalid(monkeypatch: MonkeyPatch) -> None:
+    """Test fallback to default when env var is invalid or NaN."""
+    monkeypatch.setenv("TEST_FLOAT", "not-a-number")
+    assert config.parse_env_float("TEST_FLOAT", 0.5) == 0.5
+    monkeypatch.setenv("TEST_FLOAT", "nan")
+    assert config.parse_env_float("TEST_FLOAT", 0.5) == 0.5
+
+
+def test_parse_env_float_overflow() -> None:
+    """Test parse_env_float handles OverflowError (infinity)."""
+    with patch("builtins.float", side_effect=OverflowError("Inf")):
+        val = config.parse_env_float("ANY_KEY", 0.5)
+        assert val == 0.5
+
+
+def test_parse_env_float_quoted() -> None:
+    """Test parse_env_float handles quoted strings."""
+    with patch.dict(os.environ, {"TEST_FLOAT": '"0.45"'}, clear=True):
+        assert config.parse_env_float("TEST_FLOAT", 0.0) == 0.45
+
+
 def test_config_parsing_quoted() -> None:
     """Test that Config strips quotes from all string variables."""
     # Since Config attributes are loaded at import time, testing env var influence

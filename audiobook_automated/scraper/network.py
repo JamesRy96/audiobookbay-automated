@@ -14,7 +14,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from cachetools import TTLCache
-from flask import current_app
+from flask import current_app, has_app_context
 from requests.adapters import HTTPAdapter
 from requests.sessions import Session
 from urllib3.util.retry import Retry
@@ -22,6 +22,8 @@ from urllib3.util.retry import Retry
 from audiobook_automated.constants import (
     DEFAULT_MIRRORS,
     DEFAULT_MIRRORS_REMOTE_URL,
+    DEFAULT_SCRAPER_JITTER_MAX,
+    DEFAULT_SCRAPER_JITTER_MIN,
     DEFAULT_TRACKERS,
     MAX_CATALOG_REDIRECTS,
     MAX_CATALOG_REQUEST_ATTEMPTS,
@@ -429,9 +431,23 @@ def request_external(
     elapsed_ms = 0.0
     hop = 0
     attempt = 0
+    jitter_min = (
+        float(current_app.config.get("SCRAPER_JITTER_MIN", DEFAULT_SCRAPER_JITTER_MIN))
+        if has_app_context()
+        else DEFAULT_SCRAPER_JITTER_MIN
+    )
+    jitter_max = (
+        float(current_app.config.get("SCRAPER_JITTER_MAX", DEFAULT_SCRAPER_JITTER_MAX))
+        if has_app_context()
+        else DEFAULT_SCRAPER_JITTER_MAX
+    )
+    if jitter_max < jitter_min:
+        jitter_min, jitter_max = jitter_max, jitter_min
+
     while True:
         with get_semaphore():
-            time.sleep(random.uniform(0.5, 1.5))  # noqa: S311
+            if jitter_max > 0:
+                time.sleep(random.uniform(jitter_min, jitter_max))  # noqa: S311
             started = time.perf_counter()
             send = session.get if method == "GET" else session.head
             try:
