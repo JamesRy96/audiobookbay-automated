@@ -311,10 +311,12 @@ def test_diagnostics_health_polling_is_passive_and_manual_refresh_probes(app: Fl
 
         # Forced refresh inside the throttle window is ignored.
         client.get("/api/diagnostics/health?refresh=1")
+        _wait_for_client_check()
         assert mirrors.call_count == 0
 
         # Once the throttle window has passed, a forced refresh actively probes.
         diagnostics.probe_cache["taken"] -= diagnostics.MANUAL_REFRESH_MIN_INTERVAL_SECONDS + 1
+        diagnostics.probe_cache["manual"] = diagnostics.probe_cache["taken"]
         client.get("/api/diagnostics/health?refresh=1")
         _wait_for_client_check()
         assert mirrors.call_count == 1
