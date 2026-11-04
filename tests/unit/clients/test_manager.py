@@ -99,7 +99,7 @@ def test_manager_load_client_default_port(app: Flask, caplog: LogCaptureFixture)
         manager.init_app(app)
 
         assert isinstance(manager.client, MockClient)
-        assert manager.client.host == "localhost"
+        assert manager.client.host == "127.0.0.1"
         assert manager.client.port == 1234  # MockClient.DEFAULT_PORT
 
 
@@ -481,8 +481,8 @@ def test_unreachable_client_check_names_the_settings_to_fix(caplog: LogCaptureFi
     manager.clients = {"qbittorrent": offline}
     assert manager.verify_credentials("qbittorrent") is False
     assert "QBITTORRENT_HOST" in caplog.text
-    assert "QBITTORRENT_PORT" in caplog.text
-    assert "127.0.0.1" in caplog.text
+    assert "local address is already selected" in caplog.text
+    assert "Gluetun" not in caplog.text
 
 
 def test_all_clients_offline_is_not_an_empty_success() -> None:
@@ -494,3 +494,30 @@ def test_all_clients_offline_is_not_an_empty_success() -> None:
     manager.clients = dict(zip(["qbittorrent", "transmission"], clients, strict=True))
     with raises(ConnectionError, match="No Download Clients could be reached"):
         manager.get_status()
+
+
+def test_omitted_host_and_port_connect_using_local_defaults(app: Flask) -> None:
+    """Only credentials are needed for a local qBittorrent client on its standard port."""
+    import requests_mock
+
+    app.config.update(DL_CLIENT="qbittorrent", CLIENT_CONNECTIONS={"qbittorrent": {"API_KEY": "isolated-key"}})
+    manager = TorrentManager()
+    with requests_mock.Mocker() as boundary:
+        boundary.get("http://127.0.0.1:8080/api/v2/app/version", text="v5.3.0")
+        manager.init_app(app)
+        assert manager.verify_credentials("qbittorrent") is True
+        assert boundary.called
+        manager.close()
+
+
+def test_explicit_remote_client_address_is_preserved(app: Flask) -> None:
+    """A configured remote destination must never be silently replaced with a local client."""
+    app.config.update(
+        DL_CLIENT="transmission", CLIENT_CONNECTIONS={"transmission": {"HOST": "downloads.example", "PORT": "19091"}}
+    )
+    manager = TorrentManager()
+    manager.init_app(app)
+    target = manager.get_client("transmission")
+    assert target is not None
+    assert target.host == "downloads.example"
+    assert target.port == 19091

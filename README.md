@@ -33,6 +33,9 @@ Open `.env` in a text editor. The example is ready for **qBittorrent**; replace 
 | `QBITTORRENT_USERNAME` | The username you use to sign in to that web interface |
 | `QBITTORRENT_PASSWORD` | Its password; keep the surrounding single quotes |
 
+If the client is reachable at `127.0.0.1` from inside the app, omit HOST and PORT to use the local defaults.
+Separate Docker containers normally need the client's service name; another server needs its reachable address.
+
 Downloads use the folder already configured in your Download Client. No download-folder setup or volume mount is
 needed in this app. To choose a different destination, see [optional download folders](docs/configuration.md#download-folders).
 
@@ -130,7 +133,7 @@ docker compose down
 | Setup warning about a missing login | Add the setting named in the log to `.env`, then recreate the app with `docker compose up -d`. The website can still open while a client is offline. |
 | The browser cannot open the app | Check that Docker is running, port `5078` is available, and you used the correct server address. |
 | Download says the page expired | Refresh the page and try again. If you changed the site address or restarted the app, open a fresh page first. LAN HTTP and the configured public HTTPS address use separate sessions. |
-| Download Client disconnected | Read the connection help in the banner, Download Client picker or Status page. Check its address, port and login. If it shares Gluetun with the app, use `127.0.0.1`; a separate server needs its reachable address. |
+| Download Client disconnected | Read the connection help in the banner, Download Client picker or Status page. Check its address, port and login. HOST and PORT are optional for a client sharing the app's network. For a separate container/server, use its service name or reachable address. |
 | Search is unavailable | Wait a moment and retry. If it continues, check your internet/VPN connection. Enable [Diagnostics](docs/configuration.md#diagnostics-and-network) to see mirror availability. |
 | A book does not appear in Downloads | Check the Download Client itself and its `abb-automated` category/label. Some clients take time to retrieve torrent information. |
 | Files are saved in the wrong folder | Check the client's default folder or any optional save-path override in `.env`. |

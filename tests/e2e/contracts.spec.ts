@@ -289,7 +289,7 @@ test("partial client failures explain the setting to fix without disabling worki
     const offline = page.locator('.download-client-choice:has(input[value="transmission"])');
     await expect(offline.locator("input")).toBeDisabled();
     await expect(offline.locator(".client-choice-help")).toBeVisible();
-    await expect(offline.locator(".client-choice-help")).toContainText("127.0.0.1");
+    await expect(offline.locator(".client-choice-help")).toContainText("service name or IP address");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(page.locator('input[value="qbittorrent"]')).toBeEnabled();
     await expect(page.locator("#modal-confirm")).toBeEnabled();

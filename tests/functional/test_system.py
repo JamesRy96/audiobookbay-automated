@@ -133,7 +133,7 @@ def test_status_page_json_error(client: Any) -> None:
         assert response.is_json
         # Explicit check for error key as defined in routes.py
         assert "address, port and login" in response.json["error"]
-        assert "127.0.0.1" in response.json["error"]
+        assert "address, port and login" in response.json["error"]
         assert "Client unreachable" not in response.json["error"]
 
 

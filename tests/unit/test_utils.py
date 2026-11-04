@@ -466,3 +466,36 @@ def test_build_github_issue_url() -> None:
 def test_save_path_format_is_detected_from_root(root: str, expected: str) -> None:
     """A remote client's path syntax does not depend on the app server's OS."""
     assert construct_safe_save_path(root, "My Book") == expected
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1", "[::1]"])
+def test_local_connection_help_does_not_recommend_already_selected_address(host: str) -> None:
+    """Local failure guidance explains other network locations without assuming a VPN product."""
+    from audiobook_automated.utils import client_connection_help
+
+    message = client_connection_help("deluge", {"HOST": host})
+    assert "local address is already selected" in message
+    assert "DELUGE_HOST" in message
+    assert "Gluetun" not in message
+    assert "use 127.0.0.1" not in message
+
+
+def test_remote_connection_help_preserves_the_users_network_choice() -> None:
+    """Remote host guidance points to its settings and reachability without suggesting local fallback."""
+    from audiobook_automated.utils import client_connection_help
+
+    message = client_connection_help("transmission", {"HOST": "downloads.example"})
+    assert "TRANSMISSION_HOST" in message
+    assert "TRANSMISSION_PORT" in message
+    assert "127.0.0.1" not in message
+    assert "Gluetun" not in message
+
+
+def test_explicit_client_url_help_points_to_the_setting_that_controls_the_connection() -> None:
+    """A reverse-proxied client URL must not be misidentified as the unused local host default."""
+    from audiobook_automated.utils import client_connection_help
+
+    message = client_connection_help("deluge", {"URL": "https://downloads.example/deluge/"})
+    assert "DELUGE_URL" in message
+    assert "DELUGE_HOST" not in message
+    assert "local address is already selected" not in message

@@ -8,6 +8,7 @@ import re
 
 from flask import Flask
 
+from ..utils import client_connection_help
 from .base import TorrentClientPlugin, TorrentStatus
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ class TorrentManager:
             settings = app.config.get("CLIENT_CONNECTIONS", {}).get(client_name, {})
             client_cls: type[TorrentClientPlugin] = client_class
             instance = client_cls(
-                host=settings.get("HOST") or "localhost",
+                host=settings.get("HOST") or "127.0.0.1",
                 port=int(settings.get("PORT") or getattr(client_class, "DEFAULT_PORT", 8080)),
                 username=settings.get("USERNAME"),
                 password=settings.get("PASSWORD"),
@@ -162,15 +163,8 @@ class TorrentManager:
         logger.info("Checking Download Client '%s'. Please wait for the connection result.", name)
         connected = target.verify_credentials()
         if not connected:
-            logger.warning(
-                "Cannot connect to Download Client '%s'. Check that it is running, then check %s_HOST, %s_PORT "
-                "and its login settings. If this app and client share Gluetun's network, use %s_HOST=127.0.0.1. "
-                "For a separate server, use its reachable address.",
-                name,
-                name.upper(),
-                name.upper(),
-                name.upper(),
-            )
+            settings = self._app.config.get("CLIENT_CONNECTIONS", {}).get(name, {}) if self._app else {}
+            logger.warning("%s", client_connection_help(name, settings))
         return connected
 
     @staticmethod
@@ -240,7 +234,7 @@ class TorrentManager:
             if not reached_clients:
                 raise ConnectionError(
                     "No Download Clients could be reached. Check their host, port and login settings. "
-                    "If they share Gluetun with this app, set their HOST settings to 127.0.0.1."
+                    "For clients in separate containers or servers, use their service names or IP addresses."
                 )
             return aggregated
 

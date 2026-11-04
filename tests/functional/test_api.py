@@ -961,7 +961,8 @@ def test_api_clients_checks_only_requested_client(client: FlaskClient) -> None:
         assert response.json is not None
         assert response.json["clients"][0]["connected"] is False
         assert "DELUGE_HOST" in response.json["clients"][0]["message"]
-        assert "127.0.0.1" in response.json["clients"][0]["message"]
+        assert "service name or IP address" in response.json["clients"][0]["message"]
+        assert "Gluetun" not in response.json["clients"][0]["message"]
         manager.verify_credentials.assert_called_once_with("deluge")
         manager.verify_credentials.reset_mock()
         response = client.get("/api/clients?client=unknown")

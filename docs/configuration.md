@@ -142,9 +142,16 @@ The app sends a destination path; it does not move files or change that folder's
 
 ### Optional connection settings
 
+For clients reachable at `127.0.0.1` from inside this app, omit HOST and PORT: the app automatically uses the local
+address and that client's standard port. It verifies the connection when needed. Docker containers must share one
+network connection (`network_mode: service:...` or host networking) for these local defaults to reach another client.
+Separate containers on the same Docker network still have their own localhost: use the client's Docker service name.
+For another server, set its reachable IP address or hostname. No VPN product detection is needed.
+An explicitly configured address is always preserved; the app does not scan your network or guess a replacement.
+
 | Setting | Default / purpose |
 | --- | --- |
-| `<CLIENT>_HOST` | Server address; defaults to `localhost` inside the app's network |
+| `<CLIENT>_HOST` | Server address; defaults automatically to `127.0.0.1` inside the app's network |
 | `<CLIENT>_PORT` | Client's normal port; positive whole number up to `65535` |
 | `<CLIENT>_SCHEME` | `http`; use `https` if that client serves HTTPS |
 | `<CLIENT>_TIMEOUT` | Override the common timeout for that client, in positive whole seconds |

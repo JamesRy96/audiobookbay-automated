@@ -136,7 +136,13 @@ def api_clients() -> Response | tuple[Response, int]:
     for name in client_names:
         is_connected = torrent_manager.verify_credentials(name)
         clients_data.append(
-            {"name": name, "connected": is_connected, "message": "" if is_connected else client_connection_help(name)}
+            {
+                "name": name,
+                "connected": is_connected,
+                "message": ""
+                if is_connected
+                else client_connection_help(name, current_app.config["CLIENT_CONNECTIONS"].get(name)),
+            }
         )
 
     primary = torrent_manager.client_type.lower().replace("client", "")
@@ -573,11 +579,21 @@ def status() -> str | Response | tuple[Response, int]:
                 err_type = "banned"
             elif "cooldown" in err_str or "auth" in err_str or "password" in err_str or "key" in err_str:
                 err_type = "auth_failed"
-            return jsonify({"error": client_connection_help(client_filter), "client_status": err_type}), 500
+            return jsonify(
+                {
+                    "error": client_connection_help(
+                        client_filter, current_app.config["CLIENT_CONNECTIONS"].get(client_filter)
+                    ),
+                    "client_status": err_type,
+                }
+            ), 500
 
         _, debug_details = format_user_error(e, context="client")
         names = torrent_manager.list_clients()
-        error_message = client_connection_help(client_filter or (names[0] if len(names) == 1 else None))
+        selected_name = client_filter or (names[0] if len(names) == 1 else None)
+        error_message = client_connection_help(
+            selected_name, current_app.config["CLIENT_CONNECTIONS"].get(selected_name)
+        )
         status_slug = "disconnected"
         status_label = "Client Disconnected"
         err_lower = (str(e) + " " + (debug_details or "")).lower()

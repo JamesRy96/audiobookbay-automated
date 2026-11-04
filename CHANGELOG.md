@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Make client connection guidance independent of VPN products and recognize when a local address is already selected.
+  Omitted client hosts use IPv4 loopback automatically with each plugin's standard port.
+
 - Show actionable Download Client connection help in the chooser, page banner and Status, including partial failures.
 
 - Bound Download Client request waits by default, explain unreachable client settings in logs, and report an error
@@ -117,6 +120,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`pre-commit`, `mypy`, `pytest`) are available on all runners.
 
 ### Fixed
+
+- Make client connection guidance independent of VPN products and recognize when a local address is already selected.
+  Omitted client hosts use IPv4 loopback automatically with each plugin's standard port.
 
 - Show actionable Download Client connection help in the chooser, page banner and Status, including partial failures.
 
