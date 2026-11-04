@@ -4,7 +4,8 @@
 
 ## Safety Over Speed Invariants
 
-- Mandatory Jitter: Introduce random sleep (0.5 to 1.5 seconds) prior to all external requests. Never remove or reduce.
+- Mandatory Jitter: Introduce random sleep (default 0.3 to 0.8 seconds, configurable via `SCRAPER_JITTER_MIN` and
+  `SCRAPER_JITTER_MAX`) prior to all external requests. Never bypass or remove.
 - Network Calls: Never invoke `requests` directly; always route through `audiobook_automated/scraper/network.py`.
 - Explicit Timeouts: Every blocking I/O operation must reference a named constant in `audiobook_automated/constants.py`.
 - Search Query Limits: Search queries must meet minimum character length requirements (>= 2 characters) and normalize to

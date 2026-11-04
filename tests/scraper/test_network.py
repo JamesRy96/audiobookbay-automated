@@ -10,7 +10,13 @@ from flask import Flask
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from audiobook_automated.constants import DEFAULT_TRACKERS, MAX_CATALOG_REDIRECTS, USER_AGENTS
+from audiobook_automated.constants import (
+    DEFAULT_SCRAPER_JITTER_MAX,
+    DEFAULT_SCRAPER_JITTER_MIN,
+    DEFAULT_TRACKERS,
+    MAX_CATALOG_REDIRECTS,
+    USER_AGENTS,
+)
 from audiobook_automated.scraper import network
 from audiobook_automated.scraper.network import (
     CACHE_LOCK,
@@ -719,7 +725,9 @@ def test_mirror_probes_obey_the_same_request_budget() -> None:
         assert network.check_mirror("bounded.example") == "bounded.example"
         assert semaphore.call_count == 2
         assert sleep.call_count == 2
-        assert all(0.5 <= call.args[0] <= 1.5 for call in sleep.call_args_list)
+        assert all(
+            DEFAULT_SCRAPER_JITTER_MIN <= call.args[0] <= DEFAULT_SCRAPER_JITTER_MAX for call in sleep.call_args_list
+        )
 
 
 def test_parked_mirror_is_eligible_for_recheck_after_its_cooldown() -> None:

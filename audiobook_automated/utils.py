@@ -69,23 +69,10 @@ def sanitize_title(title: str | None) -> str:
     # We use split(".")[0] to catch the primary name before any extensions.
     # Logic Update: Use re.split to correctly handle multiple dots or lack thereof.
     base_stem = sanitized.split(".")[0]
-
-    # Explicit list of reserved names to check against (including COM1-9, LPT1-9)
-    # This logic relies on WINDOWS_RESERVED_NAMES being complete, but let's be robust.
-    is_reserved = False
-
     sanitized_upper = sanitized.upper()
     base_stem_upper = base_stem.upper()
 
     if sanitized_upper in WINDOWS_RESERVED_NAMES or base_stem_upper in WINDOWS_RESERVED_NAMES:
-        is_reserved = True
-
-    # Extra check for COM/LPT + digit if not in the constant set
-    # Regex: ^(COM|LPT)[1-9]$
-    # Note: WINDOWS_RESERVED_NAMES already contains LPT1-9, COM1-9.
-    # This check is redundant if the set is complete, but kept for robustness.
-    # However, since we enforce coverage, we remove the redundant logic to satisfy DRY/Coverage.
-    if is_reserved:
         return f"{sanitized}{SAFE_SUFFIX}"
 
     return sanitized
