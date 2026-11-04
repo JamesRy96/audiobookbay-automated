@@ -63,6 +63,12 @@ MAX_FILENAME_LENGTH: Final[int] = 240
 # Timeout for Audiobookshelf API integration calls (Seconds)
 ABS_TIMEOUT_SECONDS: Final[int] = 10
 
+SCRAPER_REQUEST_TIMEOUT_SECONDS: Final[int] = 10
+MIRROR_PROBE_TIMEOUT_SECONDS: Final[float] = 2.5
+MIRROR_LIST_TIMEOUT_SECONDS: Final[float] = 3.0
+MAX_CATALOG_REDIRECTS: Final[int] = 3
+MAX_CATALOG_REQUEST_ATTEMPTS: Final[int] = 2
+
 # A curated list of diverse, modern User-Agents to rotate through to avoid bot detection.
 USER_AGENTS: Final[list[str]] = [
     # Desktop Chrome (Windows, Mac, Linux)
@@ -98,7 +104,7 @@ DEFAULT_MIRRORS: Final[list[str]] = [
 
 # Remote repository URL for dynamically synchronizing latest community mirrors
 DEFAULT_MIRRORS_REMOTE_URL: Final[str] = (
-    "https://raw.githubusercontent.com/theurer/audiobookbay-automated/master/examples/mirrors.json"
+    "https://raw.githubusercontent.com/meek2100/audiobookbay-automated/main/examples/mirrors.json"
 )
 
 # Concurrency setting for mirror availability checks

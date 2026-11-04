@@ -56,35 +56,6 @@ def handle_app_error(error: AppError) -> tuple[Response, int]:
     return jsonify({"message": error.message}), error.status_code
 
 
-@main_bp.context_processor
-def inject_global_vars() -> dict[str, Any]:
-    """Inject global variables into all templates.
-
-    Uses current_app.config to access settings loaded in config.py.
-
-    Returns:
-        dict[str, Any]: A dictionary of context variables available to templates.
-    """
-    # Retrieve version hash from app config (calculated at startup)
-    static_version = current_app.config.get("STATIC_VERSION", "v1")
-
-    # Retrieve pre-calculated flag from config instead of re-evaluating
-    # Now uses the property defined in Config class
-    library_reload_enabled = current_app.config.get("LIBRARY_RELOAD_ENABLED", False)
-
-    return {
-        "nav_link_name": current_app.config.get("NAV_LINK_NAME"),
-        "nav_link_url": current_app.config.get("NAV_LINK_URL"),
-        "library_reload_enabled": library_reload_enabled,
-        "static_version": static_version,
-        "default_cover_filename": "cover-placeholder.svg",
-        "splash_enabled": current_app.config.get("SPLASH_ENABLED", True),
-        "splash_title": current_app.config.get("SPLASH_TITLE", ""),
-        "splash_message": current_app.config.get("SPLASH_MESSAGE", ""),
-        "splash_duration": current_app.config.get("SPLASH_DURATION", 4500),
-    }
-
-
 @main_bp.route("/<path:filename>")
 def serve_root_asset(filename: str) -> Response | tuple[Response, int]:
     """Serve static asset fallbacks requested at the root path (e.g. /custom-logo.jpg).

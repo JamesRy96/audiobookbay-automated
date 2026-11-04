@@ -166,19 +166,6 @@
     flex-shrink: 0;
 }
 
-/* Fallback for standalone legacy search-form/container */
-.search-container {
-    max-width: 900px;
-    margin: 0 auto 24px;
-}
-
-.search-form {
-    display: flex;
-    gap: 15px;
-    position: relative;
-    align-items: stretch;
-}
-
 .search-bar {
     width: 100%;
     padding: 14px 20px;
@@ -971,9 +958,6 @@ td.col-actions {
 
 /* Extra Small Screens */
 @media (max-width: 500px) {
-    .search-form {
-        flex-direction: column;
-    }
     .search-button {
         width: 100%;
         min-height: 48px;

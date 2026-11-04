@@ -223,7 +223,7 @@ a response code alone does not prove that a mirror serves the catalog.
 | `LISTEN_HOST`, `LISTEN_PORT` | Container detects IPv6 (`[::]`) or IPv4 (`0.0.0.0`); port `5078` |
 | `THREADS` | `8`; keep the container's single Gunicorn worker |
 | `SCRAPER_THREADS` | `3`; bounded concurrent catalog requests |
-| `SCRAPER_TIMEOUT` | `30` seconds |
+| `SCRAPER_TIMEOUT` | `10` seconds per catalog request attempt |
 | `TZ` | Container timezone; for example `America/Los_Angeles` |
 
 The app does not provide a VPN. Configure your own VPN/proxy if required. Local browser and Download Client traffic
@@ -321,3 +321,8 @@ A fixed key preserves signing continuity; it does not disable token expiry or ot
 
 If freshly opened pages repeatedly show a page-expired message, check that the app server's clock is synchronized.
 A clock moving backward can invalidate a newly signed session. Refresh after correcting the server time.
+
+Diagnostics returns the last completed observations while checking Download Clients in the background. Its regular
+refresh does not repeat catalog probes or fetch a new mirror list. Manual checks are limited to once every 30
+seconds. A mirror request waits at most 2.5 seconds per probe attempt; catalog requests use `SCRAPER_TIMEOUT`.
+Transient connection failures can retry once, with the same request spacing and concurrency limit as other requests.

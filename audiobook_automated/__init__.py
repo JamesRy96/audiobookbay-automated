@@ -110,6 +110,11 @@ def create_app(config_class: type[Config] = Config) -> Flask:
         """Inject global configuration variables into all templates."""
         return {
             "download_clients": torrent_manager.list_clients(),
+            "nav_link_name": app.config.get("NAV_LINK_NAME"),
+            "nav_link_url": app.config.get("NAV_LINK_URL"),
+            "library_reload_enabled": app.config["LIBRARY_RELOAD_ENABLED"],
+            "static_version": app.config["STATIC_VERSION"],
+            "default_cover_filename": "cover-placeholder.svg",
             "site_title": app.config["SITE_TITLE"],
             "site_logo": app.config.get("SITE_LOGO"),
             "splash_enabled": app.config["SPLASH_ENABLED"],

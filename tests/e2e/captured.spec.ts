@@ -40,7 +40,8 @@ for (const book of capture.details) {
         const state = await (await request.get("/e2e/client")).json();
         expect(state.events).toHaveLength(1);
         expect(state.events[0]).toMatchObject({ hash: book.hash, name: book.title });
-        for (const tracker of book.trackers_in_text) expect(state.events[0].magnet).toContain(tracker);
+        for (const tracker of book.trackers_in_text)
+            expect(decodeURIComponent(state.events[0].magnet)).toContain(tracker);
     });
 }
 

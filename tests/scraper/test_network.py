@@ -10,7 +10,7 @@ from flask import Flask
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from audiobook_automated.constants import DEFAULT_TRACKERS, USER_AGENTS
+from audiobook_automated.constants import DEFAULT_TRACKERS, MAX_CATALOG_REDIRECTS, USER_AGENTS
 from audiobook_automated.scraper import network
 from audiobook_automated.scraper.network import (
     CACHE_LOCK,
@@ -39,20 +39,20 @@ def test_find_best_mirror_failover(app: Flask) -> None:
             # First mirror fails (Timeout on both HEAD, HTTPS GET, and HTTP GET)
             mock_response_ok = MagicMock()
             mock_response_ok.status_code = 200
-            mock_response_ok.text = "<div class='postTitle'>Title</div> audiobookbay"
+            mock_response_ok.text = "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay"
             mock_response_ok.url = "https://mirror2.com/"
             mock_response_ok.elapsed.total_seconds.return_value = 0.5
 
-            # Configure side effects: first mirror times out everywhere, second succeeds on HEAD
-            mock_session.head.side_effect = [requests.Timeout("Timeout"), mock_response_ok]
-            mock_session.get.side_effect = [requests.Timeout("Timeout"), requests.Timeout("Timeout"), mock_response_ok]
+            def response_for_url(url: str, **_: object) -> MagicMock:
+                """Keep every bounded retry of the first host offline while the second remains healthy."""
+                if "mirror1.com" in url:
+                    raise requests.Timeout("Timeout")
+                return mock_response_ok
 
-            # Execute
-            best_mirror = find_best_mirror()
-
-            # Assert
-            assert best_mirror == "mirror2.com"
-            assert mock_session.head.call_count == 2
+            mock_session.head.side_effect = response_for_url
+            mock_session.get.side_effect = response_for_url
+            assert find_best_mirror() == "mirror2.com"
+            assert mock_session.head.call_count == 3
 
 
 def test_find_best_mirror_fast_path(app: Flask) -> None:
@@ -164,7 +164,7 @@ def test_find_best_mirror_fallback_logic(app: Flask) -> None:
 
             mock_get_resp = MagicMock()
             mock_get_resp.status_code = 200
-            mock_get_resp.text = "<div class='postTitle'>Title</div> audiobookbay"
+            mock_get_resp.text = "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay"
             mock_get_resp.url = "https://mirror1.com/"
             # Ensure GET doesn't fail on close()
             mock_get_resp.close = MagicMock()
@@ -262,7 +262,7 @@ def test_check_mirror_success_head() -> None:
         mock_session = mock_get_session.return_value
         mock_session.head.return_value.status_code = 200
         mock_session.get.return_value.status_code = 200
-        mock_session.get.return_value.text = "<div class='postTitle'>Title</div> audiobookbay"
+        mock_session.get.return_value.text = "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay"
         mock_session.get.return_value.url = "https://good.mirror/"
         result = network.check_mirror("good.mirror")
         assert result == "good.mirror"
@@ -274,7 +274,7 @@ def test_check_mirror_success_get_fallback() -> None:
         mock_session = mock_get_session.return_value
         mock_session.head.side_effect = requests.RequestException("Method Not Allowed")
         mock_session.get.return_value.status_code = 200
-        mock_session.get.return_value.text = "<div class='postContent'>Body</div> audiobookbay"
+        mock_session.get.return_value.text = "<div id='content'><div class='postContent'>Body</div></div> audiobookbay"
         mock_session.get.return_value.url = "https://fallback.mirror/"
         # Ensure GET doesn't fail on close()
         mock_session.get.return_value.close = MagicMock()
@@ -289,7 +289,7 @@ def test_check_mirror_head_500_fallback() -> None:
         mock_session = mock_get_session.return_value
         mock_session.head.return_value.status_code = 500
         mock_session.get.return_value.status_code = 200
-        mock_session.get.return_value.text = "<div class='postTitle'>Title</div> audiobookbay"
+        mock_session.get.return_value.text = "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay"
         mock_session.get.return_value.url = "https://flaky.mirror/"
 
         result = network.check_mirror("flaky.mirror")
@@ -304,7 +304,7 @@ def test_check_mirror_head_405_fallback() -> None:
         mock_session.head.return_value.status_code = 405
         # GET returns 200
         mock_session.get.return_value.status_code = 200
-        mock_session.get.return_value.text = "<div class='postTitle'>Title</div> audiobookbay"
+        mock_session.get.return_value.text = "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay"
         mock_session.get.return_value.url = "https://fallback.mirror/"
         # Ensure GET doesn't fail on close()
         mock_session.get.return_value.close = MagicMock()
@@ -335,7 +335,7 @@ def test_check_mirror_timeout_fallback() -> None:
         mock_session.head.side_effect = requests.Timeout("Connection Timed Out")
         # GET succeeds
         mock_session.get.return_value.status_code = 200
-        mock_session.get.return_value.text = "<div class='postTitle'>Title</div> audiobookbay"
+        mock_session.get.return_value.text = "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay"
         mock_session.get.return_value.url = "https://timeout.mirror/"
         # Ensure GET doesn't fail on close()
         mock_session.get.return_value.close = MagicMock()
@@ -546,10 +546,11 @@ def test_is_authentic_catalog_edge_cases() -> None:
     assert not network.is_authentic_catalog("<html>Buy this domain</html>")
     assert not network.is_authentic_catalog("<html>Random unrelated HTML</html>")
     assert not network.is_authentic_catalog(
-        "<div class='postTitle'>Title</div> audiobookbay", final_url="https://expireddomains.net/"
+        "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay",
+        final_url="https://expireddomains.net/",
     )
     assert network.is_authentic_catalog(
-        "<div class='postTitle'>Title</div> audiobookbay", final_url="https://audiobookbay.lu/"
+        "<div id='content'><div class='postTitle'>Title</div></div> audiobookbay", final_url="https://audiobookbay.lu/"
     )
 
 
@@ -577,7 +578,7 @@ def test_check_mirror_https_get_inauthentic_and_http_fallback() -> None:
         # HTTP GET succeeds with authentic catalog
         ok_resp = MagicMock(
             status_code=200,
-            text="<div class='postTitle'>Title</div> audiobookbay",
+            text="<div id='content'><div class='postTitle'>Title</div></div> audiobookbay",
             url="http://fake.mirror/",
         )
         mock_session.get.side_effect = [fake_resp, fake_resp]
@@ -588,10 +589,12 @@ def test_check_mirror_https_get_inauthentic_and_http_fallback() -> None:
         # HTTPS GET non-200 (e.g. 500) then HTTP GET 200
         err_resp = MagicMock(status_code=500)
         mock_session.get.side_effect = [err_resp, ok_resp]
+        ok_resp.url = "http://https500.mirror/"
         assert network.check_mirror("https500.mirror") == "https500.mirror"
 
         # When HTTPS GET throws exception, it falls back to HTTP GET
         mock_session.get.side_effect = [requests.RequestException("HTTPS failed"), ok_resp]
+        ok_resp.url = "http://legit.http.mirror/"
         assert network.check_mirror("legit.http.mirror") == "legit.http.mirror"
 
         # HTTP GET inauthentic returns None
@@ -696,3 +699,160 @@ def test_check_mirror_after_delays_then_probes() -> None:
         network._check_mirror_after("m.example", 0.0)  # pyright: ignore[reportPrivateUsage]
         sleep.assert_not_called()
         assert check.call_count == 2
+
+
+def test_mirror_probes_obey_the_same_request_budget() -> None:
+    """HEAD and semantic GET probes must acquire the global semaphore and wait mandatory jitter."""
+    response = MagicMock(
+        status_code=200,
+        text="<div id='content'><div class='postTitle'>Book</div></div> audiobookbay",
+        url="https://bounded.example/",
+        headers={},
+    )
+    with (
+        patch.object(network, "get_ping_session") as session,
+        patch.object(network, "get_semaphore") as semaphore,
+        patch("audiobook_automated.scraper.network.time.sleep") as sleep,
+    ):
+        session.return_value.head.return_value = response
+        session.return_value.get.return_value = response
+        assert network.check_mirror("bounded.example") == "bounded.example"
+        assert semaphore.call_count == 2
+        assert sleep.call_count == 2
+        assert all(0.5 <= call.args[0] <= 1.5 for call in sleep.call_args_list)
+
+
+def test_parked_mirror_is_eligible_for_recheck_after_its_cooldown() -> None:
+    """A stated 24-hour parked-domain cooldown must not disable a recovered mirror forever."""
+    with patch("audiobook_automated.scraper.network.time.time", return_value=1000.0) as clock:
+        stat = network.MirrorStat("recover.example")
+        stat.record_failure("Parked", is_parked=True)
+        assert stat.is_cooling_down
+        clock.return_value = 1000.0 + 86401
+        assert not stat.is_cooling_down
+
+
+def test_transient_backoff_resets_after_a_success() -> None:
+    """Historical failures remain in accuracy statistics but do not lengthen a new failure streak."""
+    with patch("audiobook_automated.scraper.network.time.time", return_value=1000.0):
+        stat = network.MirrorStat("streak.example")
+        stat.record_failure("First")
+        stat.record_failure("Second")
+        stat.record_success(20)
+        stat.record_failure("New streak")
+        assert stat.cooldown_until == 1015.0
+        assert stat.failure_count == 3
+
+
+def test_verified_faster_mirror_can_outrank_a_slow_primary(app: Flask) -> None:
+    """Configured primary is an initial preference, not a permanent override of collected performance."""
+    app.config.update(ABB_HOSTNAME="slow.example", ABB_MIRRORS=["fast.example"])
+    with patch.object(network, "_mirror_stats", {}), patch.object(network, "fetch_remote_mirrors", return_value=[]):
+        network.get_mirror_stat("slow.example").record_success(10000)
+        network.get_mirror_stat("fast.example").record_success(100)
+        assert network.get_mirrors()[0] == "fast.example"
+
+
+def test_probes_reject_catalog_lookalikes_on_foreign_redirects() -> None:
+    """A copied title/brand on an unrelated destination must not qualify a mirror as healthy."""
+    with patch.object(network, "get_ping_session") as session:
+        session.return_value.head.return_value.status_code = 200
+        session.return_value.get.return_value = MagicMock(
+            status_code=200,
+            text="<div id='content'><div class='postTitle'>Book</div></div> audiobookbay",
+            url="https://unrelated.example/",
+            headers={},
+        )
+        assert network.check_mirror("redirect.example") is None
+
+
+def test_catalog_verification_requires_a_real_content_container() -> None:
+    """A brand word and unrelated class substring do not establish catalog structure."""
+    assert not network.is_authentic_catalog("<div class='postTitle'>Book</div> audiobookbay")
+
+
+def test_redirects_keep_the_catalog_host_and_wait_between_hops() -> None:
+    """Exercise real Session redirect handling without contacting a redirected third-party destination."""
+    import pytest
+    import requests_mock
+
+    with requests_mock.Mocker() as boundary, patch("audiobook_automated.scraper.network.time.sleep") as sleep:
+        boundary.get("https://catalog.example/start", status_code=302, headers={"Location": "/finish"})
+        boundary.get("https://catalog.example/finish", text="Catalog")
+        response, latency = network.request_external(network.get_session(), "https://catalog.example/start", timeout=2)
+        assert response.text == "Catalog"
+        assert latency >= 0
+        assert len(boundary.request_history) == 2
+        assert sleep.call_count == 2
+        boundary.get(
+            "https://catalog.example/foreign", status_code=302, headers={"Location": "https://unrelated.example/"}
+        )
+        with pytest.raises(requests.ConnectionError, match="outside"):
+            network.request_external(network.get_session(), "https://catalog.example/foreign", timeout=2)
+        assert all(request.hostname == "catalog.example" for request in boundary.request_history)
+
+
+def test_redirect_loops_and_missing_destinations_are_bounded() -> None:
+    """A redirect without Location or a same-host loop must stop within a fixed request budget."""
+    import pytest
+    import requests_mock
+
+    with requests_mock.Mocker() as boundary:
+        boundary.get("https://catalog.example/missing", status_code=302)
+        with pytest.raises(requests.ConnectionError, match="redirect"):
+            network.request_external(network.get_session(), "https://catalog.example/missing", timeout=2)
+        boundary.get("https://catalog.example/loop", status_code=302, headers={"Location": "/loop"})
+        with pytest.raises(requests.ConnectionError, match="limit"):
+            network.request_external(network.get_session(), "https://catalog.example/loop", timeout=2)
+        assert len(boundary.request_history) == 1 + MAX_CATALOG_REDIRECTS + 1
+
+
+def test_transport_retry_is_bounded_and_reacquires_request_budget() -> None:
+    """A transient connection failure retries once with fresh jitter and no hidden adapter retries."""
+    import pytest
+
+    session = MagicMock()
+    session.get.side_effect = [requests.Timeout("Transient"), MagicMock(status_code=200)]
+    with (
+        patch("audiobook_automated.scraper.network.time.sleep") as sleep,
+        patch("audiobook_automated.scraper.network.time.perf_counter", side_effect=[1.0, 2.0, 3.0, 5.0]),
+    ):
+        _, latency = network.request_external(session, "https://catalog.example/", timeout=2)
+        assert sleep.call_count == 2
+        assert latency == 3000.0
+    session.get.side_effect = requests.ConnectionError("Offline")
+    with pytest.raises(requests.ConnectionError):
+        network.request_external(session, "https://catalog.example/", timeout=2)
+    assert session.get.call_count == 4
+    session.get.reset_mock()
+    session.get.side_effect = requests.exceptions.SSLError("Bad certificate")
+    with pytest.raises(requests.exceptions.SSLError):
+        network.request_external(session, "https://catalog.example/", timeout=2)
+    session.get.assert_called_once()
+
+
+def test_request_session_has_no_automatic_transport_retries() -> None:
+    """Only explicitly budgeted attempts may reach the catalog."""
+    session = network.get_session()
+    assert cast(HTTPAdapter, session.adapters["https://"]).max_retries.total == 0
+    session.close()
+
+
+def test_all_cooling_down_mirrors_are_not_probed(app: Flask) -> None:
+    """Backoff remains effective even when every candidate is temporarily unavailable."""
+    with (
+        patch.object(network, "get_mirrors", return_value=["cool.example"]),
+        patch.object(network, "check_mirror") as check,
+    ):
+        network.get_mirror_stat("cool.example").record_failure("Offline")
+        assert network.find_best_mirror() is None
+        check.assert_not_called()
+
+
+def test_failure_backoff_reaches_cap_without_growing_forever() -> None:
+    """Repeated failures reach the stated five-minute cap."""
+    with patch("audiobook_automated.scraper.network.time.time", return_value=1000.0):
+        stat = network.MirrorStat("cap.example")
+        for _ in range(10):
+            stat.record_failure("Offline")
+        assert stat.cooldown_until == 1300.0

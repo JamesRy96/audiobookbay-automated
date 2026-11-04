@@ -180,3 +180,13 @@ def test_serve_root_asset(client: Any) -> None:
     # Non-media or invalid extension
     response = client.get("/something.py")
     assert response.status_code == 404
+
+
+def test_shared_navigation_and_asset_version_reach_diagnostics(client: Any) -> None:
+    """Every page receives the same custom navigation and cache-busted shared assets."""
+    client.application.config.update(NAV_LINK_NAME="Open Library", NAV_LINK_URL="https://library.example/")
+    for path in ("/", "/status", "/diagnostics"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert b"https://library.example/" in response.data, path
+        assert ("?v=" + client.application.config["STATIC_VERSION"]).encode() in response.data, path

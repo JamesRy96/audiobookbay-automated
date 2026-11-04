@@ -1,6 +1,8 @@
 # File: tests/functional/test_diagnostics.py
 """Tests for the diagnostics endpoints and dashboard."""
 
+import threading
+import time
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -17,13 +19,23 @@ from audiobook_automated.scraper import network
 @pytest.fixture(autouse=True)
 def _reset_probe_cache() -> None:
     """Expire the external probe cache so each test starts with a fresh probe."""
-    diagnostics.probe_cache.update({"expires": 0.0, "taken": 0.0, "clients": []})
+    diagnostics.probe_cache.update({"expires": 0.0, "taken": 0.0, "manual": 0.0, "clients": []})
 
 
 def _fresh_get(client: FlaskClient) -> Any:
     """GET the health endpoint after expiring the probe cache."""
     diagnostics.probe_cache["expires"] = 0.0
+    client.get("/api/diagnostics/health")
+    _wait_for_client_check()
     return client.get("/api/diagnostics/health")
+
+
+def _wait_for_client_check() -> None:
+    """Wait only for the test's mocked client work, without relying on a scheduling race."""
+    deadline = time.monotonic() + 2
+    while diagnostics.probe_state["clients_running"]:
+        assert time.monotonic() < deadline, "Client test work did not complete"
+        threading.Event().wait(0.001)
 
 
 def test_diagnostics_disabled_by_default(app: Flask, client: FlaskClient) -> None:
@@ -290,6 +302,7 @@ def test_diagnostics_health_polling_is_passive_and_manual_refresh_probes(app: Fl
         patch("audiobook_automated.diagnostics.network.get_mirrors", return_value=["a.example"]),
     ):
         assert client.get("/api/diagnostics/health").status_code == 200
+        _wait_for_client_check()
         body = client.get("/api/diagnostics/health").get_json()
         assert mirrors.call_count == 0
         assert clients.call_count == 1
@@ -303,13 +316,20 @@ def test_diagnostics_health_polling_is_passive_and_manual_refresh_probes(app: Fl
         # Once the throttle window has passed, a forced refresh actively probes.
         diagnostics.probe_cache["taken"] -= diagnostics.MANUAL_REFRESH_MIN_INTERVAL_SECONDS + 1
         client.get("/api/diagnostics/health?refresh=1")
+        _wait_for_client_check()
         assert mirrors.call_count == 1
         assert clients.call_count == 2
 
 
 def test_probe_candidate_mirrors_reports_stats() -> None:
     """The active probe runs check_mirror and reports the resulting stats."""
-    with patch("audiobook_automated.diagnostics.network.check_mirror", return_value="p.example"):
+
+    def checked(host: str) -> str:
+        """A successful low-level probe records its observation before the snapshot is read."""
+        network.get_mirror_stat(host).record_success(50)
+        return host
+
+    with patch("audiobook_automated.diagnostics.network.check_mirror", side_effect=checked):
         results = diagnostics._probe_candidate_mirrors(["p.example"])  # pyright: ignore[reportPrivateUsage]
     assert results[0]["hostname"] == "p.example"
     assert results[0]["reachable"] is True
@@ -377,3 +397,66 @@ def test_log_export_limit_never_expands_on_negative_input(app: Flask, client: Fl
         response = client.get("/api/diagnostics/logs", query_string={"limit": limit})
     assert response.get_json() == {"logs": [], "count": 0}
     logs.assert_not_called()
+
+
+def test_health_poll_returns_before_client_connections_finish(app: Flask, client: FlaskClient) -> None:
+    """A slow Download Client must not hold a Diagnostics HTTP request or its cache lock."""
+    jobs = []
+
+    class DeferredThread:
+        """Capture work without running it on the request thread."""
+
+        def __init__(self, **kwargs: Any) -> None:
+            jobs.append(kwargs)
+
+        def start(self) -> None:
+            """Leave the captured operation pending."""
+
+    with (
+        patch("audiobook_automated.diagnostics.threading.Thread", DeferredThread),
+        patch.object(diagnostics, "_collect_client_diagnostics", return_value=[]) as collect,
+        patch.object(diagnostics, "_start_background_probe"),
+        patch.object(network, "get_mirrors", return_value=["passive.example"]),
+    ):
+        response = client.get("/api/diagnostics/health")
+        assert response.status_code == 200
+        collect.assert_not_called()
+        assert response.json is not None and response.json["client_probe_running"] is True
+        diagnostics._start_client_probe()  # pyright: ignore[reportPrivateUsage]
+        assert len(jobs) == 1
+        jobs[0]["target"]()
+        collect.assert_called_once()
+
+
+def test_health_poll_never_fetches_remote_mirror_metadata(app: Flask, client: FlaskClient) -> None:
+    """A passive dashboard poll must not perform a potentially slow remote mirror-list request."""
+    diagnostics.probe_cache["expires"] = float("inf")
+    with (
+        patch.object(
+            network, "fetch_remote_mirrors", side_effect=AssertionError("Passive polling performed network I/O")
+        ),
+        patch.object(diagnostics, "_start_background_probe"),
+    ):
+        assert client.get("/api/diagnostics/health").status_code == 200
+
+
+def test_background_client_failure_releases_running_flag_and_backs_off(app: Flask) -> None:
+    """A failed client diagnostic refresh cannot wedge polling or retry on every HTTP request."""
+
+    class InlineThread:
+        """Execute the isolated worker body deterministically for its failure path."""
+
+        def __init__(self, target: Any, **_: Any) -> None:
+            self.target = target
+
+        def start(self) -> None:
+            self.target()
+
+    with (
+        app.app_context(),
+        patch("audiobook_automated.diagnostics.threading.Thread", InlineThread),
+        patch.object(diagnostics, "_collect_client_diagnostics", side_effect=RuntimeError("Client check failed")),
+    ):
+        diagnostics._start_client_probe()  # pyright: ignore[reportPrivateUsage]
+    assert diagnostics.probe_state["clients_running"] is False
+    assert diagnostics.probe_cache["expires"] > time.monotonic()

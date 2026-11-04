@@ -24,15 +24,15 @@ def test_fetch_page_results_unexpected_exception() -> None:
                 mock_logger = MagicMock()
                 mock_get_logger.return_value = mock_logger
 
-                results = fetch_page_results("http://example.com")
-                assert results == []
+                with pytest.raises(ConnectionError, match="Could not read catalog results"):
+                    fetch_page_results("http://example.com")
 
 
 def test_fetch_page_missing_href() -> None:
     """Test fetch_page_results handles post title missing href attribute gracefully."""
     html_content = """
     <html>
-        <body>
+        <body><main id="content">
             <div class="post">
                 <div class="postTitle">
                     <h2><a>Title Without Href</a></h2>
@@ -43,7 +43,7 @@ def test_fetch_page_missing_href() -> None:
                 </div>
                 <div class="postInfo">Info</div>
             </div>
-        </body>
+        </main></body>
     </html>
     """
 

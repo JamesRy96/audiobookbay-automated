@@ -384,7 +384,7 @@ function showLoadingSpinner() {
         button.disabled = true;
         button.setAttribute("aria-busy", "true");
         if (!button.dataset.originalText) {
-            // FIX: Use textContent instead of innerText for JSDOM compatibility
+            // Read metadata even when filtering has hidden the row.
             button.dataset.originalText = button.querySelector(".button-text").textContent;
         }
         button.querySelector(".button-text").textContent = "Searching...";
@@ -408,7 +408,7 @@ function hideLoadingSpinner() {
         button.disabled = false;
         button.setAttribute("aria-busy", "false");
         if (button.dataset.originalText) {
-            // FIX: Use textContent instead of innerText for JSDOM compatibility
+            // Read metadata even when filtering has hidden the row.
             button.querySelector(".button-text").textContent = button.dataset.originalText;
         }
     }

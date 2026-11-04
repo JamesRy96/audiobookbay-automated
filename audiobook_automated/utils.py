@@ -402,11 +402,3 @@ def build_github_issue_url(
         "labels": "bug,automated-report",
     }
     return f"{repo_url}?{urllib.parse.urlencode(params)}"
-
-
-if __name__ == "__main__":  # pragma: no cover
-    # Script entry point for Docker build time optimization.
-    # Calculates the hash of the static directory relative to this file
-    # and prints it to stdout for redirection to version.txt.
-    static_dir = Path(__file__).parent / "static"
-    print(calculate_static_hash(static_dir))

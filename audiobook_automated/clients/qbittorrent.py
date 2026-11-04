@@ -169,7 +169,7 @@ class QBittorrentClient(TorrentClientPlugin):
         # qBittorrent API v2.14+ returns JSON metadata, older versions return 'Ok.' or 'Fails.'
         result = self.client.torrents_add(urls=magnet_link, save_path=save_path, category=category)
 
-        # Check for legacy string failure response
+        # qBittorrent can reject a transfer with a plain-text failure response.
         if isinstance(result, str) and result.lower() == "fails.":
             raise ConnectionError(f"qBittorrent returned failure response: {result}")
 

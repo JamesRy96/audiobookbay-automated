@@ -10,19 +10,17 @@ import pytest
 
 # Import caches from network directly — they are defined there and re-exported via __init__
 # to avoid mypy re-export errors when imported from the package root
+from audiobook_automated.scraper import network
 from audiobook_automated.scraper.network import details_cache, mirror_cache, search_cache
 
 
 @pytest.fixture(autouse=True)
 def clear_caches() -> Generator[None]:
-    """Automatically clear network caches before every test.
-
-    CRITICAL: We clear caches in BOTH 'core' and 'network' modules.
-    Because 'test_network.py' uses importlib.reload(), the 'search_cache' object
-    in 'network' might become different from the one imported in 'core'.
-    Clearing both ensures state is truly reset and prevents 'zombie' cache entries
-    from breaking integration tests.
-    """
+    """Isolate caches, mirror observations and thread-local transports between test cases."""
+    network._local.session = None  # pyright: ignore[reportPrivateUsage]
+    network._local.ping_session = None  # pyright: ignore[reportPrivateUsage]
+    network._mirror_stats.clear()  # pyright: ignore[reportPrivateUsage]
+    network.failure_cache.clear()
     # Clear cache in network (used by low-level tests)
     mirror_cache.clear()
     search_cache.clear()

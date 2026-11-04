@@ -24,7 +24,7 @@ from itsdangerous import TimestampSigner
 from audiobook_automated import create_app
 from audiobook_automated.config import Config
 from audiobook_automated.extensions import csrf, torrent_manager
-from audiobook_automated.scraper import core, network
+from audiobook_automated.scraper import network
 
 
 class BrowserConfig(Config):
@@ -76,7 +76,7 @@ def reset_state() -> None:
         controls["offline_qbittorrent"] = False
     with network.CACHE_LOCK:
         network.search_cache.clear()
-    with core.CACHE_LOCK:
+    with network.CACHE_LOCK:
         network.details_cache.clear()
 
 
@@ -245,7 +245,8 @@ stack.enter_context(
     patch("audiobook_automated.scraper.network.get_mirrors", return_value=["catalog.example", "audiobookbay.lu"])
 )
 stack.enter_context(patch("audiobook_automated.scraper.network.get_session", return_value=CatalogTransport()))
-stack.enter_context(patch("audiobook_automated.scraper.core.time.sleep"))
+# Only this isolated catalog transport skips real-network request spacing.
+stack.enter_context(patch("audiobook_automated.scraper.network.time.sleep"))
 stack.enter_context(patch("audiobook_automated.clients.qbittorrent.QbClient", side_effect=IsolatedQbitSDK))
 stack.enter_context(patch("audiobook_automated.clients.transmission.TxClient", side_effect=IsolatedTransmissionSDK))
 app = create_app(BrowserConfig)

@@ -32,13 +32,13 @@
   the app does not load a `.env` file itself. Use Docker `env_file` or `uv run --env-file .env`.
 - `create_app()` generates a 32-byte random signing key when optional `SECRET_KEY` is empty, before CSRF/session
   initialization. Keep the key in memory for the single-worker lifetime; do not generate it per request or write it to
-disk.
+  disk.
   An explicit key is an advanced restart-continuity option. Expired action tokens return actionable JSON without
-retries.
+  retries.
 - Configuration is loaded via typed classes in `audiobook_automated/config.py` with runtime validation in `validate()`.
-- Multi-client routing: `TorrentManager` initializes individual client plugins specified by `DL_CLIENT` and
-  `DL_CLIENT` (one name or a comma-separated list) and independent client-prefixed connection settings, routing
-download requests to the designated client and aggregating status queries.
+- Multi-client routing: `TorrentManager` initializes the plugins named by `DL_CLIENT` (one name or a comma-separated
+  list), using independent client-prefixed connection settings. It routes downloads to the selected client and
+  aggregates status queries.
 
 ## Frontend Presentation
 
@@ -52,7 +52,8 @@ download requests to the designated client and aggregating status queries.
 ## Public origin and proxy trust
 
 `PUBLIC_URL` optionally declares the browser-facing origin, independent of the proxy-to-app transport. The WSGI
-middleware applies that canonical host/scheme before Flask handles the request. Do not infer proxy trust from header
+middleware applies that origin only when the request host matches its public domain. Requests to a separate LAN
+address retain their own host and HTTP scheme. Do not infer proxy trust from header
 presence or private IP ranges. Forwarded values require an explicitly allowlisted socket peer via `TRUSTED_PROXIES`;
 Gunicorn's implicit forwarded-scheme trust is disabled so the app owns this boundary. IPv4-mapped IPv6 peers are
 matched against their IPv4 proxy networks.

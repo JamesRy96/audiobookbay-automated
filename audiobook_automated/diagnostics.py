@@ -13,9 +13,10 @@ import random
 import resource
 import threading
 import time
-from typing import Any
+from typing import Any, cast
 
-from flask import Blueprint, Response, abort, current_app, jsonify, render_template, request
+from flask import Blueprint, Flask, Response, abort, current_app, jsonify, render_template, request
+from werkzeug.local import LocalProxy
 
 from audiobook_automated.constants import MIN_SEARCH_QUERY_LENGTH
 from audiobook_automated.extensions import torrent_manager
@@ -26,13 +27,12 @@ logger = logging.getLogger(__name__)
 
 diagnostics_bp = Blueprint("diagnostics", __name__)
 
-# Download client logins are cached with a randomized TTL so the
-# page's frequent local polling never produces a fixed, bot-like cadence of outbound requests.
+# Cache client checks for a few minutes so UI polling does not repeatedly log in.
 PROBE_TTL_RANGE_SECONDS = (240.0, 480.0)
 MANUAL_REFRESH_MIN_INTERVAL_SECONDS = 30.0
 _probe_lock = threading.Lock()
-probe_state: dict[str, bool] = {"running": False}
-probe_cache: dict[str, Any] = {"expires": 0.0, "taken": 0.0, "clients": []}
+probe_state: dict[str, bool] = {"running": False, "clients_running": False}
+probe_cache: dict[str, Any] = {"expires": 0.0, "taken": 0.0, "manual": 0.0, "clients": []}
 
 
 def _start_background_probe(candidates: list[str]) -> None:
@@ -40,9 +40,10 @@ def _start_background_probe(candidates: list[str]) -> None:
 
     The probe updates the shared mirror stats, so the next poll reports the fresh results.
     """
-    if probe_state["running"]:
-        return
-    probe_state["running"] = True
+    with _probe_lock:
+        if probe_state["running"]:
+            return
+        probe_state["running"] = True
 
     def _run() -> None:
         try:
@@ -50,33 +51,57 @@ def _start_background_probe(candidates: list[str]) -> None:
         except Exception:
             logger.exception("Diagnostics: background mirror probe failed")
         finally:
-            probe_state["running"] = False
+            with _probe_lock:
+                probe_state["running"] = False
 
     threading.Thread(target=_run, name="diagnostics-mirror-probe", daemon=True).start()
 
 
-def _get_external_probes(force: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]], float]:
-    """Return (mirror results, client results, client probe age seconds).
+def _start_client_probe() -> None:
+    """Refresh private client connections off the request thread and retain the last completed snapshot."""
+    with _probe_lock:
+        if probe_state["clients_running"]:
+            return
+        probe_state["clients_running"] = True
+    app = cast("LocalProxy[Flask]", current_app)._get_current_object()  # pyright: ignore[reportPrivateUsage]
 
-    Mirror data is a passive snapshot of the stats the app already collected from real traffic, so
-    polling never sends requests to mirrors. An explicit, throttled manual refresh actively probes them.
-    Download client checks are cached for a randomized TTL.
-    """
+    def _run() -> None:
+        try:
+            with app.app_context():
+                clients = _collect_client_diagnostics(torrent_manager)
+            with _probe_lock:
+                probe_cache["clients"] = clients
+                probe_cache["taken"] = time.monotonic()
+                probe_cache["expires"] = probe_cache["taken"] + random.uniform(*PROBE_TTL_RANGE_SECONDS)  # noqa: S311
+        except Exception:
+            logger.exception("Diagnostics: background client check failed")
+            with _probe_lock:
+                probe_cache["expires"] = time.monotonic() + MANUAL_REFRESH_MIN_INTERVAL_SECONDS
+        finally:
+            with _probe_lock:
+                probe_state["clients_running"] = False
+
+    threading.Thread(target=_run, name="diagnostics-client-probe", daemon=True).start()
+
+
+def _get_external_probes(force: bool) -> tuple[list[dict[str, Any]], list[dict[str, Any]], float]:
+    """Return cached observations without making external requests on the HTTP request thread."""
+    candidates = network.get_mirrors(refresh_remote=False)[:8]
     with _probe_lock:
         now = time.monotonic()
-        throttled = now - probe_cache["taken"] < MANUAL_REFRESH_MIN_INTERVAL_SECONDS
-        manual = force and not throttled
-        if manual or now >= probe_cache["expires"]:
-            probe_cache["clients"] = _collect_client_diagnostics(torrent_manager)
-            probe_cache["taken"] = time.monotonic()
-            probe_cache["expires"] = probe_cache["taken"] + random.uniform(*PROBE_TTL_RANGE_SECONDS)  # noqa: S311
-        candidates = network.get_mirrors()[:8]
-        never_tested = not any(network.get_mirror_stat(m).total_requests for m in candidates)
-        if manual or never_tested:
-            # With no traffic yet every mirror is unknown; probe once in the background to seed real data.
-            _start_background_probe(candidates)
-        mirrors = _snapshot_candidate_mirrors(candidates)
-        return mirrors, probe_cache["clients"], round(time.monotonic() - probe_cache["taken"], 1)
+        manual = force and now - max(probe_cache["manual"], probe_cache["taken"]) >= MANUAL_REFRESH_MIN_INTERVAL_SECONDS
+        if manual:
+            probe_cache["manual"] = now
+        refresh_clients = manual or now >= probe_cache["expires"]
+    if refresh_clients:
+        _start_client_probe()
+    never_tested = not any(network.get_mirror_stat(mirror).total_requests for mirror in candidates)
+    if manual or never_tested:
+        _start_background_probe(candidates)
+    mirrors = _snapshot_candidate_mirrors(candidates)
+    with _probe_lock:
+        age = round(time.monotonic() - probe_cache["taken"], 1) if probe_cache["taken"] else 0.0
+        return mirrors, list(probe_cache["clients"]), age
 
 
 def is_diagnostics_enabled() -> bool:
@@ -121,51 +146,17 @@ def _collect_system_info() -> dict[str, Any]:
 
 def _snapshot_candidate_mirrors(candidate_mirrors: list[str]) -> list[dict[str, Any]]:
     """Describe candidate mirrors from already-collected stats without sending any requests."""
-    snapshot: list[dict[str, Any]] = []
     for mirror in candidate_mirrors:
-        stat = network.get_mirror_stat(mirror)
-        snapshot.append(
-            {
-                "hostname": mirror,
-                "tested": stat.total_requests > 0,
-                "total_requests": stat.total_requests,
-                "reachable": stat.success_count > 0 and not stat.is_cooling_down,
-                "latency_ms": stat.last_latency_ms,
-                "ema_latency_ms": stat.ema_latency_ms,
-                "success_rate": round(stat.success_rate * 100, 1),
-                "cooling_down": stat.is_cooling_down,
-                "score": round(stat.score, 1),
-                "protocol": stat.protocol,
-                "is_parked": stat.is_parked_or_invalid,
-            }
-        )
-    return snapshot
+        network.get_mirror_stat(mirror)
+    by_host = {stat["hostname"]: stat for stat in network.get_all_mirror_stats()}
+    return [by_host[mirror] for mirror in candidate_mirrors]
 
 
 def _probe_candidate_mirrors(candidate_mirrors: list[str]) -> list[dict[str, Any]]:
-    """Probe candidate mirrors and return latency and scoring statistics."""
-    mirror_results: list[dict[str, Any]] = []
+    """Probe within the common request limits, then return one consistent observation snapshot."""
     for mirror in candidate_mirrors:
-        m_start = time.perf_counter()
-        active = network.check_mirror(mirror) is not None
-        latency_ms = round((time.perf_counter() - m_start) * 1000, 2)
-        stat = network.get_mirror_stat(mirror)
-        mirror_results.append(
-            {
-                "hostname": mirror,
-                "tested": True,
-                "total_requests": stat.total_requests,
-                "reachable": active,
-                "latency_ms": latency_ms,
-                "ema_latency_ms": stat.ema_latency_ms,
-                "success_rate": round(stat.success_rate * 100, 1),
-                "cooling_down": stat.is_cooling_down,
-                "score": round(stat.score, 1),
-                "protocol": stat.protocol,
-                "is_parked": stat.is_parked_or_invalid,
-            }
-        )
-    return mirror_results
+        network.check_mirror(mirror)
+    return _snapshot_candidate_mirrors(candidate_mirrors)
 
 
 def _get_client_status(client_inst: Any, connected: bool, error_msg: str | None) -> str:
@@ -240,9 +231,7 @@ def diagnostics_health() -> Response:
         negative_cache_active = "failure" in network.failure_cache
         details_cache_size = len(network.details_cache)
         details_cache_max = network.details_cache.maxsize
-    top_search_mirrors = network.get_active_search_mirrors(limit=3)
-    if not active_mirror and top_search_mirrors:
-        active_mirror = top_search_mirrors[0]
+    top_search_mirrors = network.get_active_search_mirrors(limit=3, refresh_remote=False)
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
 
@@ -252,6 +241,7 @@ def diagnostics_health() -> Response:
             "diagnostics_elapsed_ms": elapsed_ms,
             "probe_age_seconds": probe_age,
             "mirror_probe_running": probe_state["running"],
+            "client_probe_running": probe_state["clients_running"],
             "system": sys_info,
             "mirrors": {
                 "active_mirror": active_mirror,

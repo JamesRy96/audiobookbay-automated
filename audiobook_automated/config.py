@@ -11,6 +11,7 @@ from .constants import (
     DEFAULT_SPLASH_VIDEO,
     DEFAULT_SPLASH_VIDEO_WEBM,
     DEFAULT_THEME,
+    SCRAPER_REQUEST_TIMEOUT_SECONDS,
 )
 from .environment import get_env
 from .utils import parse_bool
@@ -225,9 +226,9 @@ class Config:
     # Defines the number of worker threads per worker for the scraping executor.
     SCRAPER_THREADS: int = parse_env_int("SCRAPER_THREADS", 3)
 
-    # Scraper Request Timeout (Default 30)
+    # Catalog request timeout; keep failures bounded so the user can retry.
     # Separated from Gunicorn timeout to ensure internal requests fail faster than the worker kill timer.
-    SCRAPER_TIMEOUT: int = parse_env_int("SCRAPER_TIMEOUT", 30)
+    SCRAPER_TIMEOUT: int = parse_env_int("SCRAPER_TIMEOUT", SCRAPER_REQUEST_TIMEOUT_SECONDS)
 
     # Download Client request timeout (Default 5 seconds)
     CLIENT_TIMEOUT: int = parse_env_int("CLIENT_TIMEOUT", 5)

@@ -210,6 +210,40 @@ describe("diagnostics.js - Dashboard Controller", () => {
         expect(output.style.display).toBe("block");
         expect(output.textContent).toContain('"type": "search"');
     });
+    test("client diagnostics render untrusted text without interpreting markup", async () => {
+        const payload = '<img src=x onerror="window.injected=true">';
+        mockFetch.mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                status: "healthy",
+                clients: [{ name: payload, status: "Disconnected", connected: false, error: payload }],
+            }),
+        });
+        document.dispatchEvent(new Event("DOMContentLoaded"));
+        await flushPromises();
+        const clients = document.getElementById("client-metrics");
+        expect(clients.querySelector("img")).toBeNull();
+        expect(clients.querySelector(".diag-client-error").textContent).toBe(payload);
+        expect(clients.querySelector(".diag-label").textContent).toBe(payload);
+    });
+    test.each([false, true])(
+        "background checks explain their pending state with previous data=%s",
+        async (previous) => {
+            mockFetch.mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    status: "healthy",
+                    client_probe_running: true,
+                    clients: previous ? [{ name: "qBittorrent", connected: true }] : [],
+                }),
+            });
+            document.dispatchEvent(new Event("DOMContentLoaded"));
+            await flushPromises();
+            expect(document.querySelector(".diag-client-note").textContent).toContain(
+                previous ? "previous observations" : "Checking Download Clients"
+            );
+        }
+    );
 });
 
 describe("mirror observations", () => {

@@ -18,7 +18,15 @@
   no third-party redirects or parked-domain markers exist before marking a mirror healthy.
 - Latency Scoring: Active mirrors are ranked via exponential moving average (EMA) response latency
   (`Accuracy > Speed > Security`).
-- Fail Fast: Probes must immediately return `None` on connection errors or timeouts.
+- Request Budgets: HEAD probes, semantic GETs, remote mirror lists, redirects and retries all acquire the same
+  semaphore and wait fresh jitter. Disable implicit HTTP-adapter retries. Allow at most two attempts for transient
+  connection failures/timeouts and three same-host redirect hops; never contact a third-party redirect destination.
+- Latency Measurements: Measure network time separately from semaphore waits and jitter. Verified healthy mirrors
+  outrank untested candidates; the configured primary breaks ties rather than overriding performance.
+- Recovery: Transient failures back off from 15 seconds to five minutes; success resets the failure streak. Parked
+  domains remain ineligible for 24 hours, then may be checked again. Keep lifetime failures for accuracy statistics.
+- Passive Diagnostics: Return cached observations immediately. Client checks and initial/manual mirror probes run
+  in background threads. Passive polls never refresh the remote mirror list.
 - Negative Caching: If all external mirrors fail, cache the failure state for backoff (e.g., 30 seconds) to prevent
   retry storms. Do not purge mirror caches prematurely.
 
@@ -50,3 +58,7 @@
 - Description cleanup is local to already-fetched HTML. Collect the complete structured cast and audio fields first;
   remove only leading standalone duplicates that match fields displayed above. Do not discard synopsis content or
   issue extra metadata requests.
+
+- Cache only complete successful search batches. Partial results may be returned, but must be retried on the next
+  search. Check the cache before mirror discovery. A malformed catalog response is a retryable error, not an empty
+  result. Encode each tracker URL in generated magnets and remove exact duplicates without dropping query strings.

@@ -2,22 +2,19 @@
 """Core scraper logic for retrieving search results and details."""
 
 import logging
-import random
 import re
-import time
 from collections.abc import Sequence
 from typing import Any, cast
 from urllib.parse import quote, urljoin, urlparse
 
-from ..constants import ERROR_HASH_NOT_FOUND
+from flask import current_app, has_app_context
+
+from ..constants import ERROR_HASH_NOT_FOUND, SCRAPER_REQUEST_TIMEOUT_SECONDS
 from ..extensions import executor
 from . import network, parser
 from .parser import BookSummary
 
 logger = logging.getLogger(__name__)
-
-# Used to synchronize access to the details cache across threads
-CACHE_LOCK: Any = network.threading.Lock()  # pragma: no cover
 
 
 def slugify_taxonomy(text: str) -> str:
@@ -104,18 +101,18 @@ def search_audiobookbay(query: str, max_pages: int = 1, start_page: int = 1) -> 
     """
     logger.info("Search: Starting search for '%s' (Pages %d-%d)", query, start_page, start_page + max_pages - 1)
 
-    # 1. Find a working mirror
-    base_url = network.find_best_mirror()
-    if not base_url:
-        logger.error("Search: No working mirror found. Aborting.")
-        raise ConnectionError("No working AudiobookBay mirrors found. Check network connectivity or try again shortly.")
-
     # Check Cache
     cache_key = f"{query}::pages_{start_page}_{max_pages}"
     with network.CACHE_LOCK:
         if cache_key in network.search_cache:
             logger.debug("Search: Cache hit for '%s'", cache_key)
             return cast(Sequence[BookSummary], network.search_cache[cache_key])
+
+    # 1. Find a working mirror
+    base_url = network.find_best_mirror()
+    if not base_url:
+        logger.error("Search: No working mirror found. Aborting.")
+        raise ConnectionError("No working AudiobookBay mirrors found. Check network connectivity or try again shortly.")
 
     results: list[BookSummary] = []
     seen_links: set[str] = set()
@@ -161,9 +158,10 @@ def search_audiobookbay(query: str, max_pages: int = 1, start_page: int = 1) -> 
 
     logger.info("Search: Completed. Found %d unique results.", len(results))
 
-    # Update Cache only for successful queries
-    with network.CACHE_LOCK:
-        network.search_cache[cache_key] = results
+    # Never cache a partial multi-page response after an upstream failure.
+    if encountered_error is None:
+        with network.CACHE_LOCK:
+            network.search_cache[cache_key] = results
 
     return results
 
@@ -177,37 +175,30 @@ def fetch_page_results(url: str) -> list[BookSummary]:
     Returns:
         A list of book summary dictionaries.
     """
-    # Compliance: Rate limiting and concurrency control (Rule 0)
-    with network.get_semaphore():
-        # Jitter for scraping, not crypto
-        time.sleep(random.uniform(0.5, 1.5))  # noqa: S311
-        try:
-            session = network.get_session()
-            started = time.perf_counter()
-            response = session.get(url, timeout=10)
-            response.raise_for_status()
-            network.record_request_outcome(url, True, round((time.perf_counter() - started) * 1000, 2))
-
-            soup = parser.parse_html(response.text)
-            parsed_results = parser.parse_search_results(soup, url)
-            return parsed_results
-
-        except (network.requests.ConnectionError, network.requests.Timeout):
-            # Do not expose raw URL in logs if it contains sensitive info (unlikely here)
-            logger.warning("Search: Connection error fetching page: %s", url)
-            network.record_request_outcome(url, False, error="Connection error or timeout")
-            raise
-        except network.requests.HTTPError as e:
-            if e.response is not None and e.response.status_code == 404:  # noqa: PLR2004
-                logger.info("Search: Catalog page not found; no results on this page.")
-                return []
-            network.record_request_outcome(url, False, error=str(e))
-            # Re-raise HTTP errors (4xx/5xx) to allow search_audiobookbay to handle invalidation
-            raise
-        except Exception:
-            # Catch-all for parsing errors
-            logger.exception("Search: Unexpected error fetching page: %s", url)
+    try:
+        session = network.get_thread_session()
+        timeout = current_app.config["SCRAPER_TIMEOUT"] if has_app_context() else SCRAPER_REQUEST_TIMEOUT_SECONDS
+        response, latency = network.request_external(session, url, timeout=timeout)
+        response.raise_for_status()
+        soup = parser.parse_html(response.text)
+        parsed_results = parser.parse_search_results(soup, url)
+        if not parsed_results and soup.select_one("#content") is None:
+            raise network.requests.ConnectionError("Catalog search returned an unexpected page instead of results.")
+        network.record_request_outcome(url, True, latency)
+        return parsed_results
+    except network.requests.HTTPError as error:
+        if error.response is not None and error.response.status_code == 404:  # noqa: PLR2004
+            logger.info("Search: Catalog page not found; no results on this page.")
             return []
+        network.record_request_outcome(url, False, error=str(error))
+        raise
+    except network.requests.RequestException as error:
+        network.record_request_outcome(url, False, error=type(error).__name__)
+        raise
+    except Exception as error:
+        network.record_request_outcome(url, False, error=type(error).__name__)
+        logger.warning("Search: Could not fetch or parse catalog results for %s", url, exc_info=True)
+        raise ConnectionError("Could not read catalog results. Try again shortly.") from error
 
 
 def get_book_details(url: str, refresh: bool = False) -> dict[str, Any] | None:
@@ -232,7 +223,7 @@ def get_book_details(url: str, refresh: bool = False) -> dict[str, Any] | None:
 
     # 2. Check Cache
     if not refresh:
-        with CACHE_LOCK:
+        with network.CACHE_LOCK:
             if url in network.details_cache:
                 logger.debug("Details: Cache hit for %s", url)
                 return cast(dict[str, Any], network.details_cache[url])
@@ -250,13 +241,11 @@ def get_book_details(url: str, refresh: bool = False) -> dict[str, Any] | None:
     try:
         # 2. Fetch Page
         # Ensure we have a valid session with headers (User-Agent)
-        session = network.get_session()
-        with network.get_semaphore():
-            time.sleep(random.uniform(0.5, 1.5))  # noqa: S311
-            started = time.perf_counter()
-            response = session.get(url, timeout=15)
-            response.raise_for_status()
-            network.record_request_outcome(url, True, round((time.perf_counter() - started) * 1000, 2))
+        session = network.get_thread_session()
+        timeout = current_app.config["SCRAPER_TIMEOUT"] if has_app_context() else SCRAPER_REQUEST_TIMEOUT_SECONDS
+        response, latency = network.request_external(session, url, timeout=timeout)
+        response.raise_for_status()
+        network.record_request_outcome(url, True, latency)
 
         # 3. Parse Content
         soup = parser.parse_html(response.text)
@@ -264,7 +253,7 @@ def get_book_details(url: str, refresh: bool = False) -> dict[str, Any] | None:
 
         # 4. Update Cache
         if book_details:
-            with CACHE_LOCK:
+            with network.CACHE_LOCK:
                 network.details_cache[url] = book_details
             return cast(dict[str, Any], book_details)
 
@@ -304,16 +293,9 @@ def extract_magnet_link(url: str) -> tuple[str | None, str | None]:
             magnet += f"&dn={quote(str(title))}"
 
         trackers = details.get("trackers", [])
-        # Add trackers from details
         if isinstance(trackers, list):
-            for tr in trackers:
-                magnet += f"&tr={tr}"
-
-            # Add default trackers if not present
-            default_trackers = network.get_trackers()
-            for tr in default_trackers:
-                if tr not in trackers:
-                    magnet += f"&tr={tr}"
+            for tracker in dict.fromkeys(trackers + network.get_trackers()):
+                magnet += f"&tr={quote(str(tracker), safe='')}"
 
         return magnet, None
 

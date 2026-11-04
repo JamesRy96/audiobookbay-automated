@@ -111,9 +111,18 @@ def test_get_book_details_failure(mock_sleep: Any) -> None:
             mock_log.assert_called()
 
 
-def test_get_book_details_ssrf_protection() -> None:
-    """Test SSRF protection (if implemented)."""
-    pass
+@pytest.mark.parametrize(
+    "url", ["https://audiobookbay.lu.unrelated.example/book", "http://audiobookbay.lu@127.0.0.1/private"]
+)
+def test_get_book_details_ssrf_protection(url: str) -> None:
+    """Lookalike hosts and credential-prefixed private targets are rejected before network access."""
+    with (
+        patch("audiobook_automated.scraper.core.network.get_mirrors", return_value=["audiobookbay.lu"]),
+        patch("audiobook_automated.scraper.core.network.get_thread_session") as session,
+    ):
+        with pytest.raises(ValueError, match="Invalid domain"):
+            get_book_details(url)
+    session.assert_not_called()
 
 
 def test_get_book_details_empty(mock_sleep: Any) -> None:
@@ -377,8 +386,8 @@ def test_uncached_details_obeys_request_jitter_and_semaphore() -> None:
         patch("audiobook_automated.scraper.core.network.get_mirrors", return_value=["catalog.example"]),
         patch("audiobook_automated.scraper.core.network.get_session", return_value=session),
         patch("audiobook_automated.scraper.core.network.get_semaphore", return_value=Gate()),
-        patch("audiobook_automated.scraper.core.random.uniform", return_value=1.0),
-        patch("audiobook_automated.scraper.core.time.sleep") as sleep,
+        patch("audiobook_automated.scraper.network.random.uniform", return_value=1.0),
+        patch("audiobook_automated.scraper.network.time.sleep") as sleep,
     ):
         assert get_book_details("https://catalog.example/book", refresh=True) is not None
     assert not entered

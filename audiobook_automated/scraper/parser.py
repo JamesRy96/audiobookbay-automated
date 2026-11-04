@@ -448,7 +448,7 @@ def parse_search_results(soup: BeautifulSoup, base_url: str) -> list[BookSummary
         content_div = post.select_one(".postContent")
 
         if not content_div:
-            # Skip invalid/empty posts (satisfies test_fetch_and_parse_page_missing_content_div)
+            # Skip entries without a downloadable content section.
             continue
 
         meta = parse_post_content(content_div, post_info)

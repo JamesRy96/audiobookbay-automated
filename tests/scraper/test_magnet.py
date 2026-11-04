@@ -2,14 +2,26 @@
 """Tests for magnet link extraction."""
 
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 from audiobook_automated.scraper.core import extract_magnet_link
 
 
 def test_extract_magnet_deduplication() -> None:
-    """Test deduplication of trackers."""
-    # Test deduplication of trackers
-    pass
+    """Duplicate trackers and embedded query delimiters survive as distinct valid magnet parameters."""
+    tracker = "https://tracker.example/announce?source=archive&token=test"
+    details = {"info_hash": "a" * 40, "title": "Public-domain test", "trackers": [tracker, tracker]}
+    with (
+        patch("audiobook_automated.scraper.core.get_book_details", return_value=details),
+        patch(
+            "audiobook_automated.scraper.core.network.get_trackers", return_value=[tracker, "udp://other.example:80"]
+        ),
+    ):
+        magnet, error = extract_magnet_link("https://audiobookbay.lu/abss/book/")
+    assert error is None and magnet is not None
+    values = parse_qs(urlparse(magnet).query)
+    assert values["tr"] == [tracker, "udp://other.example:80"]
+    assert "token" not in values
 
 
 def test_extract_magnet_success() -> None:
@@ -27,17 +39,20 @@ def test_extract_magnet_success() -> None:
 
 
 def test_extract_magnet_ssrf_inherited() -> None:
-    """Test inherited SSRF protection."""
-    pass
+    """Magnet extraction retains the real Details domain validation before obtaining a transport."""
+    with (
+        patch("audiobook_automated.scraper.core.network.get_mirrors", return_value=["audiobookbay.lu"]),
+        patch("audiobook_automated.scraper.core.network.get_thread_session") as session,
+    ):
+        magnet, error = extract_magnet_link("https://unrelated.example/private")
+    assert magnet is None
+    assert error is not None and "Invalid domain" in error
+    session.assert_not_called()
 
 
 def test_extract_magnet_generic_exception() -> None:
     """Test generic exception handling."""
     with patch("audiobook_automated.scraper.core.get_book_details", side_effect=Exception("Fail")):
-        # extract_magnet_link does not catch exception from get_book_details?
-        # Let's check code.
-        # It calls get_book_details. get_book_details catches exceptions and returns None.
-        # So it should return (None, "Failed...")
         magnet, error = extract_magnet_link("url")
         assert magnet is None
         assert error is not None

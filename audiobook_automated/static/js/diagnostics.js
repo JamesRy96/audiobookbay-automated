@@ -90,6 +90,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const clientContainer = document.getElementById("client-metrics");
             if (clientContainer) {
                 clientContainer.innerHTML = "";
+                if (data.client_probe_running) {
+                    const pending = document.createElement("p");
+                    pending.className = "diag-client-note";
+                    pending.textContent = data.clients?.length
+                        ? "Refreshing client connections. Showing previous observations."
+                        : "Checking Download Clients…";
+                    clientContainer.append(pending);
+                }
                 (data.clients || []).forEach((c) => {
                     const metric = document.createElement("div");
                     metric.className = "diag-metric";
@@ -103,13 +111,21 @@ document.addEventListener("DOMContentLoaded", () => {
                         statusColor = "var(--status-error)"; // soft red
                     }
 
-                    metric.innerHTML = `
-                        <span class="diag-label">${c.name}</span>
-                        <span class="diag-val" style="color: ${statusColor}; font-size: 1.15rem;">
-                            ${statusText}
-                        </span>
-                        ${c.error ? `<span style="font-size: 0.78rem; color: #f87171; margin-top: 4px; word-break: break-word;">${c.error}</span>` : ""}
-                    `;
+                    const name = document.createElement("span");
+                    name.className = "diag-label";
+                    name.textContent = c.name;
+                    const status = document.createElement("span");
+                    status.className = "diag-val";
+                    status.style.color = statusColor;
+                    status.style.fontSize = "1.15rem";
+                    status.textContent = statusText;
+                    metric.append(name, status);
+                    if (c.error) {
+                        const error = document.createElement("span");
+                        error.className = "diag-client-error";
+                        error.textContent = c.error;
+                        metric.append(error);
+                    }
                     clientContainer.appendChild(metric);
                 });
             }

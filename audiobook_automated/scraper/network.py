@@ -9,8 +9,8 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
-from urllib.parse import urlparse
+from typing import Any, Literal, cast
+from urllib.parse import urljoin, urlparse
 
 import requests
 from cachetools import TTLCache
@@ -23,10 +23,14 @@ from audiobook_automated.constants import (
     DEFAULT_MIRRORS,
     DEFAULT_MIRRORS_REMOTE_URL,
     DEFAULT_TRACKERS,
+    MAX_CATALOG_REDIRECTS,
+    MAX_CATALOG_REQUEST_ATTEMPTS,
     MIRROR_CHECK_THREADS,
+    MIRROR_LIST_TIMEOUT_SECONDS,
+    MIRROR_PROBE_TIMEOUT_SECONDS,
     USER_AGENTS,
 )
-from audiobook_automated.scraper.parser import BookDetails, BookSummary
+from audiobook_automated.scraper.parser import BookDetails, BookSummary, parse_html
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,7 @@ _mirror_executor: concurrent.futures.ThreadPoolExecutor = concurrent.futures.Thr
     max_workers=MIRROR_CHECK_THREADS
 )
 CACHE_LOCK = threading.Lock()
+_discovery_lock = threading.Lock()
 
 
 # --- Mirror Performance & Stats Tracking ---
@@ -48,6 +53,7 @@ class MirrorStat:
     hostname: str
     success_count: int = 0
     failure_count: int = 0
+    consecutive_failures: int = 0
     ema_latency_ms: float = 0.0
     last_latency_ms: float = 0.0
     last_checked_at: float = 0.0
@@ -73,11 +79,12 @@ class MirrorStat:
     @property
     def is_cooling_down(self) -> bool:
         """Whether this mirror is currently on backoff cooldown."""
-        return self.is_parked_or_invalid or (time.time() < self.cooldown_until)
+        return time.time() < self.cooldown_until
 
     def record_success(self, latency_ms: float, protocol: str = "https") -> None:
         """Record a successful response and update exponential moving average latency."""
         self.success_count += 1
+        self.consecutive_failures = 0
         self.last_latency_ms = latency_ms
         self.last_checked_at = time.time()
         self.cooldown_until = 0.0
@@ -93,14 +100,15 @@ class MirrorStat:
     def record_failure(self, error_msg: str | None = None, is_parked: bool = False) -> None:
         """Record a failure and apply exponential cooldown backoff."""
         self.failure_count += 1
+        self.consecutive_failures += 1
         self.last_checked_at = time.time()
         self.last_error = error_msg
         if is_parked:
             self.is_parked_or_invalid = True
             self.cooldown_until = time.time() + 86400.0  # 24hr cooldown for parked/spam
             return
-        # Cooldown: 15s * consecutive fail factor (up to 300s)
-        backoff_sec = min(300.0, 15.0 * min(self.failure_count, 10))
+        # Back off consecutive failures exponentially; preserve lifetime counts for accuracy.
+        backoff_sec = min(300.0, 15.0 * (2 ** min(self.consecutive_failures - 1, 5)))
         self.cooldown_until = time.time() + backoff_sec
 
     @property
@@ -110,7 +118,7 @@ class MirrorStat:
         Penalizes parked/failing/cooling down mirrors heavily.
         Rewards high success rate, low latency, and applies a bonus for HTTPS (+150).
         """
-        if self.is_parked_or_invalid:
+        if self.is_parked_or_invalid and self.is_cooling_down:
             return -9999.0
         if self.is_cooling_down:
             return -1000.0 - (self.cooldown_until - time.time())
@@ -238,6 +246,11 @@ def get_all_mirror_stats() -> list[dict[str, Any]]:
             stats.append(
                 {
                     "hostname": host,
+                    "tested": stat.total_requests > 0,
+                    "reachable": stat.success_count > 0 and stat.last_error is None and not stat.is_cooling_down,
+                    "latency_ms": stat.last_latency_ms,
+                    "protocol": stat.protocol,
+                    "is_parked": stat.is_parked_or_invalid,
                     "success_count": stat.success_count,
                     "failure_count": stat.failure_count,
                     "total_requests": stat.total_requests,
@@ -264,7 +277,7 @@ def fetch_remote_mirrors() -> list[str]:
     session = get_ping_session()
 
     try:
-        resp = session.get(remote_url, timeout=3.0)
+        resp, _ = request_external(session, remote_url, timeout=MIRROR_LIST_TIMEOUT_SECONDS)
         if resp.status_code == 200:  # noqa: PLR2004
             data = resp.json()
             if isinstance(data, list) and all(isinstance(x, str) for x in data):
@@ -294,33 +307,37 @@ def fetch_remote_mirrors() -> list[str]:
     return DEFAULT_MIRRORS
 
 
-def get_mirrors() -> list[str]:
+def get_mirrors(*, refresh_remote: bool = True) -> list[str]:
     """Retrieve the list of mirrors to attempt, in adaptive performance-ranked order."""
     primary = current_app.config.get("ABB_HOSTNAME", "audiobookbay.lu")
     extra = current_app.config.get("ABB_MIRRORS", [])
-    remote_mirrors = fetch_remote_mirrors()
+    if refresh_remote:
+        remote_mirrors = fetch_remote_mirrors()
+    else:
+        with CACHE_LOCK:
+            remote_mirrors = list(_remote_mirrors_cache.get("mirrors", DEFAULT_MIRRORS))
     candidates = list(dict.fromkeys([primary] + extra + remote_mirrors + DEFAULT_MIRRORS))
 
     # Rank candidates adaptively by score
     with CACHE_LOCK:
 
-        def rank_key(host: str) -> tuple[int, float]:
-            """Sort key prioritizing active primary mirror followed by EMA latency score."""
+        def rank_key(host: str) -> tuple[int, float, int]:
+            """Prefer verified healthy mirrors by score, then untried hosts, then cooling-down hosts."""
             stat = _mirror_stats.get(host)
-            if stat is None:
-                # Untried: prefer primary first, then others
-                is_primary = 1 if host == primary else 0
-                return (is_primary, 0.0)
-            is_primary = 1 if host == primary and not stat.is_cooling_down else 0
-            return (is_primary, stat.score)
+            primary_tie = int(host == primary)
+            if stat is None or (not stat.total_requests):
+                return (1, 0.0, primary_tie)
+            if stat.is_cooling_down:
+                return (0, stat.score, primary_tie)
+            return (2 if stat.success_count and stat.last_error is None else 1, stat.score, primary_tie)
 
         candidates.sort(key=rank_key, reverse=True)
     return candidates
 
 
-def get_active_search_mirrors(limit: int = 3) -> list[str]:
+def get_active_search_mirrors(limit: int = 3, *, refresh_remote: bool = True) -> list[str]:
     """Prune candidate mirrors to the top best-performing candidates for fast search execution."""
-    mirrors = get_mirrors()
+    mirrors = get_mirrors(refresh_remote=refresh_remote)
     # Filter out mirrors currently on cooldown unless all are on cooldown
     active = [m for m in mirrors if not get_mirror_stat(m).is_cooling_down]
     if not active:
@@ -333,8 +350,8 @@ def get_session() -> Session:
     session = requests.Session()
     session.headers.update({"User-Agent": get_random_user_agent()})
     retry_policy = Retry(
-        total=5,
-        backoff_factor=1,
+        total=0,
+        backoff_factor=0,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["HEAD", "GET", "OPTIONS"],
     )
@@ -371,7 +388,7 @@ def get_ping_session() -> Session:
 
 
 def get_thread_session() -> Session:
-    """Retrieve or create a thread-local Session with full retry logic."""
+    """Retrieve a thread-local transport; request_external owns retries and request spacing."""
     if _local.session is None:
         _local.session = get_session()
     return _local.session
@@ -395,116 +412,139 @@ def get_headers(user_agent: str | None = None, referer: str | None = None) -> di
     return headers
 
 
-def is_authentic_catalog(html_text: str, final_url: str | None = None) -> bool:
-    """Verify that a response body belongs to an authentic AudiobookBay catalog.
+def request_external(
+    session: Session,
+    url: str,
+    *,
+    method: Literal["GET", "HEAD"] = "GET",
+    timeout: float,
+    headers: dict[str, str] | None = None,
+) -> tuple[requests.Response, float]:
+    """Bound every HTTP attempt, including redirects, and reject changes to the destination host.
 
-    Checks:
-      1. Mandatory catalog elements: 'postTitle' or 'postContent' classes present.
-      2. No external redirects to parked domains, search spam, or ad-landings.
-      3. Brand identity present in page content.
+    Latency excludes semaphore wait and mandatory jitter, so mirror rankings reflect server response time.
+    Automatic adapter retries are disabled: each attempt must pass through this request budget.
     """
+    original_host = urlparse(url).hostname
+    elapsed_ms = 0.0
+    hop = 0
+    attempt = 0
+    while True:
+        with get_semaphore():
+            time.sleep(random.uniform(0.5, 1.5))  # noqa: S311
+            started = time.perf_counter()
+            send = session.get if method == "GET" else session.head
+            try:
+                response = send(url, headers=headers, timeout=timeout, allow_redirects=False)
+            except requests.exceptions.SSLError:
+                raise
+            except (requests.ConnectionError, requests.Timeout):
+                elapsed_ms += (time.perf_counter() - started) * 1000
+                attempt += 1
+                if attempt >= MAX_CATALOG_REQUEST_ATTEMPTS:
+                    raise
+                continue
+            elapsed_ms += (time.perf_counter() - started) * 1000
+        if response.status_code not in (301, 302, 303, 307, 308):
+            return response, round(elapsed_ms, 2)
+        location = response.headers.get("Location")
+        response.close()
+        if not location or hop == MAX_CATALOG_REDIRECTS:
+            raise requests.ConnectionError("Catalog redirect is missing a destination or exceeds the redirect limit.")
+        redirected = urljoin(url, location)
+        destination = urlparse(redirected)
+        if (
+            destination.hostname != original_host
+            or destination.scheme not in ("http", "https")
+            or destination.username is not None
+        ):
+            raise requests.ConnectionError("Catalog redirected outside its expected host.")
+        url = redirected
+        hop += 1
+        attempt = 0
+
+
+def is_authentic_catalog(html_text: str, final_url: str | None = None, expected_host: str | None = None) -> bool:
+    """Require authentic catalog structure and reject foreign or parked destinations."""
     if not html_text:
         return False
-
     text_lower = html_text.lower()
-
-    # Verify absence of known domain parking / landing page signatures
-    parking_indicators = ("domain is parked", "buy this domain", "expired domain", "redirecting...")
-    if any(ind in text_lower for ind in parking_indicators):
+    if any(
+        marker in text_lower for marker in ("domain is parked", "buy this domain", "expired domain", "redirecting...")
+    ):
         return False
-
-    # Check for authentic AudiobookBay post markup
-    has_post_title = "posttitle" in text_lower
-    has_post_content = "postcontent" in text_lower
-    has_abb_brand = "audiobookbay" in text_lower or "audio-books" in text_lower
-
-    if (has_post_title or has_post_content) and has_abb_brand:
-        if final_url:
-            parsed = urlparse(final_url)
-            host = parsed.netloc.split(":")[0].lower()
-            # If redirected to a known malicious or parking domain
-            foreign_ad_domains = ("expireddomains", "parkingcrew", "bodis", "sedo", "dan.com", "hugedomains")
-            if any(ad in host for ad in foreign_ad_domains):
-                return False
-        return True
-
-    return False
+    if final_url:
+        host = urlparse(final_url).hostname or ""
+        if expected_host and host != expected_host:
+            return False
+        if any(
+            marker in host for marker in ("expireddomains", "parkingcrew", "bodis", "sedo", "dan.com", "hugedomains")
+        ):
+            return False
+    soup = parse_html(html_text)
+    return bool(
+        soup.select_one("#content")
+        and soup.select_one("#content .postTitle, #content .postContent")
+        and ("audiobookbay" in text_lower or "audio-books" in text_lower)
+    )
 
 
-def _probe_catalog_endpoint(session: Session, url: str, headers: dict[str, str]) -> tuple[bool, str | None]:
-    """Helper to perform GET and verify authentic catalog structure."""
+@dataclass(frozen=True)
+class ProbeResult:
+    """Semantic probe outcome with measured network latency and its failure classification."""
+
+    reachable: bool
+    latency_ms: float = 0.0
+    error: str | None = None
+    parked: bool = False
+    stop: bool = False
+
+
+def _probe_catalog_endpoint(session: Session, url: str, headers: dict[str, str]) -> ProbeResult:
+    """Fetch a catalog page within the common budget and validate its final destination and structure."""
     try:
-        response = session.get(url, headers=headers, timeout=2.5)
+        response, latency = request_external(session, url, headers=headers, timeout=MIRROR_PROBE_TIMEOUT_SECONDS)
         if response.status_code == 200:  # noqa: PLR2004
-            if is_authentic_catalog(response.text, response.url):
-                return True, None
-            return False, "Semantic verification failed (Non-authentic catalog)"
-        return False, f"HTTP {response.status_code}"
-    except (requests.Timeout, requests.RequestException) as e:
-        return False, str(e)
+            if is_authentic_catalog(response.text, response.url, urlparse(url).hostname):
+                return ProbeResult(True, latency)
+            return ProbeResult(False, error="Semantic verification failed (Non-authentic catalog)", parked=True)
+        return ProbeResult(False, error=f"HTTP {response.status_code}")
+    except requests.RequestException as error:
+        return ProbeResult(False, error=str(error))
 
 
-def _probe_https_mirror(
-    session: Session, hostname: str, headers: dict[str, str]
-) -> tuple[bool, str | None, bool, bool]:
-    """Attempt HTTPS probes for a mirror.
-
-    Returns:
-        (success, error_message, is_parked, head_failed_hard)
-    """
-    https_url = f"https://{hostname}/"
+def _probe_https_mirror(session: Session, hostname: str, headers: dict[str, str]) -> ProbeResult:
+    """Probe HTTPS first, validating content rather than accepting a successful HEAD alone."""
+    url = f"https://{hostname}/"
     try:
-        response = session.head(https_url, headers=headers, timeout=2.5, allow_redirects=True)
-        if response.status_code == 200:  # noqa: PLR2004
-            ok, err = _probe_catalog_endpoint(session, https_url, headers)
-            return (ok, err or ("Inauthentic catalog" if not ok else None), "Non-authentic catalog" in str(err), False)
+        response, _ = request_external(
+            session, url, method="HEAD", headers=headers, timeout=MIRROR_PROBE_TIMEOUT_SECONDS
+        )
         if response.status_code >= 500:  # noqa: PLR2004
-            return False, f"HTTP {response.status_code}", False, True
-    except (requests.Timeout, requests.RequestException) as e:
-        logger.debug(f"HTTPS HEAD probe for {hostname}: {e}")
-
-    ok_https, err_https = _probe_catalog_endpoint(session, https_url, headers)
-    if ok_https:
-        return True, None, False, False
-    is_parked = bool(err_https and "Non-authentic catalog" in err_https)
-    return False, err_https, is_parked, False
+            return ProbeResult(False, error=f"HTTP {response.status_code}", stop=True)
+    except requests.RequestException as error:
+        logger.debug("HTTPS HEAD probe for %s: %s", hostname, error)
+    return _probe_catalog_endpoint(session, url, headers)
 
 
 def check_mirror(hostname: str) -> str | None:
-    """Check if a mirror is reachable via HEAD or GET request and update tracking stats.
-
-    Verifies authentic catalog structure to protect users against parked domains,
-    malware landers, and broken proxy mirrors. Evaluates HTTPS first, falling back to HTTP.
-    Uses a zero-retry thread-local session to fail fast. Returns the hostname if reachable,
-    or None if unreachable or parked.
-    """
-    headers = get_headers()
-    session = get_ping_session()
+    """Check a mirror with semantic validation, common request limits and cooldown-aware HTTPS/HTTP fallback."""
     stat = get_mirror_stat(hostname)
-    start_time = time.perf_counter()
-
-    # 1. Try HTTPS probes first
-    ok_https, err_https, is_parked_https, head_failed_hard = _probe_https_mirror(session, hostname, headers)
-    if ok_https:
-        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        stat.record_success(latency_ms, protocol="https")
-        return hostname
-
-    if is_parked_https or head_failed_hard:
-        stat.record_failure(err_https, is_parked=is_parked_https)
+    if stat.is_cooling_down:
         return None
-
-    # 2. Fallback to HTTP (Port 80)
-    http_url = f"http://{hostname}/"
-    ok_http, err_http = _probe_catalog_endpoint(session, http_url, headers)
-    if ok_http:
-        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        stat.record_success(latency_ms, protocol="http")
-        return hostname
-
-    is_parked = bool(err_http and "Non-authentic catalog" in err_http)
-    stat.record_failure(err_http or err_https or "Endpoint unreachable", is_parked=is_parked)
-    return None
+    session = get_ping_session()
+    headers = get_headers()
+    result = _probe_https_mirror(session, hostname, headers)
+    protocol = "https"
+    if not result.reachable and not result.parked and not result.stop:
+        result = _probe_catalog_endpoint(session, f"http://{hostname}/", headers)
+        protocol = "http"
+    with CACHE_LOCK:
+        if result.reachable:
+            stat.record_success(result.latency_ms, protocol=protocol)
+        else:
+            stat.record_failure(result.error or "Endpoint unreachable", is_parked=result.parked)
+    return hostname if result.reachable else None
 
 
 def get_mirror_base_url(hostname: str) -> str:
@@ -542,56 +582,57 @@ def record_request_outcome(url: str, success: bool, latency_ms: float = 0.0, err
 
 def find_best_mirror() -> str | None:
     """Find the first reachable AudiobookBay mirror using concurrent checks."""
-    # 1. Check Negative Cache (Backoff)
-    with CACHE_LOCK:
-        if "failure" in failure_cache:
-            logger.debug("Skipping mirror check due to recent failure (Negative Cache hit).")
-            return None
+    with _discovery_lock:
+        # 1. Check Negative Cache (Backoff)
+        with CACHE_LOCK:
+            if "failure" in failure_cache:
+                logger.debug("Skipping mirror check due to recent failure (Negative Cache hit).")
+                return None
 
-    # 2. Check Positive Cache
-    cache_key = "active_mirror"
-    with CACHE_LOCK:
-        if cache_key in mirror_cache:
-            return mirror_cache[cache_key]
+        # 2. Check Positive Cache
+        cache_key = "active_mirror"
+        with CACHE_LOCK:
+            if cache_key in mirror_cache:
+                return mirror_cache[cache_key]
 
-    mirrors = get_mirrors()
+        mirrors = [host for host in get_mirrors() if not get_mirror_stat(host).is_cooling_down]
 
-    # 3. Fast Path: Check primary mirror first without spinning up thread pool
-    if mirrors:
-        primary = mirrors[0]
-        logger.debug(f"Fast-path checking primary mirror: {primary}")
-        if check_mirror(primary):
-            logger.info(f"Primary mirror active: {primary}")
-            with CACHE_LOCK:
-                mirror_cache[cache_key] = primary
-            return primary
+        # 3. Fast path: Check the highest-ranked candidate before starting failover workers
+        if mirrors:
+            primary = mirrors[0]
+            logger.debug(f"Fast-path checking preferred mirror: {primary}")
+            if check_mirror(primary):
+                logger.info(f"Preferred mirror active: {primary}")
+                with CACHE_LOCK:
+                    mirror_cache[cache_key] = primary
+                return primary
 
-    # 4. Failover: Check remaining mirrors concurrently
-    failover_mirrors = mirrors[1:] if len(mirrors) > 1 else mirrors
-    logger.debug(f"Primary down. Checking failover connectivity for {len(failover_mirrors)} mirrors...")
+        # 4. Failover: Check remaining mirrors concurrently
+        failover_mirrors = mirrors[1:] if len(mirrors) > 1 else mirrors
+        logger.debug(f"Primary down. Checking failover connectivity for {len(failover_mirrors)} mirrors...")
 
-    # Stagger probes with random delays so failover never fires a simultaneous burst at every mirror.
-    futures = []
-    delay = 0.0
-    for host in failover_mirrors:
-        futures.append(_mirror_executor.submit(_check_mirror_after, host, delay))
-        delay += random.uniform(0.15, 0.5)  # noqa: S311
+        # Stagger probes with random delays so failover never fires a simultaneous burst at every mirror.
+        futures = []
+        delay = 0.0
+        for host in failover_mirrors:
+            futures.append(_mirror_executor.submit(_check_mirror_after, host, delay))
+            delay += random.uniform(0.15, 0.5)  # noqa: S311
 
-    for future in concurrent.futures.as_completed(futures):
-        result = future.result()
-        if result:
-            logger.info(f"Found active mirror: {result}")
-            # Best effort cancel other pending tasks
-            for f in futures:
-                f.cancel()
-            with CACHE_LOCK:
-                mirror_cache[cache_key] = result
-            return result
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result:
+                logger.info(f"Found active mirror: {result}")
+                # Best effort cancel other pending tasks
+                for f in futures:
+                    f.cancel()
+                with CACHE_LOCK:
+                    mirror_cache[cache_key] = result
+                return result
 
-    logger.error("No working AudiobookBay mirrors found! Caching failure for 30s.")
-    with CACHE_LOCK:
-        failure_cache["failure"] = True
-    return None
+        logger.error("No working AudiobookBay mirrors found! Caching failure for 30s.")
+        with CACHE_LOCK:
+            failure_cache["failure"] = True
+        return None
 
 
 def shutdown_network() -> None:
@@ -611,6 +652,7 @@ __all__ = [
     "fetch_remote_mirrors",
     "find_best_mirror",
     "record_request_outcome",
+    "request_external",
     "get_active_search_mirrors",
     "get_all_mirror_stats",
     "get_mirror_stat",
