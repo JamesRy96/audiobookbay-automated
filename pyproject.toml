@@ -35,6 +35,10 @@ dependencies = [
     "Flask-Limiter==4.1.1",
     "Flask-Talisman==1.1.0",
 ]
+
+[project.scripts]
+audiobookbay-automated = "audiobook_automated.app:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest==9.2.0",

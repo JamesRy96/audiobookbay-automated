@@ -11,7 +11,11 @@ logger = logging.getLogger(__name__)
 # This global 'app' variable is what Gunicorn looks for by default.
 app = create_app()
 
-if __name__ == "__main__":  # pragma: no cover
-    # This block is for local development only. Production uses entrypoint.sh with Gunicorn.
-    # Local Development Entry Point
+
+def main() -> None:  # pragma: no cover
+    """CLI entry point to launch audiobookbay-automated directly."""
     app.run(host=app.config["LISTEN_HOST"], port=app.config["LISTEN_PORT"])
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

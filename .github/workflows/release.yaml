@@ -1,10 +1,13 @@
 # File: .github/workflows/release.yaml
 name: Create Release
 on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example 1.0.0"
+        description: "Release version without leading v, for example 1.0.0"
         required: true
         type: string
 permissions:
@@ -19,6 +22,7 @@ jobs:
       contents: write
     outputs:
       release_commit: ${{ steps.stamp.outputs.release_commit }}
+      version: ${{ steps.stamp.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -29,20 +33,20 @@ jobs:
       - name: Stamp version and date
         id: stamp
         env:
-          VERSION: ${{ inputs.version }}
+          INPUT_VERSION: ${{ inputs.version }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
-          if git rev-parse --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
-            echo "::error::This version tag already exists."
-            exit 1
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           uv run --no-project python - <<'PY'
           import datetime
           import os
           import re
-          import tomllib
           from pathlib import Path
 
           version = os.environ["VERSION"].strip()
@@ -85,13 +89,15 @@ jobs:
           # Update lockfile if needed
           uv lock
 
-          # Commit and push if any files changed
+          # Commit and push if any files changed on default branch
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add pyproject.toml uv.lock CHANGELOG.md
-            git commit -m "release: prepare v${{ inputs.version }}"
-            git push origin "HEAD:$DEFAULT_BRANCH"
+            git commit -m "release: prepare v$VERSION"
+            if [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
+              git push origin "HEAD:$DEFAULT_BRANCH"
+            fi
           fi
 
           echo "release_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -105,7 +111,7 @@ jobs:
       packages: write
     uses: ./.github/workflows/docker-publish.yaml
     with:
-      version: ${{ inputs.version }}
+      version: ${{ needs.prepare.outputs.version }}
   release:
     needs: [prepare, image]
     runs-on: ubuntu-latest
@@ -115,12 +121,44 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.release_commit }}
-      - name: Create the tag and release for the checked commit
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+      - name: Build standalone python distribution artifacts
+        run: |
+          uv build
+      - name: Extract changelog notes for this release
+        id: notes
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          uv run --no-project python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          content = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          pattern = rf"(?ms)^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## |\Z)"
+          match = re.search(pattern, content)
+          notes = match.group(1).strip() if match else ""
+          Path("release_notes.md").write_text(notes, encoding="utf-8")
+          PY
+      - name: Create or update tag and release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
           TARGET_COMMIT: ${{ needs.prepare.outputs.release_commit }}
         run: |
-          gh release create "v$VERSION" --target "$TARGET_COMMIT" \
-            --title "Release v$VERSION" --generate-notes
+          if [ -s release_notes.md ]; then
+            gh release create "v$VERSION" dist/* \
+              --target "$TARGET_COMMIT" \
+              --title "Release v$VERSION" \
+              --notes-file release_notes.md
+          else
+            gh release create "v$VERSION" dist/* \
+              --target "$TARGET_COMMIT" \
+              --title "Release v$VERSION" \
+              --generate-notes
+          fi

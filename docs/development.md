@@ -129,23 +129,52 @@ For the upstream issue inventory, client API references and verification limits,
 - **CI** runs formatting/types, both Python versions, Jest, real-template browser tests, and a Docker build/HTTP smoke test.
 - **Browser tests** is called by CI and can also be run manually from Actions. It does not create a duplicate run on
   every push.
-- **Create Release** is a manual workflow. It validates the version and default branch, runs CI on that commit, calls
-  the image publishing workflow, then creates the GitHub tag and release for the checked commit.
+- **Create Release** can be triggered either automatically by pushing a version tag
+  (e.g. `git tag v1.0.0 && git push origin v1.0.0`) or manually via GitHub
+  **Actions → Create Release → Run workflow**.
+  It stamps today's date in `CHANGELOG.md`, synchronizes `pyproject.toml` and `uv.lock`, runs CI checks, builds
+  standalone Python distribution artifacts (`.whl` and `.tar.gz`), calls the Docker image publishing workflow,
+  extracts release notes directly from `CHANGELOG.md`, and creates the GitHub tag and Release with attached assets.
 - **Build test image** publishes separate test tags from a chosen source ref, without creating a release.
 - The release image workflow publishes `ghcr.io/<repository>:<version>` and `:latest`. It is called directly rather
-  than relying
-  on a token-created tag to trigger another workflow.
+  than relying on a token-created tag to trigger another workflow.
 
-Before publishing:
+### Triggering a Release
+
+You can publish a release through either method:
+
+#### Option A: Pushing a Git Tag (Recommended)
+
+1. Make sure your changes are tested, documented, and merged to `main`.
+2. Ensure `CHANGELOG.md` has an entry for the release (e.g. `## [1.0.0] - YYYY-MM-DD`). The workflow will verify and
+   stamp today's date automatically.
+3. Tag `main` locally and push the tag:
+
+~~~shell
+git checkout main
+git pull
+git tag v1.0.0
+git push origin v1.0.0
+~~~
+
+1. The `release.yaml` workflow triggers automatically, executes CI, builds the standalone packages, publishes the
+   Docker image, and generates the GitHub Release using the changelog section.
+
+#### Option B: GitHub Actions Dispatch
 
 1. Review the working changes and screenshots. Complete any live integration/container checks that could not run locally.
 2. In GitHub **Actions → Create Release → Run workflow**, select the default branch and enter the target release
    version without `v` (for example `1.0.0`).
-3. The workflow automatically stamps today's date in `CHANGELOG.md`, synchronizes `pyproject.toml` and `uv.lock`, commits
-   the release preparation to the default branch, runs the full test matrix, publishes the Docker image, and creates the
-   GitHub Release with generated release notes.
-4. Check the new release and make the GHCR package public if anonymous pulls are intended. Verify a clean installation
-   using the README and the published image.
+3. The workflow stamps today's date in `CHANGELOG.md`, synchronizes `pyproject.toml` and `uv.lock`, commits
+   the release preparation to the default branch, runs the full test matrix, builds standalone packages, publishes the
+   Docker image, and creates the GitHub Release with release notes extracted from `CHANGELOG.md`.
+
+After publishing:
+
+1. Check the new release on GitHub. Verify the release description matches `CHANGELOG.md` and that standalone `.whl`
+   and `.tar.gz` assets are attached.
+2. Make the GHCR package public if anonymous pulls are intended. Verify a clean installation using the README and the
+   published image.
 
 The workflow needs permission to write repository contents for the release and packages for GHCR. A failed check does
 not publish an image. If image publishing succeeds but release creation fails, inspect that run before retrying; do not
