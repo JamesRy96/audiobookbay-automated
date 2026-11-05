@@ -29,6 +29,7 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v7
         with:
+          enable-cache: true
           python-version: "3.14"
       - name: Stamp version and date
         id: stamp
@@ -124,6 +125,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.release_commit }}
       - uses: astral-sh/setup-uv@v7
         with:
+          enable-cache: true
           python-version: "3.14"
       - name: Build standalone python distribution artifacts
         run: |

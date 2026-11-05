@@ -103,35 +103,12 @@ repos:
         args: ["--config-file", ".yamllint.yaml"]
 
   # ------------------------------------------------------------------
-  # 5. STATIC TYPE CHECKING (Slowest - Run last)
+  # 5. STATIC TYPE CHECKING (Run last)
   # ------------------------------------------------------------------
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: "v2.4.1"
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: 1.40.2
     hooks:
-      - id: mypy
-        args: ["--no-incremental", "--config=pyproject.toml"]
-        files: '\.py$'
-        additional_dependencies:
-          - pytest
-          - flask
-          - Flask-Limiter
-          - Flask-WTF
-          - qbittorrent-api
-          - transmission-rpc
-          - deluge-web-client
-          - cachetools
-          - gunicorn
-          - types-requests
-          - types-cachetools
-          - types-setuptools
-          - types-beautifulsoup4
-          - types-jsonschema
-          - types-gunicorn
-
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.414
-    hooks:
-      - id: pyright
+      - id: basedpyright
         additional_dependencies:
           - pytest
           - flask

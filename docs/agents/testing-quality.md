@@ -5,7 +5,7 @@
 ## Quality Gates & Tooling
 
 - 100% Test Coverage: Strictly enforced with `--cov-fail-under=100`.
-- Type Checking: Dual validation via MyPy and Pyright in strict mode. Use Python 3.12+ generic syntax
+- Type Checking: Validation via Basedpyright in strict mode. Use Python 3.12+ generic syntax
   (`def fn[T](x: T) -> T`).
 - Linting & Security: Enforced via Ruff (`ruff check`, `ruff format`).
 - Docstrings: Google style conventions strictly checked with `pydocstyle`. All test functions and classes require

@@ -93,7 +93,7 @@ Consult specialized documentation for subsystem implementation details:
   length safety.
 - [Download Clients & Plugins](docs/agents/torrent-clients.md): Download client interface, progress normalization,
   client quirks, plugin creation.
-- [Testing & Quality Standards](docs/agents/testing-quality.md): 100% coverage enforcement, MyPy/Pyright strict typing,
+- [Testing & Quality Standards](docs/agents/testing-quality.md): 100% coverage enforcement, Basedpyright strict typing,
   fixture conventions.
 
 ## 6. End-User Experience and Release Maintenance

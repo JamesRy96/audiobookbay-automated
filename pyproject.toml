@@ -48,8 +48,7 @@ dev = [
     "requests-mock==1.12.1",
     "ruff==0.17.3",
     "pre-commit==4.7.0",
-    "mypy==2.4.1",
-    "pyright==1.1.414",
+    "basedpyright==1.40.2",
     "types-requests==2.33.0.20261030",
     "types-cachetools==7.0.0.20260713",
     "types-gunicorn==26.2.0.20261008",
@@ -107,41 +106,10 @@ convention = "google"
 # Network uses globals for singleton/semaphore management
 "audiobook_automated/scraper/network.py" = ["PLW0603"]
 
-[tool.mypy]
-python_version = "3.14"
-warn_unused_configs = true
-ignore_missing_imports = true
-strict = true
-mypy_path = "stubs"
-
-[[tool.mypy.overrides]]
-module = [
-    "flask_wtf.csrf",
-    "transmission_rpc",
-    "bs4.*",
-    "urllib3.*",
-    "requests_mock.*",
-    "pytest.*",
-    "flask_talisman.*",
-]
-ignore_missing_imports = true
-disable_error_code = ["import-untyped"]
-
-[tool.pyright]
+[tool.basedpyright]
 pythonVersion = "3.14"
 include = ["audiobook_automated", "tests"]
-typeCheckingMode = "strict"
-# Reduce noise from untyped libraries (handled by mypy overrides mostly)
-reportMissingImports = "none"
-reportMissingTypeStubs = "none"
-reportUntypedFunctionDecorator = "none"
-# Allow untyped variables from libraries (essential for Flask/Requests/BS4)
-reportUnknownMemberType = "none"
-reportUnknownVariableType = "none"
-reportUnknownArgumentType = "none"
-reportUnknownParameterType = "none"
-# Missing sources are inevitable for some libraries (like bs4 stubs issues)
-reportMissingModuleSource = "none"
+typeCheckingMode = "standard"
 
 [tool.coverage.report]
 exclude_lines = [
@@ -155,4 +123,9 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     'class .*\bProtocol\):',
     '@(abc\.)?abstractmethod',
+]
+
+[dependency-groups]
+dev = [
+    "basedpyright==1.40.2",
 ]
