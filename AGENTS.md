@@ -5,7 +5,7 @@
 ## 1. Project Overview & Intent
 
 - **What:** A single-user, self-hosted web appliance automating audiobook search, scraping, and torrent client dispatch.
-- **Architecture:** Python 3.13/3.14 Flask backend with Gunicorn (`WORKERS=1`, `THREADS=8+`), plain ES6 browser
+- **Architecture:** Python 3.13–3.15 Flask backend with Gunicorn (`WORKERS=1`, `THREADS=8+`), plain ES6 browser
   frontend, and pluggable torrent download client plugins.
 - **Appliance Philosophy:** Zero SQL databases, zero local persistent application caches, and zero external queues (no
   Redis/Celery). Torrent clients hold download state; proxy scrapers protect user privacy.
@@ -109,7 +109,7 @@ Consult specialized documentation for subsystem implementation details:
   its owner/name from the GitHub repository context.
 - Browser checks must use the real templates, CSS and controllers. `tests/e2e/server.py` replaces only integration
   boundaries and runs on port 5090. Never point automated Download Client actions at production clients.
-- CI checks Python 3.13/3.14, full coverage, Jest, three browser engines, static/types and a container HTTP smoke test.
+- CI checks Python 3.13–3.15, full coverage, Jest, three browser engines, static/types and a container HTTP smoke test.
   Release publishing explicitly calls CI and the image workflow; it does not rely on token-created tag events.
 - Do not claim Docker, GitHub-hosted checks, published-image installation or real Download Client compatibility has
   been verified unless those checks actually ran. Keep pending release actions separate from completed local evidence.

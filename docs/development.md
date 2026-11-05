@@ -11,7 +11,7 @@ Install Git, [uv](https://docs.astral.sh/uv/getting-started/installation/), and 
 ~~~shell
 git clone https://github.com/meek2100/audiobookbay-automated.git
 cd audiobookbay-automated
-uv sync --frozen --all-extras --python 3.14
+uv sync --frozen --all-extras --python 3.15
 npm ci
 ~~~
 
@@ -75,7 +75,7 @@ npm run test:js -- --runInBand
 uv run --frozen --all-extras pre-commit run --all-files
 ~~~
 
-Python tests require 100% application coverage. CI runs Python 3.13 and 3.14. Pre-commit also checks types, shell,
+Python tests require 100% application coverage. CI runs Python 3.13, 3.14, and 3.15. Pre-commit also checks types, shell,
 Dockerfile, Compose examples, Markdown and formatting. Docker Compose must be installed for its validation hook.
 The branch-protection hook rejects commits on `main`; use a working branch. CI skips only that local branch hook.
 

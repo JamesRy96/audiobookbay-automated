@@ -1,5 +1,5 @@
 # File: Dockerfile
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 LABEL org.opencontainers.image.title="AudiobookBay Automated" \
       org.opencontainers.image.description="Search AudiobookBay and send books to your Download Client" \

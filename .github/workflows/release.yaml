@@ -30,7 +30,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-          python-version: "3.14"
+          python-version: "3.15"
       - name: Stamp version and date
         id: stamp
         env:
@@ -126,7 +126,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-          python-version: "3.14"
+          python-version: "3.15"
       - name: Build standalone python distribution artifacts
         run: |
           uv build

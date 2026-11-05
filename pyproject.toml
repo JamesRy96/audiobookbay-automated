@@ -17,6 +17,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -107,7 +108,7 @@ convention = "google"
 "audiobook_automated/scraper/network.py" = ["PLW0603"]
 
 [tool.basedpyright]
-pythonVersion = "3.14"
+pythonVersion = "3.15"
 include = ["audiobook_automated", "tests"]
 typeCheckingMode = "standard"
 
