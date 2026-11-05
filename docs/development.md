@@ -139,13 +139,12 @@ For the upstream issue inventory, client API references and verification limits,
 Before publishing:
 
 1. Review the working changes and screenshots. Complete any live integration/container checks that could not run locally.
-2. Choose a stable version, such as `1.0.0`. Set it in `pyproject.toml`, run `uv lock`, and add a dated `CHANGELOG.md`
-   section for that version. Keep a new `[Unreleased]` section for future work. The private JavaScript test package is
-   not separately released.
-3. Commit and push the reviewed changes to the default branch through the repository's normal review process.
-4. In GitHub **Actions → Create Release → Run workflow**, select the default branch and enter the version without `v`.
-5. Wait for all checks and image publishing to finish. The workflow refuses a mismatched version or existing version tag.
-6. Check the new release and make the GHCR package public if anonymous pulls are intended. Verify a clean installation
+2. In GitHub **Actions → Create Release → Run workflow**, select the default branch and enter the target release
+   version without `v` (for example `1.0.0`).
+3. The workflow automatically stamps today's date in `CHANGELOG.md`, synchronizes `pyproject.toml` and `uv.lock`, commits
+   the release preparation to the default branch, runs the full test matrix, publishes the Docker image, and creates the
+   GitHub Release with generated release notes.
+4. Check the new release and make the GHCR package public if anonymous pulls are intended. Verify a clean installation
    using the README and the published image.
 
 The workflow needs permission to write repository contents for the release and packages for GHCR. A failed check does

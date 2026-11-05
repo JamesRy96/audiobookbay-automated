@@ -4,17 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version already committed in pyproject.toml, for example 1.0.0"
+        description: "Release version, for example 1.0.0"
         required: true
         type: string
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: release
   cancel-in-progress: false
 jobs:
-  validate:
+  prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_commit: ${{ steps.stamp.outputs.release_commit }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -22,45 +26,80 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.14"
-      - name: Validate release version and branch
+      - name: Stamp version and date
+        id: stamp
         env:
           VERSION: ${{ inputs.version }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
+          if git rev-parse --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "::error::This version tag already exists."
+            exit 1
+          fi
+
           uv run --no-project python - <<'PY'
           import datetime
           import os
           import re
           import tomllib
           from pathlib import Path
-          version = os.environ["VERSION"]
+
+          version = os.environ["VERSION"].strip()
           if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
-              raise SystemExit("Use a version such as 1.0.0, without a leading v.")
-          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
-          if project["version"] != version:
-              raise SystemExit("Commit the matching pyproject.toml version before releasing.")
-          section = re.search(
-              rf"^## \[{re.escape(version)}\] - (\d{{4}}-\d{{2}}-\d{{2}})\s*$",
-              Path("CHANGELOG.md").read_text(),
-              re.MULTILINE,
+              raise SystemExit("Use a semantic version such as 1.0.0, without a leading v.")
+
+          today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+          # 1. Update pyproject.toml version
+          pyproject_path = Path("pyproject.toml")
+          pyproject_text = pyproject_path.read_text(encoding="utf-8")
+          new_pyproject = re.sub(
+              r'(?m)^version\s*=\s*"[^"]+"',
+              f'version = "{version}"',
+              pyproject_text,
+              count=1,
           )
-          if section is None:
-              raise SystemExit("Add a dated changelog section for this version before releasing.")
-          try:
-              datetime.date.fromisoformat(section[1])
-          except ValueError:
-              raise SystemExit("Use a valid YYYY-MM-DD date in the release changelog heading.") from None
+          pyproject_path.write_text(new_pyproject, encoding="utf-8")
+
+          # 2. Update CHANGELOG.md release header and date
+          changelog_path = Path("CHANGELOG.md")
+          changelog_text = changelog_path.read_text(encoding="utf-8")
+          if re.search(rf"^## \[{re.escape(version)}\](?: - .*)?$", changelog_text, re.MULTILINE):
+              new_changelog = re.sub(
+                  rf"^## \[{re.escape(version)}\](?: - .*)?$",
+                  f"## [{version}] - {today}",
+                  changelog_text,
+                  flags=re.MULTILINE,
+              )
+          else:
+              new_changelog = re.sub(
+                  r"^## \[Unreleased\]\s*$",
+                  f"## [Unreleased]\n\n## [{version}] - {today}",
+                  changelog_text,
+                  flags=re.MULTILINE,
+              )
+          changelog_path.write_text(new_changelog, encoding="utf-8")
           PY
-          if git rev-parse --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
-            echo "::error::This version tag already exists."
-            exit 1
+
+          # Update lockfile if needed
+          uv lock
+
+          # Commit and push if any files changed
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pyproject.toml uv.lock CHANGELOG.md
+            git commit -m "release: prepare v${{ inputs.version }}"
+            git push origin "HEAD:$DEFAULT_BRANCH"
           fi
+
+          echo "release_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
   checks:
-    needs: validate
+    needs: prepare
     uses: ./.github/workflows/ci.yaml
   image:
-    needs: checks
+    needs: [prepare, checks]
     permissions:
       contents: read
       packages: write
@@ -68,16 +107,20 @@ jobs:
     with:
       version: ${{ inputs.version }}
   release:
-    needs: image
+    needs: [prepare, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.release_commit }}
       - name: Create the tag and release for the checked commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}
+          TARGET_COMMIT: ${{ needs.prepare.outputs.release_commit }}
         run: |
-          gh release create "v$VERSION" --target "$GITHUB_SHA" \
+          gh release create "v$VERSION" --target "$TARGET_COMMIT" \
             --title "Release v$VERSION" --generate-notes
