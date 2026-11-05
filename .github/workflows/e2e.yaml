@@ -20,7 +20,19 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps
+      - name: Cache Playwright browser binaries
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Playwright browsers and dependencies
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps
+          else
+            npx playwright install --with-deps
+          fi
       - name: Run against the isolated Flask fixture server
         run: npm run test:e2e
       - uses: actions/upload-artifact@v7

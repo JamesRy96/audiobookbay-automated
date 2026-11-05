@@ -42,6 +42,7 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          export VERSION
 
           uv run --no-project python - <<'PY'
           import datetime
