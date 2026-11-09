@@ -1,0 +1,127 @@
+# File: .pre-commit-config.yaml
+# Exclude vendor files and minified assets from all hooks
+exclude: ^(audiobook_automated/static/vendor/|.*\.min\.(css|js))
+
+repos:
+  # ------------------------------------------------------------------
+  # 1. CLEANUP & BASICS (Fastest)
+  # ------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      # Exclude VS Code/Devcontainer files (JSONC)
+      - id: check-json
+        exclude: ^(\.vscode/|\.devcontainer/)
+      - id: check-added-large-files
+        args: ["--maxkb=5000"]
+        exclude: ^(\.agents/)
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
+
+  # ------------------------------------------------------------------
+  # 2. FORMATTERS (Modify code style first)
+  # ------------------------------------------------------------------
+  # Run Format BEFORE Check so linters validate the final code structure.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-format
+
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: "v3.9.10"
+    hooks:
+      - id: prettier
+        types_or: [css, javascript, ts, html, json, yaml]
+        args: ["--config", ".prettierrc.yaml"]
+
+  # ------------------------------------------------------------------
+  # 3. SPELLING & HEADERS (Fast checks)
+  # ------------------------------------------------------------------
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        exclude: ^(poetry\.lock$|package-lock\.json$|tests/e2e/catalog/captured/)
+        args: ["--ignore-words-list", "afterAll, COo"]
+
+  - repo: https://github.com/meek2100/pre-commit-context-header
+    rev: v0.1.1
+    hooks:
+      - id: context-headers
+        args: ["--fix"]
+        # AGENTS.md requires the base template path comment before its doctype.
+        exclude: ^(audiobook_automated/static/vendor/|package-lock.json|audiobook_automated/templates/base.html$)
+
+  # ------------------------------------------------------------------
+  # 4. LINTERS (Logic & Validity)
+  # ------------------------------------------------------------------
+  # Python Linter (Ruff)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+
+  # Markdown Linter
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.50.0
+    hooks:
+      - id: markdownlint
+        name: Lint Markdown
+        args: ["--config", ".markdownlint.yaml", "--fix"]
+
+  # Infrastructure Linters (Docker, Shell, YAML)
+  - repo: https://github.com/IamTheFij/docker-pre-commit
+    rev: v3.0.1
+    hooks:
+      - id: docker-compose-check
+        files: .*(docker-compose|compose).*\.y[a]?ml$
+
+  - repo: https://github.com/AleksaC/hadolint-py
+    rev: v2.15.1
+    hooks:
+      - id: hadolint
+        args: ["--ignore", "DL3008"]
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+        args: ["--format=gcc"]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        name: Lint YAML
+        args: ["--config-file", ".yamllint.yaml"]
+
+  # ------------------------------------------------------------------
+  # 5. STATIC TYPE CHECKING (Run last)
+  # ------------------------------------------------------------------
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: 1.40.2
+    hooks:
+      - id: basedpyright
+        additional_dependencies:
+          - pytest
+          - flask
+          - Flask-Limiter
+          - Flask-WTF
+          - qbittorrent-api
+          - transmission-rpc
+          - deluge-web-client
+          - cachetools
+          - gunicorn
+          - types-requests
+          - types-cachetools
+          - types-setuptools
+          - types-beautifulsoup4
+          - types-jsonschema
+          - types-gunicorn

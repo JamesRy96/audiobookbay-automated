@@ -1,0 +1,197 @@
+<!-- File: audiobook_automated/templates/details.html -->
+{% extends "base.html" %} {% block title %}Details - {{ book.title if book else 'Error' }}{% endblock %} {% block
+extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/details.css', v=static_version) }}" />
+{% endblock %} {% block content %} {% if error %}
+<h1 class="sr-only">Audiobook details unavailable</h1>
+<div class="error-message">
+    <div class="error-message-primary">
+        <span class="error-icon" aria-hidden="true">⚠️</span>
+        <div>
+            <p>{{ error }}</p>
+            <p style="margin-top: 10px">
+                <button
+                    class="back-link-btn"
+                    style="
+                        color: inherit;
+                        font-weight: bold;
+                        background: none;
+                        border: none;
+                        cursor: pointer;
+                        padding: 0;
+                    "
+                >
+                    ← Back to Search
+                </button>
+            </p>
+        </div>
+    </div>
+    {% if debug_details and flask_debug %}
+    <details class="error-debug-details">
+        <summary>Technical Details & Debug Info</summary>
+        <pre><code>{{ debug_details }}</code></pre>
+    </details>
+    {% endif %} {% if github_issue_url %}
+    <div class="error-actions" style="margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+        <a
+            href="{{ github_issue_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-primary"
+            style="
+                padding: 6px 14px;
+                font-size: 0.85rem;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            "
+        >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+                />
+            </svg>
+            Report Issue on GitHub
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% elif book %}
+
+<div class="details-container">
+    <div class="details-left">
+        {% set default_cover_url = url_for('static', filename='images/' + default_cover_filename, v=static_version) %}
+        {% if book.cover %}
+        <img
+            src="{{ book.cover if book.cover else default_cover_url }}"
+            alt="Cover of {{ book.title }}"
+            class="details-cover"
+            data-default-cover="{{ default_cover_url }}"
+        />
+        {% else %}<span class="details-cover cover-placeholder" role="img" aria-label="Cover Unavailable"></span>{%
+        endif %}
+    </div>
+
+    <div class="details-info">
+        <button
+            class="back-link back-link-btn"
+            style="background: none; border: none; cursor: pointer; color: inherit; font: inherit; padding: 0"
+        >
+            ← Back to results
+        </button>
+
+        <h1>{{ book.title }}</h1>
+
+        <div class="details-meta-wrapper">
+            <div class="metadata-grid">
+                <div class="meta-item">
+                    <span class="meta-label">Author</span>
+                    <div class="meta-pills-wrap">
+                        {% if book.author and book.author != "Unknown" %} {% for person in
+                        book.author|split_contributors %}
+                        <a
+                            href="{{ url_for('main.search', query='author:' + person) }}"
+                            class="category-tag category-link"
+                            title="Search the catalog for {{ person }}"
+                            >{{ person }}</a
+                        >
+                        {% endfor %} {% else %}
+                        <span class="meta-value">{{ book.author }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Narrator</span>
+                    <div class="meta-pills-wrap">
+                        {% if book.narrator and book.narrator != "Unknown" %} {% for person in
+                        book.narrator|split_contributors %} {% if person|lower == "full cast" %}<span class="meta-value"
+                            >{{ person }}</span
+                        >{% else %}
+                        <a
+                            href="{{ url_for('main.search', query='narrator:' + person) }}"
+                            class="category-tag category-link"
+                            title="Search the catalog for {{ person }}"
+                            >{{ person }}</a
+                        >
+                        {% endif %}{% endfor %} {% else %}
+                        <span class="meta-value">{{ book.narrator }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Language</span>
+                    <div class="meta-pills-wrap">
+                        {% if book.language and book.language != "Unknown" %}
+                        <a
+                            href="{{ url_for('main.search', query='language:' + book.language) }}"
+                            class="category-tag category-link"
+                            title="Browse all {{ book.language }} audiobooks"
+                            >{{ book.language }}</a
+                        >
+                        {% else %}
+                        <span class="meta-value">{{ book.language }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Category</span>
+                    <div class="meta-pills-wrap">
+                        {% for raw_cat in book.category %} {% for cat in raw_cat.split(',') %} {% if cat.strip() and
+                        cat.strip() != "Unknown" %}
+                        <a
+                            href="{{ url_for('main.search', query='category:' + cat.strip()) }}"
+                            class="category-tag category-link"
+                            title="Browse {{ cat.strip() }} category"
+                            >{{ cat.strip() }}</a
+                        >
+                        {% endif %} {% endfor %} {% endfor %}
+                    </div>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Format</span>
+                    <span class="meta-value">{{ book.format }} / {{ book.bitrate }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Size</span>
+                    <span class="meta-value">{{ book.file_size }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <button
+                class="btn-primary details-download-btn"
+                data-link="{{ book.link|escape }}"
+                data-title="{{ book.title|escape }}"
+            >
+                Download
+            </button>
+
+            <button class="btn-glass direct-link-btn" data-external-link="{{ book.link|escape }}">
+                Open External Page
+            </button>
+        </div>
+
+        <div class="details-description">
+            <h2>Description</h2>
+            {{ book.description | safe }}
+        </div>
+
+        <details class="technical-details">
+            <summary>Download information</summary>
+            <div class="details-info-hash">
+                <span class="meta-label">Info hash</span><code class="info-hash-value">{{ book.info_hash }}</code>
+            </div>
+            {% if book.trackers %}
+            <p class="meta-label">Trackers</p>
+            <ul class="tracker-list">
+                {% for tracker in book.trackers %}
+                <li class="tracker-item">{{ tracker }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </details>
+    </div>
+</div>
+{% endif %} {% endblock %}

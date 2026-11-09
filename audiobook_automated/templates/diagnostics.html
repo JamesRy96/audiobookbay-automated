@@ -1,0 +1,166 @@
+<!-- File: audiobook_automated/templates/diagnostics.html -->
+{% extends "base.html" %} {% set splash_enabled = false %} {% block title %}System Diagnostics - {{ site_title }}{%
+endblock %} {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/status.css', v=static_version) }}" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/diagnostics.css', v=static_version) }}" />
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', filename='js/diagnostics.js', v=static_version) }}" defer></script>
+{% endblock %} {% block content %}
+<div class="status-header-glass">
+    <div class="status-header-main">
+        <div class="status-header-title-wrap">
+            <h1 class="status-title">System Diagnostics</h1>
+            <span class="status-client-pill" id="diag-status-pill">
+                <span class="pulse-dot"></span>
+                <span class="client-pill-text">Live System</span>
+            </span>
+        </div>
+        <div class="status-header-meta">
+            <span id="last-updated-badge" class="diag-badge">Last updated: -</span>
+            <div class="refresh-controls" aria-label="Refresh controls">
+                <label
+                    class="auto-refresh-label refresh-toggle"
+                    for="auto-refresh-toggle"
+                    title="Toggle 5-second automatic refresh"
+                >
+                    <input
+                        type="checkbox"
+                        id="auto-refresh-toggle"
+                        role="switch"
+                        aria-label="Automatic refresh every five seconds"
+                        checked
+                    />
+                    <span class="refresh-switch-track" aria-hidden="true"></span
+                    ><span class="auto-refresh-text">Live</span>
+                </label>
+                <button
+                    type="button"
+                    class="status-poll-indicator"
+                    id="diag-poll-indicator"
+                    title="Click to refresh diagnostics immediately (auto-refreshes every 5s)"
+                    aria-label="Refresh diagnostics"
+                >
+                    <div class="poll-dial-wrap">
+                        <svg
+                            class="poll-icon poll-spinner-ring"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                        </svg>
+                        <span class="poll-countdown-num" id="poll-countdown-num">5</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<p id="logs-update-note" class="update-note" role="status" aria-live="polite">Waiting for logs…</p>
+<div class="diag-container">
+    <div class="diag-card">
+        <div class="diag-header">
+            <span class="diag-title" role="heading" aria-level="2">
+                <span>⚡ System Health & Environment</span>
+                <span id="health-spinner" class="card-spinner" style="display: none"></span>
+            </span>
+        </div>
+        <div class="diag-grid" id="system-metrics">
+            <div class="diag-metric">
+                <span class="diag-label">Status</span>
+                <span class="diag-val" id="diag-status">Loading...</span>
+            </div>
+            <div class="diag-metric">
+                <span class="diag-label">Memory RSS</span>
+                <span class="diag-val" id="diag-memory">-</span>
+            </div>
+            <div class="diag-metric">
+                <span class="diag-label">Active Mirror</span>
+                <span class="diag-val" id="diag-active-mirror">-</span>
+            </div>
+            <div class="diag-metric">
+                <span class="diag-label">Details Cache Size</span>
+                <span class="diag-val" id="diag-cache">-</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="diag-card">
+        <div class="diag-header">
+            <span class="diag-title" role="heading" aria-level="2">
+                <span>🌐 Catalog Mirrors & Availability</span>
+            </span>
+        </div>
+        <p class="mirror-explanation">
+            The app chooses a working mirror automatically. Only verified, available mirrors receive a performance rank.
+        </p>
+        <p id="mirror-summary" class="mirror-summary" role="status" aria-live="polite"></p>
+        <div class="mirror-list" id="mirror-metrics">
+            <!-- Populated via JS -->
+        </div>
+    </div>
+
+    <div class="diag-card">
+        <div class="diag-header">
+            <span class="diag-title" role="heading" aria-level="2">
+                <span>📥 Download Clients</span>
+            </span>
+        </div>
+        <div class="diag-grid" id="client-metrics">
+            <!-- Populated via JS -->
+        </div>
+    </div>
+
+    <!-- Live Application Logs Card -->
+    <div class="diag-card">
+        <div class="diag-header">
+            <span class="diag-title" role="heading" aria-level="2">
+                <span>📜 Real-Time Scrubbed Application Logs</span>
+                <span id="logs-spinner" class="card-spinner" style="display: none"></span>
+            </span>
+            <div class="diag-actions diag-logs-actions">
+                <input
+                    type="text"
+                    id="log-filter-input"
+                    placeholder="Filter logs..."
+                    class="inspect-input log-filter-input"
+                />
+                <label class="auto-scroll-label" for="auto-scroll-toggle" title="Auto-scroll to latest log entries">
+                    <input type="checkbox" id="auto-scroll-toggle" checked />
+                    <span>Auto-scroll</span>
+                </label>
+                <button id="download-logs-btn" class="btn-primary log-download-btn">Download (.txt)</button>
+            </div>
+        </div>
+        <pre id="log-viewer-pre" class="log-viewer-pre">Loading application logs...</pre>
+    </div>
+
+    <div class="diag-card">
+        <div class="diag-header">
+            <span class="diag-title" role="heading" aria-level="2">
+                <span>🔍 Live Parser & Metadata Inspector</span>
+            </span>
+        </div>
+        <div class="inspect-box">
+            <p class="inspect-desc">
+                Inspect tag parsing, title, author, format, and bitrate fidelity on any AudiobookBay search query or
+                detail URL.
+            </p>
+            <div class="inspect-input-row">
+                <input
+                    type="text"
+                    id="inspect-input"
+                    class="inspect-input"
+                    placeholder="Enter search query (e.g. 'Martian') or URL (/abss/...)"
+                />
+                <button id="run-inspect-btn" class="btn-primary inspect-btn">Inspect</button>
+            </div>
+            <pre id="inspect-output" class="inspect-results-pre" style="display: none"></pre>
+        </div>
+    </div>
+</div>
+{% endblock %}

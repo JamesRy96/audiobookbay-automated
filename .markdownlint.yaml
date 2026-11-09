@@ -1,0 +1,41 @@
+# File: .markdownlint.yaml
+---
+# Linter rules doc:
+# - https://github.com/DavidAnson/markdownlint
+#
+# Configured to align with Python (Ruff) line-length of 120.
+
+# Default state for all rules
+default: true
+
+# --- Rules to Disable ---
+# MD004: Unordered list style
+MD004: false
+# MD033: Inline HTML
+MD033: false
+# MD024: Allow duplicate headings (for CHANGELOG.md)
+MD024: false
+
+# --- Rules to Configure ---
+# MD007: Set unordered list indentation to 2 spaces
+MD007:
+  indent: 2
+
+# MD013: Set line length to 120
+# Disable line length checks for tables and code blocks
+MD013:
+  line_length: 120
+  tables: false
+  code_blocks: false
+
+# MD035: Set horizontal rule style to the 70-character underscore string used by mdformat.
+MD035:
+  style: "---"
+
+# MD049: Set emphasis style to UNDERSCORE (to match Prettier/existing files)
+MD049:
+  style: underscore
+
+# Preserve the project code-fence convention.
+MD048:
+  style: tilde

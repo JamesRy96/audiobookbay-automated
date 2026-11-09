@@ -1,0 +1,41 @@
+{
+    "name": "AudiobookBay Automated Dev",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": "/usr/local/bin/python",
+                "python.testing.pytestEnabled": true,
+                "python.testing.pytestArgs": ["tests"],
+                "terminal.integrated.cwd": "/app",
+                "python.analysis.typeCheckingMode": "strict",
+                "files.insertFinalNewline": true,
+                "files.trimTrailingWhitespace": true
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "tamasfe.even-better-toml",
+                "esbenp.prettier-vscode",
+                // ADDED: Markdown Linting extension
+                "davidanson.vscode-markdownlint"
+            ]
+        }
+    },
+    "remoteEnv": {
+        "FLASK_APP": "app.app",
+        "FLASK_DEBUG": "1",
+        "SECRET_KEY": "dev-key",
+        "SAVE_PATH_BASE": "/tmp/audiobooks_dev",
+        "LISTEN_PORT": "5078",
+        "DL_CLIENT": "qbittorrent",
+        "QBITTORRENT_HOST": "localhost"
+    },
+    "forwardPorts": [5078],
+    // UPDATED: Install Node.js for JS testing, then install Python and JS dependencies
+    "postCreateCommand": "apt-get update && apt-get install -y nodejs npm && pip install -e \"\\.[dev]\" && npm install",
+    "remoteUser": "appuser"
+}

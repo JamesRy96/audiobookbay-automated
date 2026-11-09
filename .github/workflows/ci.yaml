@@ -1,0 +1,126 @@
+# File: .github/workflows/ci.yaml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+permissions:
+  contents: read
+jobs:
+  lint:
+    name: Formatting, lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate workflow semantics
+        uses: docker://rhysd/actionlint:1.7.12
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.15"
+      - run: uv sync --frozen --all-extras
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+      - name: Check all tracked files
+        env:
+          SKIP: no-commit-to-branch
+        run: uv run --frozen --all-extras pre-commit run --all-files --show-diff-on-failure
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python }}
+      - run: uv sync --frozen --all-extras --python ${{ matrix.python }}
+      - name: Tests with full coverage
+        run: uv run --frozen --all-extras --python ${{ matrix.python }} pytest --junitxml=pytest-results.xml
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: pytest-${{ matrix.python }}
+          path: pytest-results.xml
+  javascript:
+    name: JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:js -- --runInBand
+  browser:
+    name: Real-template browser tests
+    uses: ./.github/workflows/e2e.yaml
+  docker:
+    name: Container build and HTTP health
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build smoke image with layer caching
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: audiobookbay-automated:ci
+          cache-from: type=gha,scope=smoke-test
+          cache-to: type=gha,mode=max,scope=smoke-test
+      - name: Scan container image for vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: audiobookbay-automated:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload vulnerability scan report to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+      - name: Start isolated smoke container
+        run: |
+          docker run -d --name smoke-test -p 127.0.0.1:5078:5078 \
+            -e SAVE_PATH_BASE=/downloads/audiobooks \
+            -e DL_CLIENT=qbittorrent -e QBITTORRENT_HOST=127.0.0.1 -e CLIENT_TIMEOUT=2 \
+            -e LISTEN_HOST=0.0.0.0 audiobookbay-automated:ci
+      - name: Wait for a healthy HTTP response
+        run: |
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --max-time 5 http://127.0.0.1:5078/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Container logs and cleanup
+        if: always()
+        run: |
+          docker logs smoke-test || true
+          docker rm -f smoke-test || true

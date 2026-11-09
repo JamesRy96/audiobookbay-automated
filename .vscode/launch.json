@@ -1,0 +1,43 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Flask App",
+            "type": "python",
+            "request": "launch",
+            "module": "flask",
+            "env": {
+                "FLASK_APP": "audiobook_automated.app",
+                "FLASK_DEBUG": "1",
+                "APP_ENV": "development",
+                "SAVE_PATH_BASE": "/tmp/audiobooks_dev", // Safe local dev path
+                "SECRET_KEY": "dev-key",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": ["run", "--port", "5078", "--no-debugger", "--no-reload"],
+            "jinja": true,
+            "justMyCode": true
+        },
+        {
+            "name": "Debug Pytest (Current File)",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            // Explicitly set test environment from pyproject.toml for reliability
+            "env": {
+                "TESTING": "1",
+                "SAVE_PATH_BASE": "/tmp/test_downloads",
+                "SECRET_KEY": "test-secret-key",
+                "DL_CLIENT": "qbittorrent",
+                "QBITTORRENT_HOST": "localhost",
+                "QBITTORRENT_PORT": "8080",
+                "QBITTORRENT_USERNAME": "admin",
+                "QBITTORRENT_PASSWORD": "admin",
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": ["${file}"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}

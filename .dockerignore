@@ -1,0 +1,26 @@
+# File: .dockerignore
+.git/
+.github/
+.agents/
+.env
+.env.*
+.venv/
+env/
+venv/
+node_modules/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+build/
+dist/
+tests/
+test-results/
+playwright-report/
+docs/
+examples/
+*.log

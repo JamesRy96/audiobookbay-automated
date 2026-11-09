@@ -1,0 +1,14 @@
+# File: examples/docker-compose.no-env.yaml
+services:
+  audiobookbay-automated:
+    image: ghcr.io/meek2100/audiobookbay-automated:latest
+    restart: unless-stopped
+    ports:
+      - "5078:5078"
+    environment:
+      DL_CLIENT: qbittorrent
+      QBITTORRENT_HOST: "192.168.1.100"
+      QBITTORRENT_USERNAME: admin
+      QBITTORRENT_PASSWORD: "replace-with-your-client-password"
+      # Optional: omit to use the Download Client's default folder.
+      # SAVE_PATH_BASE: /downloads/audiobooks

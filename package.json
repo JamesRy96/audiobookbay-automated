@@ -1,0 +1,24 @@
+{
+    "name": "audiobookbay-automated-js-tests",
+    "version": "1.0.0",
+    "description": "JavaScript test suite for UI filtering logic.",
+    "type": "commonjs",
+    "scripts": {
+        "test:js": "jest",
+        "test:e2e": "playwright test",
+        "screenshots": "node tests/e2e/capture_screenshots.js"
+    },
+    "keywords": [
+        "jest",
+        "javascript",
+        "testing"
+    ],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "@playwright/test": "^1.65.0",
+        "jest": "^30.5.2",
+        "jest-environment-jsdom": "^30.5.2"
+    },
+    "private": true
+}

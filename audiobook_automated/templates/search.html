@@ -1,0 +1,612 @@
+<!-- File: audiobook_automated/templates/search.html -->
+{% extends "base.html" %} {% block title %}{{ site_title }} - Search{% endblock %} {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/search.css', v=static_version) }}" />
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', filename='js/search.js', v=static_version) }}" defer></script>
+{% endblock %} {% block content %}
+
+<h1 class="sr-only">Search audiobooks</h1>
+<div class="search-omnibar-container" id="search-container">
+    <div class="search-panel">
+        <div id="filter-container" class="search-omnibar">
+            <form method="get" class="omnibar-search-form" id="search-form">
+                <div class="search-input-wrapper">
+                    <svg
+                        class="search-input-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="18"
+                        height="18"
+                    >
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input
+                        type="text"
+                        id="main-search-input"
+                        aria-label="Search audiobooks by title, author, or keyword"
+                        minlength="2"
+                        name="query"
+                        placeholder="Search audiobooks by title, author, or keyword..."
+                        class="search-bar"
+                        value="{{ query }}"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        enterkeyhint="search"
+                        required
+                    />
+                    <button
+                        type="button"
+                        id="clear-search-btn"
+                        class="clear-search-btn"
+                        aria-label="Clear search text"
+                        hidden
+                    >
+                        <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            width="18"
+                            height="18"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.8"
+                        >
+                            <path d="m6 6 12 12M18 6 6 18" />
+                        </svg>
+                    </button>
+                </div>
+                <button type="submit" class="search-button" aria-busy="false">
+                    <span class="button-spinner" id="button-spinner" style="display: none" aria-hidden="true"
+                        ><span class="spinner"></span
+                    ></span>
+                    <span class="button-text" aria-live="polite">Search</span>
+                </button>
+            </form>
+
+            {% if books %}
+            <div class="omnibar-controls">
+                <div class="filter-toolbar-left">
+                    <button
+                        aria-expanded="false"
+                        aria-controls="filter-drawer-overlay"
+                        id="toolbar-filter-toggle"
+                        class="btn-glass toolbar-filter-btn"
+                        aria-label="Toggle Filter Menu"
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                            width="18"
+                            height="18"
+                        >
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                        <span>Filters</span>
+                        <span id="toolbar-filter-badge" class="filter-badge" style="display: none">0</span>
+                    </button>
+                </div>
+
+                <!-- View Mode Switcher -->
+                <div class="filter-toolbar-right">
+                    <div class="view-toggle-container" role="group" aria-label="Results view">
+                        <button
+                            class="view-btn"
+                            id="view-list-btn"
+                            type="button"
+                            aria-label="List View"
+                            title="List view"
+                            aria-pressed="false"
+                        >
+                            <svg
+                                aria-hidden="true"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                            <span>List</span>
+                        </button>
+                        <button
+                            class="view-btn active"
+                            id="view-grid-btn"
+                            type="button"
+                            aria-label="Grid View"
+                            title="Grid view"
+                            aria-pressed="true"
+                        >
+                            <svg
+                                aria-hidden="true"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                            </svg>
+                            <span>Grid</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div id="recent-searches" class="recent-searches" hidden aria-label="Recent searches"></div>
+    </div>
+
+    <!-- Message Scroller -->
+    <div class="message-scroller" id="message-scroller">
+        <p id="scrolling-message"></p>
+    </div>
+</div>
+
+{% if error %}
+<div class="error-message">
+    <div class="error-message-primary">
+        <span class="error-icon" aria-hidden="true">⚠️</span>
+        <p>{{ error }}</p>
+    </div>
+    {% if debug_details and flask_debug %}
+    <details class="error-debug-details">
+        <summary>Technical Details & Debug Info</summary>
+        <pre><code>{{ debug_details }}</code></pre>
+    </details>
+    {% endif %} {% if github_issue_url %}
+    <div class="error-actions" style="margin-top: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+        <a
+            href="{{ github_issue_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-primary"
+            style="
+                padding: 6px 14px;
+                font-size: 0.85rem;
+                text-decoration: none;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+            "
+        >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+                />
+            </svg>
+            Report Issue on GitHub
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endif %} {% if books %}
+
+<!-- Expanding Filter Drawer Popover -->
+<div id="filter-drawer-overlay" class="filter-drawer-overlay" aria-hidden="true">
+    <div
+        class="filter-drawer-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="filter-drawer-title"
+        aria-describedby="filter-scope-note"
+        tabindex="-1"
+    >
+        <div class="filter-drawer-header">
+            <h4 id="filter-drawer-title">Filter Audiobooks</h4>
+            <button id="filter-drawer-close" class="filter-drawer-close" aria-label="Close filters">&times;</button>
+        </div>
+
+        <p id="filter-scope-note" class="filter-scope-note">Filters apply to results loaded so far.</p>
+
+        <div class="filter-drawer-grid">
+            <div class="filter-field-group">
+                <label for="author-filter">Author / contributor</label>
+                <div class="input-icon-wrapper">
+                    <select id="author-filter" aria-describedby="author-filter-help">
+                        <option value="">All credited contributors</option>
+                    </select>
+                </div>
+                <small id="author-filter-help">Credits in loaded titles; some listings may omit them.</small>
+            </div>
+            <div class="filter-field-group">
+                <label for="category-filter">
+                    <svg
+                        class="field-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="15"
+                        height="15"
+                    >
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                        <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                    </svg>
+                    Category
+                </label>
+                <div class="input-icon-wrapper">
+                    <select id="category-filter" aria-label="Category Filter">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="language-filter">
+                    <svg
+                        class="field-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="15"
+                        height="15"
+                    >
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path
+                            d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+                        ></path>
+                    </svg>
+                    Language
+                </label>
+                <div class="input-icon-wrapper">
+                    <select id="language-filter" aria-label="Language Filter">
+                        <option value="">All Languages</option>
+                        {% for lang in languages %}
+                        <option value="{{ lang }}">{{ lang }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="bitrate-filter">
+                    <svg
+                        class="field-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="15"
+                        height="15"
+                    >
+                        <path d="M4.93 19.07A10 10 0 0 1 2 12a10 10 0 0 1 2.93-7.07"></path>
+                        <path d="M19.07 4.93A10 10 0 0 1 22 12a10 10 0 0 1-2.93 7.07"></path>
+                        <circle cx="12" cy="12" r="2"></circle>
+                    </svg>
+                    Bitrate
+                </label>
+                <div class="input-icon-wrapper">
+                    <select id="bitrate-filter" aria-label="Bitrate Filter">
+                        <option value="">All Bitrates</option>
+                        {% for bitrate in bitrates %}
+                        <option value="{{ bitrate }}">{{ bitrate }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="format-filter">
+                    <svg
+                        class="field-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="15"
+                        height="15"
+                    >
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    Format
+                </label>
+                <div class="input-icon-wrapper">
+                    <select id="format-filter" aria-label="Format Filter">
+                        <option value="">All Formats</option>
+                        {% for fmt in formats %}
+                        <option value="{{ fmt }}">{{ fmt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-field-group">
+                <label for="file-size-filter">
+                    <svg
+                        class="field-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="15"
+                        height="15"
+                    >
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                    File Size
+                </label>
+                <div class="input-icon-wrapper">
+                    <select id="file-size-filter" aria-label="File Size Filter">
+                        <option value="">Any Size</option>
+                        <option value="under_500mb">&lt; 500 MB</option>
+                        <option value="500mb_2gb">500 MB – 2 GB</option>
+                        <option value="2gb_5gb">2 GB – 5 GB</option>
+                        <option value="over_5gb">&gt; 5 GB</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-field-group date-range-group">
+                <label>
+                    <svg
+                        class="field-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        aria-hidden="true"
+                        width="15"
+                        height="15"
+                    >
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    Date Range
+                </label>
+                <div class="native-date-range">
+                    <input
+                        type="date"
+                        id="date-from-filter"
+                        class="native-date-input"
+                        aria-label="Filter Posted Date From"
+                        title="From Date"
+                    />
+                    <span class="date-range-sep">to</span>
+                    <input
+                        type="date"
+                        id="date-to-filter"
+                        class="native-date-input"
+                        aria-label="Filter Posted Date To"
+                        title="To Date"
+                    />
+                </div>
+            </div>
+        </div>
+
+        <p id="filter-validation" role="alert" hidden></p>
+        <div class="filter-drawer-actions">
+            <button id="filter-button" class="btn-primary">Apply Filters</button>
+            <button id="clear-button" class="btn-glass">Reset filters</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Floating Condensed Search & Filter HUD -->
+<aside id="floating-filter-hud" class="floating-filter-hud floating-control" aria-label="Quick Search and Filters">
+    <div class="hud-pill">
+        <form id="hud-search-form" class="hud-search-form" action="/" method="get">
+            <svg
+                class="hud-search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+            >
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+                type="text"
+                name="query"
+                id="hud-search-input"
+                class="hud-search-input"
+                minlength="2"
+                required
+                placeholder="Search..."
+                value="{{ query }}"
+                aria-label="Condensed Search"
+            />
+        </form>
+        {% if books %}
+        <button
+            aria-expanded="false"
+            aria-controls="filter-drawer-overlay"
+            id="hud-filter-toggle"
+            class="hud-btn hud-filter-btn"
+            aria-label="Open audiobook filters"
+            title="Filter audiobooks"
+        >
+            <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+                width="18"
+                height="18"
+            >
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
+            <span class="hud-btn-label">Filters</span>
+            <span id="hud-filter-badge" class="hud-filter-badge" style="display: none">0</span></button
+        >{% endif %}
+    </div>
+</aside>
+
+<div id="filtered-empty" class="filtered-empty" hidden>
+    No loaded audiobooks match these filters.
+    <button id="reset-empty-filters" class="btn-glass" type="button">Reset filters</button>
+</div>
+<div
+    class="table-wrapper view-grid"
+    id="results-container"
+    data-query="{{ query|escape }}"
+    data-has-results="{% if books %}true{% else %}false{% endif %}"
+>
+    <table>
+        <tbody id="results-table-body">
+            {% if books %} {% set default_cover_url = url_for('static', filename='images/' + default_cover_filename,
+            v=static_version) %} {% for book in books %} {% set credit = book.title|catalog_credit %}
+            <tr
+                data-credits="{{ credit.credited_contributors|tojson|forceescape }}"
+                class="result-row"
+                data-category="{{ book.category|join('|') }}"
+                data-language="{{ book.language }}"
+                data-bitrate="{{ book.bitrate }}"
+                data-format="{{ book.format }}"
+                data-file-size="{{ book.file_size }}"
+                data-post-date="{{ book.post_date }}"
+            >
+                <td class="col-cover">
+                    <a href="{{ url_for('main.details', link=book.link) }}">
+                        {% if book.cover %}
+                        <img
+                            src="{{ book.cover if book.cover else default_cover_url }}"
+                            alt="Cover of {{ book.title }}"
+                            class="cover"
+                            width="100"
+                            loading="lazy"
+                            decoding="async"
+                            data-default-cover="{{ url_for('static', filename='images/' + default_cover_filename, v=static_version) }}"
+                        />
+                        {% else %}<span class="cover-placeholder" role="img" aria-label="Cover Unavailable"></span>{%
+                        endif %}
+                    </a>
+                </td>
+                <td class="col-info">
+                    <p class="book-title" title="{{ book.title }}">{{ credit.display_title }}</p>
+                    <p
+                        class="book-attribution{% if not credit.author_credit %} book-attribution-empty{% endif %}"
+                        title="{{ credit.author_credit }}"
+                        {%
+                        if
+                        not
+                        credit.author_credit
+                        %}
+                        aria-hidden="true"
+                        {%
+                        endif
+                        %}
+                    >
+                        {{ credit.author_credit }}
+                    </p>
+
+                    <div class="categories-container">
+                        {# Render individual pills for both Grid and List views #} {% for raw_cat in book.category %} {%
+                        for cat in raw_cat.split(',') %} {% if cat.strip() and cat.strip() != "Unknown" %}
+                        <a
+                            href="{{ url_for('main.search', query='category:' + cat.strip()) }}"
+                            class="category-tag category-link"
+                            title="Browse {{ cat.strip() }} category"
+                            >{{ cat.strip() }}</a
+                        >
+                        {% endif %} {% endfor %} {% endfor %}
+                    </div>
+
+                    <dl class="property-results-container">
+                        <div class="book-property">
+                            <dt>Language</dt>
+                            <dd class="book-language">{{ book.language }}</dd>
+                        </div>
+                        <div class="book-property">
+                            <dt>Bitrate</dt>
+                            <dd class="book-bitrate">{{ book.bitrate }}</dd>
+                        </div>
+                        <div class="book-property">
+                            <dt>Format</dt>
+                            <dd class="book-format">{{ book.format }}</dd>
+                        </div>
+                        <div class="book-property">
+                            <dt>File size</dt>
+                            <dd class="book-file_size">{{ book.file_size }}</dd>
+                        </div>
+                    </dl>
+                </td>
+                <td class="col-actions">
+                    <div class="action-buttons">
+                        <a href="{{ url_for('main.details', link=book.link) }}" class="btn-glass details-button"
+                            >Details</a
+                        >
+                        <button
+                            class="btn-primary send-torrent-btn"
+                            data-link="{{ book.link|escape }}"
+                            data-title="{{ book.title|escape }}"
+                        >
+                            Download
+                        </button>
+                    </div>
+                    <p class="book-posted" title="Posted to catalog">
+                        <svg
+                            aria-hidden="true"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.6"
+                        >
+                            <rect x="3" y="5" width="18" height="16" rx="2" />
+                            <path d="M16 3v4M8 3v4M3 11h18" />
+                        </svg>
+                        <span class="sr-only">Posted to catalog </span
+                        ><span class="book-post_date">{{ book.post_date }}</span>
+                    </p>
+                </td>
+            </tr>
+            {% endfor %} {% else %} {% if query and not error %}
+            <tr>
+                <td colspan="3" class="empty-message">
+                    No audiobooks found for "<strong>{{ query }}</strong>". <br />
+                    <small>Try a different keyword or check spelling.</small>
+                </td>
+            </tr>
+            {% endif %} {% endif %}
+        </tbody>
+    </table>
+    {% if books %}
+    <div id="load-more-indicator" class="load-more-container" aria-busy="false">
+        <p id="pagination-message" class="pagination-status" role="status" aria-live="polite">
+            <span id="load-more-loading" class="load-more-spinner" hidden aria-hidden="true"></span>
+            <span id="pagination-text">More results load as you scroll.</span>
+        </p>
+        <button id="load-more-btn" class="btn-glass load-more-btn" type="button">Load more audiobooks</button>
+        <p role="status" aria-live="polite" id="load-more-end" class="load-more-end" hidden></p>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}

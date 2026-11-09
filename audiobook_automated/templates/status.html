@@ -1,0 +1,189 @@
+<!-- File: audiobook_automated/templates/status.html -->
+{% extends "base.html" %} {% block title %}Active Downloads - {{ site_title }}{% endblock %} {% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/status.css', v=static_version) }}" />
+{% endblock %} {% block extra_js %}
+<script src="{{ url_for('static', filename='js/status.js', v=static_version) }}" defer></script>
+{% endblock %} {% block content %}
+<div class="status-header-glass">
+    <div class="status-header-main">
+        <div class="status-header-title-wrap">
+            <h1 class="status-title">Active Downloads</h1>
+            <span class="status-count-badge" id="status-count-badge">
+                {{ torrents|length if torrents else 0 }} Active
+            </span>
+        </div>
+        <div class="status-header-meta">
+            <div class="status-client-pill {{ client_status if client_status else '' }}" id="status-client-pill">
+                <span class="pulse-dot"></span>
+                <span class="client-pill-text"
+                    >{{ client_status_label if client_status_label else 'Client Connected' }}</span
+                >
+            </div>
+            <div class="refresh-controls" aria-label="Refresh controls">
+                <label
+                    class="auto-refresh-label refresh-toggle"
+                    for="auto-refresh-toggle"
+                    title="Toggle 5-second automatic refresh"
+                >
+                    <input
+                        type="checkbox"
+                        id="auto-refresh-toggle"
+                        role="switch"
+                        aria-label="Automatic refresh every five seconds"
+                        checked
+                    />
+                    <span class="refresh-switch-track" aria-hidden="true"></span
+                    ><span class="auto-refresh-text">Live</span>
+                </label>
+                <button
+                    type="button"
+                    class="status-poll-indicator"
+                    id="status-poll-indicator"
+                    title="Click to refresh status immediately (auto-refreshes every 5s)"
+                    aria-label="Refresh status"
+                >
+                    <div class="poll-dial-wrap">
+                        <svg
+                            class="poll-icon poll-spinner-ring"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                        </svg>
+                        <span class="poll-countdown-num" id="poll-countdown-num">5</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% if clients and clients|length > 1 %}
+    <div class="status-client-tabs" aria-label="Filter downloads by Download Client">
+        <a href="{{ url_for('main.status') }}" class="client-tab {{ 'active' if not active_client else '' }}"
+            >All Clients</a
+        >
+        {% for c in clients %}
+        <a href="{{ url_for('main.status', client=c) }}" class="client-tab {{ 'active' if active_client == c else '' }}"
+            >{{ {'qbittorrent': 'qBittorrent', 'transmission': 'Transmission', 'deluge': 'Deluge', 'putio':
+            'Put.io'}.get(c, c) }}</a
+        >
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<p id="status-update-note" class="update-note" role="status" aria-live="polite">Waiting for an update…</p>
+<div class="status-container">
+    {% if error %}
+    <div class="error-message" id="status-initial-error">
+        <div class="error-message-primary">
+            <span class="error-icon" aria-hidden="true">⚠️</span>
+            <p>{{ error }}</p>
+        </div>
+        {% if debug_details and flask_debug %}
+        <details class="error-debug-details">
+            <summary>Technical Details & Debug Info</summary>
+            <pre><code>{{ debug_details }}</code></pre>
+        </details>
+        {% endif %}
+    </div>
+    {% endif %}
+    <div class="table-wrapper" id="status-table-wrapper" {% if error %}hidden{% endif %}>
+        <table>
+            <caption class="sr-only">
+                List of active downloads
+            </caption>
+            <thead>
+                <tr>
+                    <th class="col-title">Title</th>
+                    <th class="col-progress">Progress</th>
+                    <th class="col-state">State</th>
+                    <th class="col-size">Size</th>
+                    <th class="col-action">Action</th>
+                </tr>
+            </thead>
+            <tbody id="status-table-body">
+                {% if torrents %} {% for torrent in torrents %} {% set state_lower = (torrent.state|lower) if
+                torrent.state else 'unknown' %} {% if 'download' in state_lower %} {% set badge_class =
+                'badge-downloading' %} {% elif 'seed' in state_lower or 'finish' in state_lower or 'complete' in
+                state_lower %} {% set badge_class = 'badge-seeding' %} {% elif 'pause' in state_lower or 'stop' in
+                state_lower %} {% set badge_class = 'badge-paused' %} {% elif 'error' in state_lower or 'fail' in
+                state_lower %} {% set badge_class = 'badge-error' %} {% else %} {% set badge_class = 'badge-other' %} {%
+                endif %}
+                <tr>
+                    <td class="cell-title">
+                        <div class="title-with-icon">
+                            <span class="book-media-icon" aria-hidden="true">🎧</span>
+                            <div class="title-text-group">
+                                <span class="title-text">{{ torrent.name }}</span>
+                                {% if torrent.client %}
+                                <span class="torrent-client-tag">{{ torrent.client|capitalize }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td class="cell-progress">
+                        <div class="progress-cell-wrap">
+                            <div
+                                class="progress-bar-container"
+                                role="progressbar"
+                                aria-label="Download progress for {{ torrent.name }}"
+                                aria-valuenow="{{ torrent.progress }}"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                            >
+                                <div
+                                    class="progress-bar-fill {{ 'fill-complete' if torrent.progress >= 100 else '' }}"
+                                    style="width: {{ torrent.progress }}%"
+                                ></div>
+                            </div>
+                            <span class="progress-percentage">{{ torrent.progress }}%</span>
+                        </div>
+                    </td>
+                    <td class="cell-state">
+                        <span class="status-badge {{ badge_class }}">{{ torrent.state }}</span>
+                    </td>
+                    <td class="cell-size">{{ torrent.size }}</td>
+                    <td class="cell-action">
+                        <button
+                            class="remove-button remove-torrent-btn btn-glass-danger"
+                            data-torrent-id="{{ torrent.id }}"
+                            data-client="{{ torrent.client or '' }}"
+                            title="Remove download"
+                        >
+                            <svg
+                                class="action-btn-icon"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                aria-hidden="true"
+                            >
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                                ></path>
+                            </svg>
+                            <span>Remove</span>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %} {% else %}
+                <tr>
+                    <td
+                        colspan="5"
+                        class="empty-message"
+                        style="text-align: center; padding: 40px; color: var(--text-muted)"
+                    >
+                        No active downloads found.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+# File: .yamllint.yaml
+---
+# Configuration file for yamllint to enforce consistency on YAML files.
+# Extends the default relaxed profile.
+
+extends: relaxed
+rules:
+  # Set max line length to 90 characters for configuration consistency
+  line-length:
+    max: 90
+  # Disable validation for the spaces around braces (helps with complex structures)
+  braces: disable

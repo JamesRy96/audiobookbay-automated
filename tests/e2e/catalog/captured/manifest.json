@@ -1,0 +1,154 @@
+{
+  "captured_at": "2026-11-03T07:48:39.886539+00:00",
+  "method": "Actual catalog HTTP responses through authorized proxy; only parser-relevant posts retained. No title, description or tracker normalization.",
+  "search": {
+    "url": "https://audiobookbay.lu/page/1/?s=the%20hobbit",
+    "file": "search-hobbit.html",
+    "raw_posts": 9,
+    "unique_paths": [
+      "/abss/the-hobbit-j-r-r-tolkien/",
+      "/abss/thes-hobbit-1979-minds-eye-radio-drama-jrr-tolkien/",
+      "/abss/rthe-hobbit-the-bbc-tv-soundtrack-of-the-jackanory-multi-voice-reading-j-r-r-tolkien/",
+      "/abss/the-hobsbit-2020-harpercollins-andy-serkis-j-r-r-tolkien/",
+      "/abss/the-hobbbit-j-r-r-tolkien-2/",
+      "/abss/the-hobcbit-lord-of-the-rings-trilogy-theatrical-experience-chapterized-j-r-r-tolkien/",
+      "/abss/the-hobvbit-andy-serkis-j-r-r-tolkien/",
+      "/abss/the-hobrbit-the-lord-of-the-rings-trilogy-audiobooks-chapterized-high-quality-j-r-r-tolkien/",
+      "/abss/thle-hobbit-the-lord-of-the-rings-trilogy-audiobooks-chapterized-j-r-r-tolkien-2/"
+    ]
+  },
+  "details": [
+    {
+      "url": "https://audiobookbay.lu/abss/thes-hobbit-1979-minds-eye-radio-drama-jrr-tolkien/",
+      "path": "/abss/thes-hobbit-1979-minds-eye-radio-drama-jrr-tolkien/",
+      "file": "details-536cd5c8c670.html",
+      "title": "The Hobbit: 1979 Mind\u2019s Eye Radio Drama - J.R.R. Tolkien",
+      "hash": "d704b35ba624051f028fa1f47116fbad90658ec8",
+      "trackers_in_text": [
+        "http://tracker.files.fm:6969/announce",
+        "http://tracker.files.fm:6969/announce",
+        "http://tracker.bt4g.com:2095/announce",
+        "http://tracker2.dler.org:80/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://bt1.archive.org:6969/announce",
+        "udp://tracker.dler.org:6969/announce",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://tracker.tiny-vps.com:6969/announce",
+        "udp://tracker.torrent.eu.org:451/announce"
+      ],
+      "sha256": "2cfee7593cb2da99537e9e91b39e28d3c008d74af0d8b8653299cbf5203b19ab"
+    },
+    {
+      "url": "https://audiobookbay.lu/abss/will-wpight-cradle-series-full-books-1-12-will-wight/",
+      "path": "/abss/will-wpight-cradle-series-full-books-1-12-will-wight/",
+      "file": "details-2718e2ab85e1.html",
+      "title": "Will Wight - Cradle Series - Full - Books 1-12 - Will Wight",
+      "hash": "e31bc6fa405b0c7f5e9f1bd506ddc88f705236b9",
+      "trackers_in_text": [
+        "http://tracker.files.fm:6969/announce",
+        "http://tracker.files.fm:6969/announce",
+        "http://open.acgnxtracker.com:80/announce",
+        "http://tracker2.dler.org:80/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://opentor.org:2710/announce",
+        "udp://tracker.dler.org:6969/announce",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://tracker.tiny-vps.com:6969/announce",
+        "udp://tracker.torrent.eu.org:451/announce"
+      ],
+      "sha256": "abeba87b36ff4772797de97050afebb63ed9fa803f0cecf38b4264138cbf0c20"
+    },
+    {
+      "url": "https://audiobookbay.lu/abss/the-fsleeper-awakes-hg-wells/",
+      "path": "/abss/the-fsleeper-awakes-hg-wells/",
+      "file": "details-2480306f9e84.html",
+      "title": "The Sleeper Awakes - H.G. Wells",
+      "hash": "25312eea8e96142cb7b4e48a04050c7b6d6e14e4",
+      "trackers_in_text": [
+        "http://tracker.files.fm:6969/announce",
+        "http://tracker.files.fm:6969/announce",
+        "http://open.acgnxtracker.com:80/announce",
+        "http://tracker2.dler.org:80/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://opentor.org:2710/announce",
+        "udp://tracker.dler.org:6969/announce",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://tracker.tiny-vps.com:6969/announce",
+        "udp://tracker.torrent.eu.org:451/announce"
+      ],
+      "sha256": "e9612f0e9fa0fa2dba3f72104311af62e1eac7e2663869ae9cbda37f89ecbb00"
+    },
+    {
+      "url": "https://audiobookbay.lu/abss/the-hobbit-j-r-r-tolkien/",
+      "path": "/abss/the-hobbit-j-r-r-tolkien/",
+      "file": "details-650f69fb00df.html",
+      "title": "The Hobbit - J.R.R. Tolkien",
+      "hash": "24b2327d1c88af40bea4af63aaa306ffae89542b",
+      "trackers_in_text": [
+        "http://tracker.bt4g.com:2095/announce",
+        "http://tracker.bt4g.com:2095/announce",
+        "http://tracker.files.fm:6969/announce",
+        "http://tracker2.dler.org:80/announce",
+        "udp://bt1.archive.org:6969/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://tracker.dler.org:6969/announce",
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://tracker.tiny-vps.com:6969/announce",
+        "udp://tracker.torrent.eu.org:451/announce",
+        "udp://bittorrent-tracker.e-n-c-r-y-p-t.net:1337/announce",
+        "udp://retracker01-msk-virt.corbina.net:80/announce",
+        "http://ipv4announce.sktorrent.eu:6969/announce",
+        "http://tracker.mywaifu.best:6969/announce"
+      ],
+      "sha256": "6f79cdd2e32f7daf60bd89bb02751b73f1b95370ab9aa3f94a02c8de7350589c"
+    }
+  ],
+  "encoded_search": {
+    "url": "https://audiobookbay.lu/page/1/?s=grover%20gardner",
+    "file": "search-encoded.html",
+    "raw_posts": 9,
+    "encoded_posts": 5,
+    "books": [
+      {
+        "title": "Stephen King Collection (1974-2025) - Stephen King",
+        "link": "/abss/stephepn-king-collection-1974-2025-stephen-king/"
+      },
+      {
+        "title": "The Sicilian Method (Inspector Montalbano Book 26) - Andrea Camilleri, Stephen Sartarelli (translator), Grover Gardner (narrator)",
+        "link": "/abss/tqhe-sicilian-method-inspector-montalbano-book-26-andrea-camilleri-stephen-sartarelli-translator-grover-gardner-narrator/"
+      },
+      {
+        "title": "Rose Gardner Investigations Series - Denise Grover Swank",
+        "link": "/abss/rotse-gardner-investigations-series-denise-grover-swank/"
+      },
+      {
+        "title": "Trailer Trash (Neely Kate Mystery) Bk 1 - Denise Grover Swank",
+        "link": "/abss/trabiler-trash-neely-kate-mystery-bk-1-denise-grover-swank/"
+      },
+      {
+        "title": "In High Cotton (Neely Kate Mystery) Bk 2 - Denise Grover Swank",
+        "link": "/abss/in-zhigh-cotton-neely-kate-mystery-bk-2-denise-grover-swank/"
+      },
+      {
+        "title": "Radical Wholeness - Philip Shepherd, Jeff Brown, Grover Gardner",
+        "link": "/abss/radictal-wholeness-philip-shepherd-jeff-brown-grover-gardner/"
+      },
+      {
+        "title": "Aliens: Bug Hunt -  James Anderson Foster, Eric G. Dove, R. C. Bray, Chris Andrew Ciulla, Nicol Zanzarella, James Patrick Cronin, Suzanne Elise Freeman, Andrew Eiden, Michael David Axtell, Grover Gardner, Priya Ayyar",
+        "link": "/abss/alicens-bug-hunt-james-anderson-foster-eric-g-dove-r-c-bray-chris-andrew-ciulla-nicol-zanzarella-james-patrick-cronin-suzanne-elise-freeman-andrew-eiden-michael-david-axtell-grover-gard/"
+      },
+      {
+        "title": "Twenty-Nine and a Half Reasons (Rose Gardner 02) - Denise Grover Swank",
+        "link": "/abss/tdwenty-nine-and-a-half-reasons-rose-gardner-02-denise-grover-swank/"
+      },
+      {
+        "title": "Twenty Eight and a Half Wishes (Rose Gardner Mystery 01) - Denise Grover Swank",
+        "link": "/abss/twevnty-eight-and-a-half-wishes-rose-gardner-mystery-01-denise-grover-swank/"
+      }
+    ]
+  }
+}

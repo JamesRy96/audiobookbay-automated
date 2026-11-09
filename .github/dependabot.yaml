@@ -1,0 +1,72 @@
+# File: .github/dependabot.yaml
+version: 2
+updates:
+  # 1. Python Dependencies (uv / pyproject.toml + uv.lock)
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "America/Los_Angeles"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
+
+  # 2. JavaScript / Frontend Dependencies (package.json + package-lock.json)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:10"
+      timezone: "America/Los_Angeles"
+    groups:
+      js-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  # 3. Pre-Commit Hooks (.pre-commit-config.yaml)
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:20"
+      timezone: "America/Los_Angeles"
+    groups:
+      pre-commit-hooks:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  # 4. GitHub Actions Workflows (.github/workflows)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:30"
+      timezone: "America/Los_Angeles"
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+
+  # 5. Dockerfile base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:40"
+      timezone: "America/Los_Angeles"
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5

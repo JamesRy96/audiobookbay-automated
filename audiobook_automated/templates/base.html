@@ -1,0 +1,357 @@
+<!-- File: audiobook_automated/templates/base.html -->
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="theme-color" content="#2e003e" />
+        <meta name="csrf-token" content="{{ csrf_token() }}" />
+        <title>{% block title %}{{ site_title }}{% endblock %}</title>
+        <script nonce="{{ csp_nonce() }}">
+            // Immediate splash screen check to prevent FOUC
+            try {
+            if (
+                {{ 'false' if splash_enabled else 'true' }} ||
+                sessionStorage.getItem("splashShown") ||
+                localStorage.getItem("splashShown")
+            ) {
+                document.documentElement.classList.add("no-splash");
+            }
+            } catch (_) { document.documentElement.classList.add("no-splash"); }
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) document.documentElement.classList.add("no-splash");
+            window.APP_VERSION = "{{ static_version }}";
+            window.DEFAULT_THEME = "{{ default_theme }}";
+            window.ABB_HOST = "{{ abb_host }}";
+        </script>
+        <style nonce="{{ csp_nonce() }}">
+            /* Immediate override to hide splash if no-splash class is present */
+            html.no-splash #splash-overlay {
+                display: none !important;
+            }
+        </style>
+
+        <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/fonts.css', v=static_version) }}" />
+
+        <link
+            rel="icon"
+            type="image/x-icon"
+            href="{{ url_for('static', filename='images/favicon.ico', v=static_version) }}"
+        />
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v=static_version) }}" />
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/splash.css', v=static_version) }}" />
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/modal.css', v=static_version) }}" />
+        {% block extra_css %}{% endblock %} {% block extra_js %}{% endblock %}
+        <script src="{{ url_for('static', filename='js/ui.js', v=static_version) }}"></script>
+        <script src="{{ url_for('static', filename='js/theme.js', v=static_version) }}"></script>
+        <script src="{{ url_for('static', filename='js/actions.js', v=static_version) }}" defer></script>
+    </head>
+
+    <body>
+        <div id="notification-container"></div>
+
+        {% if splash_enabled %}
+        <div
+            id="splash-overlay"
+            data-splash-duration="{{ splash_duration }}"
+            data-splash-enabled="{{ splash_enabled }}"
+        >
+            {% if splash_video or splash_video_webm %}
+            <div id="splash-brand-frame">
+                <video id="splash-video" preload="none" muted playsinline>
+                    {% if splash_video_webm %}
+                    <source
+                        src="{{ splash_video_webm }}{% if not splash_video_webm.startswith(('http://', 'https://', 'data:')) and '?' not in splash_video_webm %}?v={{ static_version }}{% endif %}"
+                        type="video/webm"
+                    />
+                    {% endif %} {% if splash_video %}
+                    <source
+                        src="{{ splash_video }}{% if not splash_video.startswith(('http://', 'https://', 'data:')) and '?' not in splash_video %}?v={{ static_version }}{% endif %}"
+                        type="video/mp4"
+                    />
+                    {% endif %}
+                </video>
+                {% if site_logo %}<img
+                    id="splash-handoff-logo"
+                    src="{{ site_logo }}{% if not site_logo.startswith(('http://', 'https://', 'data:')) and '?' not in site_logo %}?v={{ static_version }}{% endif %}"
+                    alt=""
+                    aria-hidden="true"
+                />{% endif %}
+            </div>
+            <button id="skip-splash-btn" class="skip-splash-btn" type="button" aria-label="Skip Intro Animation">
+                Skip Intro
+            </button>
+            {% else %}
+            <div id="splash-content">
+                {% if splash_title %}
+                <h1 class="splash-title">{{ splash_title }}</h1>
+                {% endif %}
+                <p class="splash-text">{{ splash_message | safe }}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <a class="skip-link" href="#main-content">Skip to content</a>
+        <nav class="navbar navbar-minimal" aria-label="Main navigation">
+            <div class="nav-container">
+                <button
+                    class="mobile-menu-btn"
+                    id="mobile-menu-btn"
+                    aria-label="Toggle navigation menu"
+                    aria-expanded="false"
+                    aria-controls="nav-links"
+                >
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                    <span class="bar"></span>
+                </button>
+
+                <div class="nav-backdrop" id="nav-backdrop" aria-hidden="true"></div>
+
+                <!-- Slide-out Drawer (All Screen Sizes) -->
+                <div class="nav-links" id="nav-links">
+                    <div class="drawer-header">
+                        <span class="drawer-title">Navigation</span>
+                    </div>
+
+                    <a
+                        href="{{ url_for('main.search') }}"
+                        class="nav-link-item {% if request.endpoint == 'main.search' %}active{% endif %}"
+                    >
+                        <svg
+                            class="nav-link-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                        >
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <span>Search</span>
+                    </a>
+                    <a
+                        href="{{ url_for('main.status') }}"
+                        class="nav-link-item {% if request.endpoint == 'main.status' %}active{% endif %}"
+                    >
+                        <svg
+                            class="nav-link-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                        >
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                        </svg>
+                        <span>Status</span>
+                    </a>
+                    {% if nav_link_name and nav_link_url %}
+                    <a
+                        href="{{ nav_link_url }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="nav-link-item nav-external-link"
+                    >
+                        <svg
+                            class="nav-link-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                        >
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                        <span>{{ nav_link_name }}</span>
+                    </a>
+                    {% endif %} {% if library_reload_enabled %}
+                    <a
+                        href="#"
+                        id="reload-library-btn"
+                        class="nav-link-item nav-action-link"
+                        aria-label="Reload Library"
+                        title="Reload Library"
+                    >
+                        <svg
+                            class="nav-link-icon"
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"
+                            />
+                        </svg>
+                        <span>Reload Library</span>
+                    </a>
+                    {% endif %} {% if diagnostics_enabled %}
+                    <a
+                        href="{{ url_for('diagnostics.diagnostics_page') }}"
+                        class="nav-link-item {% if request.endpoint == 'diagnostics.diagnostics_page' %}active{% endif %}"
+                    >
+                        <svg
+                            class="nav-link-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            aria-hidden="true"
+                        >
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+                            ></path>
+                        </svg>
+                        <span>Diagnostics</span>
+                    </a>
+                    {% endif %}
+
+                    <div class="drawer-divider" aria-hidden="true"></div>
+
+                    <div class="drawer-theme-control">
+                        <label for="theme-selector" class="drawer-section-label">
+                            <svg
+                                class="drawer-section-icon"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                aria-hidden="true"
+                            >
+                                <circle cx="12" cy="12" r="5"></circle>
+                                <line x1="12" y1="1" x2="12" y2="3"></line>
+                                <line x1="12" y1="21" x2="12" y2="23"></line>
+                                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                                <line x1="1" y1="12" x2="3" y2="12"></line>
+                                <line x1="21" y1="12" x2="23" y2="12"></line>
+                                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                            </svg>
+                            <span>Appearance</span>
+                        </label>
+                        <div class="theme-select-wrapper">
+                            <select id="theme-selector" class="theme-select" aria-label="Select color theme">
+                                <option value="purple">🔮 Purple</option>
+                                <option value="crow">🌙 Crow</option>
+                                <option value="catppuccin">🌸 Catppuccin Mocha</option>
+                                <option value="nord">❄️ Nord Arctic</option>
+                                <option value="tokyo">🏙️ Tokyo Night</option>
+                                <option value="oled">🖤 OLED Black</option>
+                                <option value="forest">🌲 Forest</option>
+                                <option value="ocean">🌊 Ocean</option>
+                                <option value="sunset">🌅 Sunset</option>
+                                <option value="dracula">🧛 Dracula</option>
+                                <option value="cyberpunk">🦾 Cyberpunk</option>
+                                <option value="light">☀️ Light</option>
+                                <option value="royal">👑 Royal</option>
+                                <option value="slate">🗿 Slate</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Masthead -->
+        <header class="masthead-showcase">
+            <a href="{{ url_for('main.search') }}" class="masthead-brand" aria-label="{{ site_title }} - Home">
+                {% if site_logo %}
+                <img
+                    class="masthead-logo-img"
+                    src="{{ site_logo }}{% if not site_logo.startswith(('http://', 'https://', 'data:')) and '?' not in site_logo %}?v={{ static_version }}{% endif %}"
+                    alt="{{ site_title }}"
+                />
+                {% else %}
+                <h1 class="masthead-title">{{ site_title }}</h1>
+                {% endif %}
+            </a>
+        </header>
+
+        <!-- Download Client Offline Alert Banner -->
+        <div id="client-offline-banner" class="client-alert-banner" style="display: none">
+            <div class="client-alert-content">
+                <span class="client-alert-icon" aria-hidden="true">⚠️</span>
+                <div class="client-alert-text" role="status">
+                    <strong>Download Client Disconnected:</strong>
+                    <span id="client-connection-message"
+                        >Check that your Download Client is running and its address, port and login are correct. For a
+                        client in another container or server, use its service name or IP address.</span
+                    >
+                </div>
+                <a
+                    href="{{ url_for('diagnostics.diagnostics_page') if diagnostics_enabled else url_for('main.status') }}"
+                    class="btn-glass client-alert-btn"
+                >
+                    {{ "Check Diagnostics" if diagnostics_enabled else "Check Status" }}
+                </a>
+            </div>
+        </div>
+
+        <main class="content" id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
+
+        <!-- Floating Scroll to Top Button -->
+        <button
+            id="scroll-to-top-btn"
+            class="scroll-to-top-btn floating-control"
+            type="button"
+            aria-label="Scroll back to top"
+            title="Scroll to top"
+        >
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+            >
+                <line x1="12" y1="19" x2="12" y2="5"></line>
+                <polyline points="5 12 12 5 19 12"></polyline>
+            </svg>
+        </button>
+
+        <!-- Global Confirmation Modal -->
+        <div id="confirmation-modal" class="modal-overlay" aria-hidden="true">
+            <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="modal-title">Confirm Action</h3>
+                </div>
+                <div class="modal-body" id="modal-body">Are you sure you want to proceed?</div>
+                {% if download_clients|length > 1 %}
+                <fieldset id="modal-client-picker" class="modal-client-picker" hidden>
+                    <legend>Download Client</legend>
+                    {% set client_labels = {'qbittorrent': 'qBittorrent', 'deluge': 'Deluge', 'transmission':
+                    'Transmission', 'putio': 'Put.io'} %} {% for client in download_clients %}
+                    <label class="download-client-choice" data-state="checking">
+                        <input type="radio" name="download-client" value="{{ client }}" disabled />
+                        <span class="client-choice-info"
+                            ><span class="client-choice-name">{{ client_labels.get(client, client) }}</span>
+                            <span class="client-choice-help" hidden></span
+                        ></span>
+                        <span class="client-choice-status" role="status">Checking…</span>
+                    </label>
+                    {% endfor %}
+                </fieldset>
+                {% endif %}
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="modal-cancel">Cancel</button>
+                    <button class="btn-primary" id="modal-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

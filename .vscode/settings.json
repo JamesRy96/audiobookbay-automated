@@ -1,0 +1,72 @@
+{
+    // -------------------------------------------------------------------------
+    // CORE PYTHON CONFIGURATION
+    // -------------------------------------------------------------------------
+
+    // "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+
+    // Testing: Uses pytest as configured in pyproject.toml
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestArgs": ["tests"],
+
+    // Type Checking (Handled by Pylance with Mypy config from pyproject.toml)
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.autoImportCompletions": true,
+
+    // -------------------------------------------------------------------------
+    // FORMATTING AND LINTING CONSISTENCY
+    // -------------------------------------------------------------------------
+    "editor.formatOnSave": true,
+
+    // RUFF (Python Formatting & Linting)
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            // Apply Ruff fixes/auto-imports on save (Equivalent to pre-commit ruff-check --fix)
+            "source.organizeImports": "explicit",
+            "source.fixAll.ruff": "explicit"
+        }
+    },
+
+    // PRETTIER (Web/Config Formatting)
+    "prettier.enable": true,
+    "prettier.configPath": ".prettierrc.yaml",
+
+    // Explicitly set Prettier as default for file types handled by your pre-commit
+    "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[html]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+    "[yaml]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+    // MARKDOWN CONFIGURATION (Aligns to mdformat/markdownlint rules)
+    "[markdown]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.markdownlint": "explicit"
+        }
+    },
+    // Markdown All in One and other extension fixes:
+    // These settings explicitly disable features that conflict with mdformat's strict formatting,
+    // ensuring .markdownlint.yaml rules are respected.
+    "markdown.extension.list.indentationSize": 2,
+    "markdown.extension.orderedList.autoRenumber": false,
+    "markdown.extension.theming.decoration.renderCodeSpan": false,
+    "markdown.extension.theming.decoration.renderStrikethrough": false,
+    "markdown.extension.theming.decoration.renderLink": false,
+
+    // -------------------------------------------------------------------------
+    // FILE EXCLUSIONS
+    // -------------------------------------------------------------------------
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/*.egg-info": true
+    },
+    "[toml]": {
+        "editor.defaultFormatter": "tamasfe.even-better-toml"
+    }
+}

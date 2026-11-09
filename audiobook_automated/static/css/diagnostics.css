@@ -1,0 +1,437 @@
+/* File: audiobook_automated/static/css/diagnostics.css */
+/**
+ * Dedicated styles for the System Diagnostics & Health Dashboard.
+ * Harmonized with Status, Search, and Details pages for consistent glass aesthetics and responsive viewports.
+ */
+
+.auto-refresh-label,
+.auto-scroll-label {
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-muted, #94a3b8);
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+.auto-refresh-label:hover,
+.auto-scroll-label:hover {
+    color: var(--text-main, #ffffff);
+}
+
+.auto-refresh-label input[type="checkbox"],
+.auto-scroll-label input[type="checkbox"] {
+    accent-color: var(--accent-color, #38bdf8);
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+}
+
+/* --- Main Layout Container --- */
+.diag-container {
+    max-width: var(--primary-content-width);
+    margin: 0 auto;
+    width: 100%;
+    padding: 0 0 40px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.diag-card {
+    background: var(--glass-bg, rgba(25, 20, 35, 0.65));
+    border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.12));
+    border-radius: var(--border-radius-lg, 16px);
+    padding: 24px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-soft, 0 10px 30px rgba(0, 0, 0, 0.35));
+}
+
+.diag-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 14px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.diag-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-main, #ffffff);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.diag-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.diag-logs-actions {
+    gap: 10px;
+}
+
+.log-filter-input {
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    width: 180px;
+}
+
+.log-download-btn {
+    padding: 7px 14px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.diag-badge {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted, #94a3b8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    white-space: nowrap;
+}
+
+.diag-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.diag-metric {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--border-radius-md, 12px);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    transition:
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.diag-metric:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.diag-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted, #94a3b8);
+}
+
+.diag-val {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-main, #ffffff);
+    word-break: break-word;
+}
+
+.inspect-box {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.inspect-desc {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.9rem;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.inspect-input-row {
+    display: flex;
+    gap: 12px;
+}
+
+.inspect-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #fff;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+}
+
+.inspect-input:focus {
+    outline: none;
+    border-color: var(--accent-color, #38bdf8);
+}
+
+.inspect-btn {
+    white-space: nowrap;
+    padding: 10px 20px;
+}
+
+.inspect-results-pre,
+.log-viewer-pre {
+    background: rgba(10, 8, 15, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 16px;
+    color: var(--accent-color, #38bdf8);
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-viewer-pre {
+    color: #cbd5e1;
+    max-height: 380px;
+    line-height: 1.45;
+}
+
+.card-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    border-top-color: var(--accent-color, #38bdf8);
+    animation: diag-spin 0.8s linear infinite;
+    vertical-align: middle;
+}
+
+@keyframes diag-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* --- Responsive & Mobile Viewports --- */
+@media (max-width: 850px) {
+    .diag-container {
+        padding: 0 0 30px 0;
+        gap: 18px;
+    }
+
+    .diag-card {
+        padding: 18px;
+        border-radius: 14px;
+    }
+
+    .diag-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+    }
+
+    .diag-title {
+        font-size: 1.15rem;
+    }
+
+    .log-filter-input {
+        width: 100%;
+    }
+
+    .diag-logs-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+@media (max-width: 580px) {
+    .diag-badge {
+        font-size: 0.72rem;
+        padding: 3px 8px;
+    }
+
+    .auto-refresh-label {
+        font-size: 0.8rem;
+    }
+
+    .diag-container {
+        padding: 0 0 24px 0;
+        gap: 14px;
+    }
+
+    .diag-card {
+        padding: 14px 12px;
+        border-radius: 12px;
+    }
+
+    .diag-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .diag-val {
+        font-size: 1.2rem;
+    }
+
+    .diag-header {
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+    }
+
+    .diag-logs-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .log-download-btn {
+        width: 100%;
+        text-align: center;
+    }
+
+    .inspect-input-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .inspect-btn {
+        width: 100%;
+    }
+
+    .inspect-results-pre,
+    .log-viewer-pre {
+        padding: 12px;
+        font-size: 0.78rem;
+        max-height: 280px;
+    }
+}
+
+.mirror-explanation,
+.mirror-summary {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 12px;
+}
+.mirror-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.mirror-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.4fr) minmax(100px, 0.8fr) minmax(140px, 1fr) minmax(140px, 1fr);
+    align-items: center;
+    gap: 10px 20px;
+}
+.mirror-host {
+    display: block;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    overflow-wrap: anywhere;
+}
+.mirror-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+.mirror-state {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.mirror-state-available {
+    color: #16866b;
+    font-weight: 600;
+}
+.mirror-state-invalid,
+.mirror-state-offline {
+    color: #e36b6b;
+}
+.mirror-state-cooldown {
+    color: #b99131;
+}
+.mirror-latency,
+.mirror-success {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.mirror-details {
+    grid-column: 1 / -1;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    border-top: var(--glass-border);
+}
+.mirror-details summary {
+    min-height: 32px;
+}
+.mirror-details p {
+    margin: 0 0 8px;
+}
+@media (max-width: 900px) {
+    .mirror-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .mirror-state {
+        justify-self: end;
+        text-align: right;
+    }
+}
+@media (max-width: 420px) {
+    .mirror-row {
+        gap: 10px;
+        padding: 14px;
+    }
+    .mirror-identity {
+        grid-column: 1 / -1;
+    }
+    .mirror-state {
+        justify-self: start;
+        text-align: left;
+        grid-column: 1 / -1;
+    }
+}
+
+.mirror-state-available {
+    color: #4ade80;
+}
+[data-theme="light"] .mirror-state-available {
+    color: #166534;
+}
+[data-theme="light"] .mirror-state-invalid,
+[data-theme="light"] .mirror-state-offline {
+    color: #b91c1c;
+}
+[data-theme="light"] .mirror-state-cooldown {
+    color: #854d0e;
+}
+
+.mirror-state-offline,
+.mirror-state-invalid {
+    color: var(--status-error);
+}
+.mirror-state-cooldown {
+    color: var(--status-warning);
+}
+.inspect-input {
+    color: var(--text-main);
+}
+[data-theme="light"] .inspect-input {
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.diag-client-error {
+    font-size: 0.78rem;
+    color: var(--status-error);
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+}
+.diag-client-note {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}

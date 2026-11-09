@@ -1,0 +1,167 @@
+# File: .github/workflows/release.yaml
+name: Create Release
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without leading v, for example 1.0.0"
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_commit: ${{ steps.stamp.outputs.release_commit }}
+      version: ${{ steps.stamp.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.15"
+      - name: Stamp version and date
+        id: stamp
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          export VERSION
+
+          uv run --no-project python - <<'PY'
+          import datetime
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
+              raise SystemExit("Use a semantic version such as 1.0.0, without a leading v.")
+
+          today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+
+          # 1. Update pyproject.toml version
+          pyproject_path = Path("pyproject.toml")
+          pyproject_text = pyproject_path.read_text(encoding="utf-8")
+          new_pyproject = re.sub(
+              r'(?m)^version\s*=\s*"[^"]+"',
+              f'version = "{version}"',
+              pyproject_text,
+              count=1,
+          )
+          pyproject_path.write_text(new_pyproject, encoding="utf-8")
+
+          # 2. Update CHANGELOG.md release header and date
+          changelog_path = Path("CHANGELOG.md")
+          changelog_text = changelog_path.read_text(encoding="utf-8")
+          if re.search(rf"^## \[{re.escape(version)}\](?: - .*)?$", changelog_text, re.MULTILINE):
+              new_changelog = re.sub(
+                  rf"^## \[{re.escape(version)}\](?: - .*)?$",
+                  f"## [{version}] - {today}",
+                  changelog_text,
+                  flags=re.MULTILINE,
+              )
+          else:
+              new_changelog = re.sub(
+                  r"^## \[Unreleased\]\s*$",
+                  f"## [Unreleased]\n\n## [{version}] - {today}",
+                  changelog_text,
+                  flags=re.MULTILINE,
+              )
+          changelog_path.write_text(new_changelog, encoding="utf-8")
+          PY
+
+          # Update lockfile if needed
+          uv lock
+
+          # Commit and push if any files changed on default branch
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pyproject.toml uv.lock CHANGELOG.md
+            git commit -m "release: prepare v$VERSION"
+            if [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ]; then
+              git push origin "HEAD:$DEFAULT_BRANCH"
+            fi
+          fi
+
+          echo "release_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  checks:
+    needs: prepare
+    uses: ./.github/workflows/ci.yaml
+  image:
+    needs: [prepare, checks]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-publish.yaml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+  release:
+    needs: [prepare, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.release_commit }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.15"
+      - name: Build standalone python distribution artifacts
+        run: |
+          uv build
+      - name: Extract changelog notes for this release
+        id: notes
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          uv run --no-project python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["VERSION"].strip()
+          content = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          pattern = rf"(?ms)^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## |\Z)"
+          match = re.search(pattern, content)
+          notes = match.group(1).strip() if match else ""
+          Path("release_notes.md").write_text(notes, encoding="utf-8")
+          PY
+      - name: Create or update tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET_COMMIT: ${{ needs.prepare.outputs.release_commit }}
+        run: |
+          if [ -s release_notes.md ]; then
+            gh release create "v$VERSION" dist/* \
+              --target "$TARGET_COMMIT" \
+              --title "Release v$VERSION" \
+              --notes-file release_notes.md
+          else
+            gh release create "v$VERSION" dist/* \
+              --target "$TARGET_COMMIT" \
+              --title "Release v$VERSION" \
+              --generate-notes
+          fi

@@ -1,8 +1,19 @@
+# File: Makefile
+.PHONY: run install test e2e check
+
 run:
-	source app/.env/bin/activate && python3.10 app/app.py
+	uv run --env-file .env python -m audiobook_automated.app
 
-venv:
-	python3.10 -m venv app/.env
+install:
+	uv sync --frozen --all-extras
+	npm ci
 
-requirements:
-	source app/.env/bin/activate && python3.10 -m pip install -r app/requirements.txt
+test:
+	uv run --frozen --all-extras pytest
+	npm run test:js -- --runInBand
+
+e2e:
+	npm run test:e2e
+
+check:
+	uv run --frozen --all-extras pre-commit run --all-files
