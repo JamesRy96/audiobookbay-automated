@@ -69,11 +69,38 @@ pre-commit run --all-files
 
 ## 4. Operating Protocol & Reasoning Framework
 
-- **Sandbox Protocol:**
-  - `.agents/docs/`: Architectural documentation, research, and `plan.md`.
-  - `.agents/scratchpad/`: Working drafts, isolated verification tests, and experiments.
-  - `.agents/logs/`: Step-by-step reasoning and audit logs.
-  - Changes must be staged and validated in `.agents/` before modifying source files.
+- **Sandbox Protocol & Workspace Taxonomy:**
+  - `.agents/foundation/`: Project brief (`brief.md`), locked contracts, and approved addenda (Read-only seeds).
+  - `.agents/docs/`: Master architecture, canonical truth (`product-truth.md`), forensic audit (`forensic-audit.md`),
+    and master execution ledger (`plan.md`).
+  - `.agents/docs/drops/`: Read-only recon drops (`SCOUT-*.md`) from exploration workers.
+  - `.agents/scratchpad/`: Isolated per-task staging directories (`.agents/scratchpad/<TASK_ID>/`). Never modify
+    source or root production files directly from scratchpads.
+  - `.agents/scratchpad/INTEGRATION/`: Shared staged integration and multi-suite verification root owned by
+    `qa-validator`.
+  - `.agents/scratchpad/ROLLBACK/`: Pre-promotion SHA-256 backup manifests and restorable file copies.
+  - `.agents/reports/`: Independent QA validation reports (`GATE*-QA.md`, canaries, and diagnostic baselines).
+  - `.agents/logs/`: Per-task execution audit logs (`<TASK_ID>.md`).
+  - `.agents/assets/`: Design assets, mockups, and historical UI screenshots (`legacy/`).
+  - `.agents/bin/`: Standalone portable local tools if required (never install global system packages).
+  - `.agents/cache/`: Ephemeral build and test caches (e.g. `uv build` outputs); strictly ignored by Git.
+  - Changes must be staged and validated in `.agents/scratchpad/<TASK_ID>/` before modifying source files.
+- **Sub-Agent Role Locks & Workflow:**
+  - `recon-scout`: Read-only exploration; returns drops via Lead Orchestrator to `.agents/docs/drops/<TASK_ID>.md`.
+  - `consolidator`: Single-writer sequential synthesis; edits explicitly locked master files in `.agents/docs/`.
+  - `sandbox-builder`: Stages implementations under `.agents/scratchpad/<TASK_ID>/`; never touches production.
+  - `qa-validator`: Assembles integration trees in `.agents/scratchpad/INTEGRATION/`; runs independent verification.
+  - `release-promoter`: Prepares rollback manifest in `.agents/scratchpad/ROLLBACK/` and copies Human-approved
+    staged files to production.
+- **Hierarchical `AGENTS.md` Routing:**
+  - Before reading or staging changes for any sub-directory, read its local `AGENTS.md`:
+    - [AGENTS.md](file:///home/agentsvc/repos/audiobookbay-automated/AGENTS.md) - Global constitution and sandbox rules.
+    - [audiobook_automated/AGENTS.md](file:///home/agentsvc/repos/audiobookbay-automated/audiobook_automated/AGENTS.md)
+      - Backend architecture, module boundaries, and Shared Helper Registry.
+    - [tests/AGENTS.md](file:///home/agentsvc/repos/audiobookbay-automated/tests/AGENTS.md) - Test runners, fixture
+      conventions, anti-vaporware checklist, and 100% coverage gate.
+    - [docs/AGENTS.md](file:///home/agentsvc/repos/audiobookbay-automated/docs/AGENTS.md) - Playbook F multi-audience
+      personas, styling invariants, and product truth mapping.
 - **Reasoning Framework:**
   - Apply Sequential Thinking and the Hermeneutic Circle against overall architecture.
   - Follow ReAct (Thought -> Action -> Observation) and Chain of Verification (CoVe).

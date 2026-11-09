@@ -4,3 +4,14 @@
 
 # Preserve captured catalog whitespace and irregular markup as parser inputs.
 tests/e2e/catalog/captured/
+
+# Sandbox, dependencies, and test artifacts
+.agents/
+.venv/
+node_modules/
+playwright-report/
+test-results/
+.coverage*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

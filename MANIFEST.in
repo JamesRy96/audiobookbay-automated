@@ -1,6 +1,17 @@
+# File: MANIFEST.in
 include pyproject.toml
 include README.md
 include AGENTS.md
 include entrypoint.sh
 recursive-include audiobook_automated/templates *
 recursive-include audiobook_automated/static *
+
+prune .agents
+prune tests
+prune docs
+prune examples
+prune node_modules
+prune playwright-report
+prune test-results
+prune .venv
+global-exclude .coverage* *.py[cod] __pycache__
