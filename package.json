@@ -16,7 +16,7 @@
     "author": "",
     "license": "MIT",
     "devDependencies": {
-        "@playwright/test": "^1.64.1",
+        "@playwright/test": "^1.65.0",
         "jest": "^30.5.2",
         "jest-environment-jsdom": "^30.5.2"
     },
